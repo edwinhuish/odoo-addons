@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 销售订单 Form 视图：标题显示订单编号，隐藏原生系统编号       -->
+    <!-- ============================================================ -->
+    <record id="view_order_form_inherit" model="ir.ui.view">
+        <field name="name">sale.order.form.inherit.order.no</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+
+            <!-- 订单编号可编辑，留空则在保存时自动生成 -->
+            <xpath expr="//div[hasclass('oe_title')]/h1/field[@name='name']" position="before">
+                <field name="order_no"
+                       placeholder="留空自动生成"
+                       class="text-break"
+                       readonly="state == 'cancel'"/>
+            </xpath>
+
+            <!-- 保留原生 name 字段（其他模块可能继承它），但不再显示在标题区 -->
+            <xpath expr="//div[hasclass('oe_title')]/h1/field[@name='name']" position="attributes">
+                <attribute name="invisible">1</attribute>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- 列表视图：继承基础列表，报价单与销售订单同时生效             -->
+    <!-- ============================================================ -->
+    <record id="sale_order_tree_inherit" model="ir.ui.view">
+        <field name="name">sale.order.list.inherit.order.no</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.sale_order_tree"/>
+        <field name="arch" type="xml">
+
+            <!-- 订单编号列置顶显示；原生 name 列仅隐藏不删除，避免其他模块继承时找不到锚点 -->
+            <xpath expr="//field[@name='name']" position="before">
+                <field name="order_no" string="订单编号" decoration-bf="1" readonly="1"/>
+            </xpath>
+
+            <xpath expr="//field[@name='name']" position="attributes">
+                <attribute name="column_invisible">1</attribute>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- 搜索视图：默认搜索框与独立筛选项都支持订单编号               -->
+    <!-- ============================================================ -->
+    <record id="view_sales_order_filter_inherit" model="ir.ui.view">
+        <field name="name">sale.order.search.inherit.order.no</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_sales_order_filter"/>
+        <field name="arch" type="xml">
+
+            <!-- 顶部搜索框直接输入客户编号即可命中订单编号 -->
+            <xpath expr="//field[@name='name']" position="attributes">
+                <attribute name="filter_domain">['|', '|', '|', ('name', 'ilike', self), ('order_no', 'ilike', self), ('client_order_ref', 'ilike', self), ('partner_id', 'child_of', self)]</attribute>
+            </xpath>
+
+            <!-- 独立的“订单编号”搜索项，便于只看编号过滤 -->
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="order_no" string="订单编号"/>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

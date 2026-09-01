@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 联系人 Form 视图：把内部参考 ref 标注为客户编号               -->
+    <!-- Odoo 19 原生表单已有 ref 字段（销售与采购 → 杂项），           -->
+    <!-- 这里只改标签与占位提示，不再重复插入同名字段。                 -->
+    <!-- ============================================================ -->
+    <record id="view_partner_form_inherit" model="ir.ui.view">
+        <field name="name">res.partner.form.inherit.order.no</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//field[@name='ref']" position="attributes">
+                <attribute name="string">客户编号</attribute>
+                <attribute name="placeholder">大写英文字母，如 DZ、DAZG</attribute>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

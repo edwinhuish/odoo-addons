@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 列表视图“动作”菜单：为未编号的单据批量补号                    -->
+    <!-- ============================================================ -->
+    <record id="action_generate_order_no" model="ir.actions.server">
+        <field name="name">生成订单编号</field>
+        <field name="model_id" ref="sale.model_sale_order"/>
+        <field name="binding_model_id" ref="sale.model_sale_order"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">records.action_generate_order_no()</field>
+    </record>
+
+</odoo>

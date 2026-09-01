@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 报价单 / 销售订单 / 形式发票打印报表：用订单编号替代系统编号   -->
+    <!-- Odoo 19 只有 report_saleorder_document 一个单据模板，          -->
+    <!-- 报价单与形式发票均由它派生，改一处即可全覆盖。                 -->
+    <!-- ============================================================ -->
+    <template id="report_saleorder_document_inherit"
+              inherit_id="sale.report_saleorder_document"
+              priority="99">
+
+        <xpath expr="//span[@t-field='doc.name']" position="replace">
+            <!-- 优先显示订单编号，未分配时回退到系统编号 -->
+            <span t-if="doc.order_no" t-field="doc.order_no"/>
+            <span t-else="" t-field="doc.name"/>
+        </xpath>
+
+    </template>
+
+</odoo>
