@@ -6,6 +6,9 @@
 
 - PDF 文件名定制：
   - 覆盖 `sale` 模块原生 `ir.actions.report` 记录 `action_report_saleorder` 与 `action_report_saleorder_pro_forma` 的 `print_report_name`
+  - 使用完整外部 ID（`sale.action_report_saleorder`）引用现有记录，避免被 Odoo 19 数据加载器当作新建（首次实现误用本模块命名空间 id 导致 `name` 字段 NotNullViolation）
+  - 用 `<data noupdate="1">` 包裹，防止后续升级反复覆盖用户手动调整
+  - 未分配 `order_no` 时回退到 `object.name`，保证新建未保存单据不报错
   - 报价单（draft/sent 态）文件名由 `Quotation - <order_no or name>` 生成，订单态为 `Order - <order_no or name>`
   - 形式发票文件名由 `PRO-FORMA - <order_no or name>` 生成
   - 未分配 `order_no` 时回退到 `object.name`，保证新建未保存单据不报错
