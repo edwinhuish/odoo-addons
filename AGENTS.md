@@ -95,7 +95,7 @@
 | `image_uploader` | 19.0.1.0.0 | 后台图片字段粘贴 / 拖拽上传（patch `ImageField` + `FileUploader`，复用原生上传链路，即时预览 + 进度条） | 已交付，目标环境已验证（T-003） |
 | `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | 未迁移，按需（T-005） |
 | `product_model` | 19.0.1.0.0 | 产品多型号 + 可搜索（One2many 明细 / 冗余 trigram 索引 / 命中提示） | 目标环境已验证（T-002） |
-| `product_multi_image` | — | 产品多图图库（排序 / 主图） | 待开发（T-004） |
+| `product_multi_image` | 19.0.1.0.0 | 产品多图图库（多图并存 / 拖拽排序 / 首图即主图 / 图库内粘贴即新增，继承 image.mixin 复用多尺寸与 webp） | 已交付，待目标环境验证（T-004） |
 
 ## 9. 验证流程
 

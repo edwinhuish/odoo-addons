@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+    <!-- 扩展原生 X2ManyField 根元素，挂 paste 事件用于图库粘贴新增 -->
+    <t t-name="product_multi_image.X2ManyField" t-inherit="web.X2ManyField" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('o_x2m_control_panel')]/.." position="attributes">
+            <attribute name="t-on-paste">onPasteGallery</attribute>
+            <attribute name="t-att-tabindex">this.isImageGallery ? 0 : undefined</attribute>
+        </xpath>
+    </t>
+
+</templates>
