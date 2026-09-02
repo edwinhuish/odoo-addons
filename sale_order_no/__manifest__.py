@@ -23,7 +23,7 @@
         - 客户编码格式校验（仅允许大写英文字母），保存时自动转大写
         - 列表视图提供"生成订单编号"批量补号动作
         - 打印预览与PDF正文优先显示订单编号，未分配时回退到系统编号
-        - PDF文件名（报价单/订单/形式发票）包含订单编号，替代原生SOxxxx命名规则
+        - PDF文件名覆盖三个报表动作（sale.action_report_saleorder / sale.action_report_pro_forma_invoice / sale_pdf_quote_builder.action_report_saleorder_raw），中英文界面下均使用订单编号
         - 客户门户预览页面的面包屑与 H2 标题也使用订单编号
     """,
     "category": "Sales",
