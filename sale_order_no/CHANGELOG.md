@@ -1,5 +1,26 @@
 # 变更日志
 
+## [19.0.1.6.1] - 2026-09-02
+
+### 变更
+
+- PDF 文件名覆盖修复（dict 写入陷阱）：
+  - 1.6.0 用 `write({'print_report_name': {lang: value for lang in langs}})` 传 dict，但 Odoo 19 的 `_String.write` 经 `convert_to_cache` 调 `str(value)` 把 dict 整体转为字符串值写入，导致英文界面下文件名变成 `{"zh_CN": "...", "en_US": "..."}` 的字符串表示
+  - 改为在 `_force_order_no_print_name` 内逐语言切换上下文后 write，每次只写一个 lang 的 JSONB key：
+    - 先 `with_context(lang='en_US').write(...)` 写 base 值
+    - 再循环 `res.lang`，对每个非 en_US 语言 `with_context(lang=code).write(...)` 写对应 lang 的 key
+
+### 影响
+
+- 升级后所有语言的 `print_report_name` 都被覆盖为含 `order_no` 的字符串值
+- 不再有 dict 被转为字符串的污染问题
+
+### 文档
+
+- 同步更新 `__manifest__.py`
+
+---
+
 ## [19.0.1.6.0] - 2026-09-02
 
 ### 变更
