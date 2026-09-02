@@ -1,5 +1,27 @@
 # 变更日志
 
+## [19.0.1.4.0] - 2026-09-02
+
+### 变更
+
+- PDF 文件名定制：
+  - 覆盖 `sale` 模块原生 `ir.actions.report` 记录 `action_report_saleorder` 与 `action_report_saleorder_pro_forma` 的 `print_report_name`
+  - 报价单（draft/sent 态）文件名由 `Quotation - <order_no or name>` 生成，订单态为 `Order - <order_no or name>`
+  - 形式发票文件名由 `PRO-FORMA - <order_no or name>` 生成
+  - 未分配 `order_no` 时回退到 `object.name`，保证新建未保存单据不报错
+
+### 影响
+
+- 用户打印询价单、报价单、销售订单、形式发票时，下载的 PDF 文件名会显示自定义订单编号（如 `Quotation - DZ2602.pdf`），不再暴露原生 `SOxxxx`
+- 打印报表正文显示订单编号的能力在 `19.0.1.3.0` 已具备（继承 `sale.report_saleorder_document`），本次无重复改动
+- 不涉及数据库结构变更，无需迁移脚本
+
+### 文档
+
+- 同步更新 `README.md`、`__manifest__.py`
+
+---
+
 ## [19.0.1.3.0] - 2026-09-01
 
 ### 变更

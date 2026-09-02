@@ -18,4 +18,17 @@
 
     </template>
 
+    <!-- ============================================================ -->
+    <!-- PDF 文件名：用订单编号替代系统编号                           -->
+    <!-- 覆盖 sale 模块原生 ir.actions.report 的 print_report_name，  -->
+    <!-- 未分配编号时回退到 object.name，保证新建未保存单据不报错。    -->
+    <!-- ============================================================ -->
+    <record id="action_report_saleorder" model="ir.actions.report">
+        <field name="print_report_name">(object.state in ('draft', 'sent') and 'Quotation - %s' % (object.order_no or object.name)) or 'Order - %s' % (object.order_no or object.name)</field>
+    </record>
+
+    <record id="action_report_saleorder_pro_forma" model="ir.actions.report">
+        <field name="print_report_name">'PRO-FORMA - %s' % (object.order_no or object.name)</field>
+    </record>
+
 </odoo>
