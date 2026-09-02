@@ -1,5 +1,26 @@
 # 变更日志
 
+## [19.0.1.5.4] - 2026-09-02
+
+### 变更
+
+- PDF 文件名覆盖改为 `<function>` + `write` 强制执行：
+  - 1.5.3 用 `<record id="sale.action_report_saleorder" model="ir.actions.report">` 跨模块引用 sale 的报表动作，但截图证明 PDF 文件名仍未变（仍是 `S00026`），说明该写法在升级时未真正覆盖 `print_report_name`
+  - 改为在 `reports/report_saleorder.xml` 末尾追加两条 `<function model="ir.actions.report" name="write">`，显式查找 `sale.action_report_saleorder` 与 `sale.action_report_pro_forma_invoice` 的 `res_id` 并写入新的 `print_report_name`
+  - `<function>` 在 init/update/demo 模式下都会执行，确保数据库里该字段必定为最新版本
+  - 1.5.3 之前的 `<record>` 写法保留以兼容两种模式，但 `<function>` 会强制覆盖
+
+### 影响
+
+- 升级后 `print_report_name` 必定被强制写入含 `order_no` 的表达式，不再依赖 XML 跨模块 record id 引用的兼容性
+- 不涉及数据库结构变更
+
+### 文档
+
+- 同步更新 `__manifest__.py`
+
+---
+
 ## [19.0.1.5.3] - 2026-09-02
 
 ### 变更
