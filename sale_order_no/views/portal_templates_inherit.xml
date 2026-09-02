@@ -8,39 +8,43 @@
     <!-- 必须在视图层显式覆盖。                                       -->
     <!-- ============================================================ -->
 
-    <!-- 面包屑：销售订单/报价单详情页通用 -->
+    <!--
+        sale.portal_my_home_menu_sale 是 extension 模式，
+        parent = portal.portal_breadcrumbs。
+        它用 <xpath position="inside"> 向 <ol class="o_portal_submenu"> 内
+        追加 3 个 <li>，其中第 3 个 <li>（带 t-if="sale_order" 且
+        class="breadcrumb-item active"）是详情页尾节点：
+            <li t-if="sale_order" class="breadcrumb-item active">
+                <span t-field="sale_order.type_name"/>
+                <t t-out="sale_order.name"/>
+            </li>
+        继承时 parent 仍是 portal.portal_breadcrumbs，
+        xpath 必须能匹配到应用 sale 那个 extension 之后的全树。
+        用 hasclass 匹配 <li>，用 <t> 直接定位（无歧义：active li 内只有一个 <t>）。
+    -->
     <template id="portal_my_home_menu_sale_inherit"
               inherit_id="sale.portal_my_home_menu_sale"
               priority="99">
 
-        <!--
-            原始结构：
-              <li t-if="sale_order" class="breadcrumb-item active">
-                  <span t-field="sale_order.type_name"/>
-                  <t t-out="sale_order.name"/>
-              </li>
-            用位置定位第三个子节点：第二个 <span> 之前的 <t>。
-        -->
-        <xpath expr="//li[hasclass('breadcrumb-item') and hasclass('active')]/t[2]" position="replace">
+        <xpath expr="//li[hasclass('breadcrumb-item')][hasclass('active')]/t" position="replace">
             <!-- 优先显示订单编号，未分配时回退到系统编号 -->
             <t t-out="sale_order.order_no or sale_order.name"/>
         </xpath>
 
     </template>
 
-    <!-- 客户门户详情页：H2 标题（"Quotation - S00026" / "Order - S00026"） -->
+    <!--
+        sale.sale_order_portal_content 第 582 行：
+            <h2>
+                <t t-out="sale_order.type_name"/> -
+                <em t-out="sale_order.name"/>
+            </h2>
+        模板内只有这一处 <em>，无歧义。
+    -->
     <template id="sale_order_portal_content_inherit"
               inherit_id="sale.sale_order_portal_content"
               priority="99">
 
-        <!--
-            原始结构：
-              <h2>
-                  <t t-out="sale_order.type_name"/> -
-                  <em t-out="sale_order.name"/>
-              </h2>
-            直接选 <em> 元素（模板内只有这一处 <em>，无歧义）。
-        -->
         <xpath expr="//div[@id='introduction']//h2/em" position="replace">
             <!-- 优先显示订单编号，未分配时回退到系统编号 -->
             <em t-out="sale_order.order_no or sale_order.name"/>

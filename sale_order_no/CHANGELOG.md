@@ -1,5 +1,24 @@
 # 变更日志
 
+## [19.0.1.5.2] - 2026-09-02
+
+### 变更
+
+- 客户门户预览页面（xpath 兼容性修复）：
+  - 1.5.1 用的 xpath `//li[hasclass('breadcrumb-item') and hasclass('active')]/t[2]` 在 Odoo 19 视图继承链中报"上级视图内找不到元素"
+  - 改为 `//li[hasclass('breadcrumb-item')][hasclass('active')]/t`（两个谓词连写代替 `and`，去掉位置索引 `[2]`，直接选 active `<li>` 内唯一的 `<t>`）
+  - H2 标题的 xpath 保持 `//div[@id='introduction']//h2/em`
+
+### 影响
+
+- 与 1.5.0/1.5.1 行为一致；不涉及数据库结构变更
+
+### 文档
+
+- 同步更新 `__manifest__.py`
+
+---
+
 ## [19.0.1.5.1] - 2026-09-02
 
 ### 变更
