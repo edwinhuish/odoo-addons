@@ -1,0 +1,8 @@
+/* 图片粘贴 / 拖拽上传的视觉提示 */
+
+.o_image_uploader_drag_over {
+    outline: 2px dashed #7c7bad;
+    outline-offset: -2px;
+    background-color: rgba(124, 123, 173, 0.08);
+    transition: outline 0.15s ease, background-color 0.15s ease;
+}

@@ -32,7 +32,7 @@
 |------|------|------|------|
 | ✅ | `sale_order_no` | 19.0.1.7.0 | 销售订单/报价单自定义编号（客户编码+年份+流水号），含 PDF 文件名与门户预览定制 |
 | ✅ | `product_model` | 19.0.1.0.0 | 产品多型号 + 可搜索（T-002），目标环境已验证 |
-| 🚧 | `image_uploader` | 19.0.1.0.0 | 图片粘贴上传，待迁移+增强（T-003） |
+| 🚧 | `image_uploader` | 19.0.1.0.0 | 图片粘贴 / 拖拽上传，一次多图，超大图报错（T-003，待验证） |
 | 🚧 | `product_multi_image` | — | 产品多图图库（T-004） |
 | 🚧 | `web_multi_tabs` | 19.0.1.0.0 | 后台多标签页，未迁移按需（T-005） |
 
@@ -41,28 +41,39 @@
 
 ## 进行中
 
-（空）
+### T-003 ｜ `image_uploader` ｜ P1 ｜ 图片支持粘贴上传（迁移 + 增强）
 
----
+现状：历史备份目录不可用，基于 Odoo 19 原生 `FileUploader` / `ImageField` 组件重新实现并增强。
 
-## 待办池
+本次做的事：
 
-### T-003 ｜ `image_uploader` ｜ P1 ｜ 图片支持粘贴上传（已有实现，需迁移 + 增强）
-
-现状：历史模块 `image_uploader` 已支持后台图片字段 `Ctrl+V` / `Cmd+V` 粘贴上传。
-
-本次要做的事：
-
-- [ ] 从本地备份目录迁移 `image_uploader` 到本仓库（注意其静态资源路径为 `static/src/{js,xml,scss}`）
-- [ ] 扩展到 T-004 的多图片控件（列表/图库内粘贴即新增一条图片记录）
-- [ ] 增强：拖拽上传、一次粘贴多图、上传中状态提示、超大图压缩或明确报错
+- [x] 基于 Odoo 19 原生上传组件重新实现 `image_uploader`（纯前端模块，依赖 `web`）
+- [x] patch `ImageField`：根 `div` 挂 `t-on-paste` / `t-on-dragover` / `t-on-dragleave` / `t-on-drop`，复用原生 `onFileUploaded(info)`
+- [x] patch `FileUploader`：根 `div` 挂 `t-on-paste`，让所有使用 `FileUploader` 的场景都获得粘贴能力
+- [x] 增强：拖拽上传（含高亮提示）、一次粘贴 / 拖拽多图、超大图走原生 `checkFileSize` 报错（带出具体大小）
+- [x] 只读态处理器入口直接 `return`；剪贴板无图片时不 `preventDefault`（放行文本粘贴）
+- [x] 复用 Odoo 原生上传链路（`getDataURLFromFile` → `onUploaded`），不改核心模板文件
 
 验收标准：
 
 - [ ] 图片区域获得焦点后 `Ctrl+V` 可直接上传，效果与点选文件一致
 - [ ] 剪贴板无图片时不拦截普通文本粘贴
 - [ ] 只读态不触发上传
+- [ ] 拖拽图片文件到图片区域可上传，容器高亮提示
+- [ ] 一次粘贴 / 拖拽多张图片逐张处理
+- [ ] 超大图弹出中文报错，带出具体大小
 - [ ] 复用 Odoo 原生上传链路，不改核心模板文件
+
+### T-003 待验证清单
+
+- 改了什么：新增纯前端模块 `image_uploader`，patch `ImageField` 与 `FileUploader`，扩展两个 QWeb 模板挂事件，新增拖拽高亮样式
+- 在哪验证：任意带图片字段的表单（如产品表单 `image_1920`、联系人表单头像）
+- 怎么验：见上方「验收标准」7 项
+- 回滚方式：卸载模块 `odoo -d <db> -u image_uploader --stop-after-init` 后在应用列表卸载；或直接从 `addons_path` 移除目录后重启
+
+---
+
+## 待办池
 
 ### T-004 ｜ `product_multi_image`（新） ｜ P1 ｜ 产品支持多图片
 

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!--
+        ImageField 根 div 绑定 paste / dragover / dragleave / drop 事件
+        不替换原模板，只通过 t-inherit extension 模式添加事件处理器
+    -->
+    <t t-name="image_uploader.ImageField" t-inherit="web.ImageField" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('opacity-trigger-hover')]" position="attributes">
+            <attribute name="t-on-paste">onPaste</attribute>
+            <attribute name="t-on-dragover.prevent">onDragOver</attribute>
+            <attribute name="t-on-dragleave">onDragLeave</attribute>
+            <attribute name="t-on-drop.prevent">onDrop</attribute>
+            <attribute name="tabindex">0</attribute>
+        </xpath>
+    </t>
+
+    <!--
+        FileUploader 根 div 绑定 paste 事件，让所有使用 FileUploader 的场景
+        （Many2many binary、附件上传等）都获得粘贴能力
+    -->
+    <t t-name="image_uploader.FileUploader" t-inherit="web.FileUploader" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('d-contents')]" position="attributes">
+            <attribute name="t-on-paste">onPaste</attribute>
+        </xpath>
+    </t>
+
+</templates>
