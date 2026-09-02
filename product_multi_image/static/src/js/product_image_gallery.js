@@ -1,15 +1,14 @@
 /** @odoo-module **/
 
-import { ImageField } from "@web/views/fields/image/image_field";
-import { FileUploader } from "@web/views/fields/file_handler";
-import { registry } from "@web/core/registry";
 import { _t } from "@web/core/l10n/translation";
 import { useService } from "@web/core/utils/hooks";
-import { getDataURLFromFile } from "@web/core/utils/urls";
+import { getDataURLFromFile, imageUrl } from "@web/core/utils/urls";
 import { checkFileSize } from "@web/core/utils/files";
-import { isBinarySize, fileTypeMagicWordMap } from "@web/views/fields/image/image_field";
-import { imageUrl } from "@web/core/utils/urls";
+import { isBinarySize } from "@web/core/utils/binary";
+import { fileTypeMagicWordMap } from "@web/views/fields/image/image_field";
+import { FileUploader } from "@web/views/fields/file_handler";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
+import { registry } from "@web/core/registry";
 
 import { Component, useState } from "@odoo/owl";
 
