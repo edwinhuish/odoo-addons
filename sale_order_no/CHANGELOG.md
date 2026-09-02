@@ -1,5 +1,24 @@
 # 变更日志
 
+## [19.0.1.5.3] - 2026-09-02
+
+### 变更
+
+- PDF 文件名覆盖修复：
+  - 1.4.0 用 `<data noupdate="1">` 包裹两条 `ir.actions.report` 覆盖，导致首次安装后再次升级时 Odoo 跳过写入，旧 `object.name` 表达式残留，PDF 文件名仍为 `Quotation - S00026.pdf`
+  - 移除 `<data noupdate="1">` 包裹，改为默认 `noupdate=0`，每次升级都强制覆盖 `print_report_name`，避免用户手动改动或历史失败升级造成的旧值残留
+
+### 影响
+
+- 升级后 `sale.action_report_saleorder` 与 `sale.action_report_pro_forma_invoice` 的 `print_report_name` 会被强制刷新为含 `order_no` 的表达式
+- 不涉及数据库结构变更
+
+### 文档
+
+- 同步更新 `__manifest__.py`
+
+---
+
 ## [19.0.1.5.2] - 2026-09-02
 
 ### 变更

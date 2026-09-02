@@ -21,17 +21,17 @@
     <!-- ============================================================ -->
     <!-- PDF 文件名：用订单编号替代系统编号                           -->
     <!-- 通过完整外部 ID（sale.xxx）引用 sale 模块的 ir.actions.report， -->
-    <!-- Odoo 识别为更新现有记录而非新建。noupdate=1 防止升级时覆盖。  -->
+    <!-- Odoo 识别为更新现有记录而非新建。                            -->
+    <!-- 不用 noupdate=1：让每次升级都强制覆盖 print_report_name，    -->
+    <!-- 避免首次写入失败或用户手动改动后旧表达式残留。              -->
     <!-- 未分配编号时回退到 object.name，保证新建未保存单据不报错。    -->
     <!-- ============================================================ -->
-    <data noupdate="1">
-        <record id="sale.action_report_saleorder" model="ir.actions.report">
-            <field name="print_report_name">(object.state in ('draft', 'sent') and 'Quotation - %s' % (object.order_no or object.name)) or 'Order - %s' % (object.order_no or object.name)</field>
-        </record>
+    <record id="sale.action_report_saleorder" model="ir.actions.report">
+        <field name="print_report_name">(object.state in ('draft', 'sent') and 'Quotation - %s' % (object.order_no or object.name)) or 'Order - %s' % (object.order_no or object.name)</field>
+    </record>
 
-        <record id="sale.action_report_pro_forma_invoice" model="ir.actions.report">
-            <field name="print_report_name">'PRO-FORMA - %s' % (object.order_no or object.name)</field>
-        </record>
-    </data>
+    <record id="sale.action_report_pro_forma_invoice" model="ir.actions.report">
+        <field name="print_report_name">'PRO-FORMA - %s' % (object.order_no or object.name)</field>
+    </record>
 
 </odoo>
