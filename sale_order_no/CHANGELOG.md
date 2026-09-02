@@ -1,5 +1,28 @@
 # 变更日志
 
+## [19.0.1.6.0] - 2026-09-02
+
+### 变更
+
+- PDF 文件名覆盖——按语言强制写入：
+  - 发现 1.5.4 用 `<function>` + `write` 只覆盖了 `en_US` 翻译，`zh_CN` 仍是原生 `object.name` 表达式，导致中文界面下 PDF 文件名仍是 `S00026`
+  - 根因：`print_report_name` 是 `translate=True` 字段（JSONB 按语言存储），XML 加载默认上下文是 `en_US`，普通 `write({'print_report_name': '...'})` 只写当前 lang 对应的 key
+  - 新增 `models/ir_actions_report.py`，扩展 `ir.actions.report`，提供 `_force_order_no_print_name(expression)` 方法
+  - 该方法在所有 `res.lang` 上写入相同表达式（用 `with_context(lang=None).write({'print_report_name': {lang: value for lang in langs}})`）
+  - `reports/report_saleorder.xml` 中两条 `<function>` 改为调用 `_force_order_no_print_name`
+
+### 影响
+
+- 升级后任意语言下打印，PDF 文件名都会显示 `order_no`（如 `Quotation - OW2602.pdf`）
+- 数据库中 `print_report_name` 的 JSONB 所有语言 key 都会被统一覆盖
+- 不涉及 sale_order 表结构变更
+
+### 文档
+
+- 同步更新 `__manifest__.py`
+
+---
+
 ## [19.0.1.5.4] - 2026-09-02
 
 ### 变更

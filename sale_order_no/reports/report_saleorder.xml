@@ -19,26 +19,24 @@
     </template>
 
     <!-- ============================================================ -->
-    <!-- PDF 文件名：用 <function> 在加载阶段直接调 write 强制覆盖   -->
-    <!-- sale.action_report_saleorder 与 sale.action_report_pro_forma_  -->
-    <!-- invoice 的 print_report_name。                                -->
-    <!-- 用 <function> 而非 <record id="sale.xxx"> 的原因：            -->
-    <!-- 1. 跨模块引用 record id 存在解析不确定性（Odoo 19 数据加载器  -->
-    <!--    对 update 模式下带模块前缀 id 的处理不统一）              -->
-    <!-- 2. <function> 在 init/update/demo 三种模式下都会执行，        -->
-    <!--    确保数据库里 print_report_name 必定为最新版本              -->
-    <!-- 3. 用 env['ir.actions.report'].write 强制写入，绕过任何        -->
-    <!--    noupdate 检查或缓存问题                                    -->
+    <!-- PDF 文件名：用 <function> 调 _force_order_no_print_name      -->
+    <!-- 强制按所有启用语言写入 print_report_name 翻译值。            -->
+    <!--                                                            -->
+    <!-- print_report_name 是 translate=True 字段（JSONB 多语言），    -->
+    <!-- 普通 write({'print_report_name': '...'}) 只写当前 lang 对应   -->
+    <!-- 的 key（XML 加载默认 en_US），其他语言（如 zh_CN）仍是旧值。 -->
+    <!-- _force_order_no_print_name 在所有 res.lang 上写入相同值，     -->
+    <!-- 确保任意语言下 PDF 文件名都用 order_no。                     -->
     <!-- 未分配编号时回退到 object.name，保证新建未保存单据不报错。    -->
     <!-- ============================================================ -->
-    <function model="ir.actions.report" name="write">
-        <value model="ir.actions.report" eval="[ref('sale.action_report_saleorder')]"/>
-        <value eval="{'print_report_name': &quot;(object.state in ('draft', 'sent') and 'Quotation - %s' % (object.order_no or object.name)) or 'Order - %s' % (object.order_no or object.name)&quot;}"/>
+    <function model="ir.actions.report" name="_force_order_no_print_name">
+        <value model="ir.actions.report" eval="ref('sale.action_report_saleorder')"/>
+        <value eval="&quot;(object.state in ('draft', 'sent') and 'Quotation - %s' % (object.order_no or object.name)) or 'Order - %s' % (object.order_no or object.name)&quot;"/>
     </function>
 
-    <function model="ir.actions.report" name="write">
-        <value model="ir.actions.report" eval="[ref('sale.action_report_pro_forma_invoice')]"/>
-        <value eval="{'print_report_name': &quot;'PRO-FORMA - %s' % (object.order_no or object.name)&quot;}"/>
+    <function model="ir.actions.report" name="_force_order_no_print_name">
+        <value model="ir.actions.report" eval="ref('sale.action_report_pro_forma_invoice')"/>
+        <value eval="&quot;'PRO-FORMA - %s' % (object.order_no or object.name)&quot;"/>
     </function>
 
 </odoo>
