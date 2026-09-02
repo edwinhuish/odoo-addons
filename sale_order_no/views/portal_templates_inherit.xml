@@ -2,19 +2,26 @@
 <odoo>
 
     <!-- ============================================================ -->
-    <!-- 客户门户模板：把面包屑与标题里的 sale_order.name 替换为     -->
-    <!-- sale_order.order_no，未分配时回退到 sale_order.name。         -->
-    <!-- 这两处原本直接 t-out sale_order.name，绕过了               -->
+    <!-- 客户门户模板：把 sale_order.name 替换为 order_no。           -->
+    <!-- sale 模块原模板直接 t-out sale_order.name，绕过了            -->
     <!-- _compute_display_name() 的优先显示 order_no 逻辑，           -->
-    <!-- 所以必须显式覆盖。                                          -->
+    <!-- 必须在视图层显式覆盖。                                       -->
     <!-- ============================================================ -->
 
-    <!-- 面包屑：销售订单/报价单列表与详情页通用 -->
+    <!-- 面包屑：销售订单/报价单详情页通用 -->
     <template id="portal_my_home_menu_sale_inherit"
               inherit_id="sale.portal_my_home_menu_sale"
               priority="99">
 
-        <xpath expr="//li[hasclass('breadcrumb-item') and hasclass('active')]/t[@t-out='sale_order.name']" position="replace">
+        <!--
+            原始结构：
+              <li t-if="sale_order" class="breadcrumb-item active">
+                  <span t-field="sale_order.type_name"/>
+                  <t t-out="sale_order.name"/>
+              </li>
+            用位置定位第三个子节点：第二个 <span> 之前的 <t>。
+        -->
+        <xpath expr="//li[hasclass('breadcrumb-item') and hasclass('active')]/t[2]" position="replace">
             <!-- 优先显示订单编号，未分配时回退到系统编号 -->
             <t t-out="sale_order.order_no or sale_order.name"/>
         </xpath>
@@ -26,7 +33,15 @@
               inherit_id="sale.sale_order_portal_content"
               priority="99">
 
-        <xpath expr="//h2/em[@t-out='sale_order.name']" position="replace">
+        <!--
+            原始结构：
+              <h2>
+                  <t t-out="sale_order.type_name"/> -
+                  <em t-out="sale_order.name"/>
+              </h2>
+            直接选 <em> 元素（模板内只有这一处 <em>，无歧义）。
+        -->
+        <xpath expr="//div[@id='introduction']//h2/em" position="replace">
             <!-- 优先显示订单编号，未分配时回退到系统编号 -->
             <em t-out="sale_order.order_no or sale_order.name"/>
         </xpath>
