@@ -1,5 +1,26 @@
 # 变更日志
 
+## [19.0.1.7.0] - 2026-09-02
+
+### 变更
+
+- 覆盖 sale_pdf_quote_builder 模块新建的报表动作：
+  - 发现"打印 → 报价单/订单"菜单项指向 `sale_pdf_quote_builder.action_report_saleorder_raw`（report_name=`sale.report_saleorder_raw`），与"打印 → PDF 询价"（指向 `sale.action_report_saleorder`）是**两个不同的报表动作**
+  - 1.6.1 只覆盖了 `sale.action_report_saleorder` 与 `sale.action_report_pro_forma_invoice`，未覆盖 `sale_pdf_quote_builder.action_report_saleorder_raw`，导致"报价单/订单"PDF 文件名仍是 `object.name`
+  - 新增 `<function>` 覆盖 `sale_pdf_quote_builder.action_report_saleorder_raw` 的 `print_report_name`，行为与其他两条一致
+  - `__manifest__.py` 的 `depends` 加入 `sale_pdf_quote_builder`
+
+### 影响
+
+- 升级后"打印 → 报价单/订单"导出的 PDF 文件名也会显示 `order_no`
+- 必须先安装 `sale_pdf_quote_builder` 模块（Odoo 19 enterprise 标准模块），否则依赖无法满足
+
+### 文档
+
+- 同步更新 `__manifest__.py`
+
+---
+
 ## [19.0.1.6.1] - 2026-09-02
 
 ### 变更
@@ -154,7 +175,7 @@
   - 用 `<data noupdate="1">` 包裹，防止后续升级反复覆盖用户手动调整
   - 未分配 `order_no` 时回退到 `object.name`，保证新建未保存单据不报错
   - 报价单（draft/sent 态）文件名由 `Quotation - <order_no or name>` 生成，订单态为 `Order - <order_no or name>`
-  - 形式发票文件名由 `PRO-FORMA - <order_no or name>` 生成
+  - 形式发票文件名由 `Proforma - <order_no or name>` 生成
   - 未分配 `order_no` 时回退到 `object.name`，保证新建未保存单据不报错
 
 ### 影响

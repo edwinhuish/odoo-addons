@@ -1,6 +1,6 @@
 {
     "name": "订单编号",
-    "version": "19.0.1.6.1",
+    "version": "19.0.1.7.0",
     "summary": "按客户编码+年份生成订单编号，支持手动编辑、批量补号、全局唯一校验、PDF文件名与门户预览定制",
     "description": """
         外贸SOHO场景下的销售订单/报价单编号定制模块。
@@ -28,7 +28,7 @@
     """,
     "category": "Sales",
     "author": "SOHO外贸",
-    "depends": ["sale"],
+    "depends": ["sale", "sale_pdf_quote_builder"],
     "data": [
         "views/partner_views.xml",
         "views/sale_order_views.xml",

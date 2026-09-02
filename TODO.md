@@ -42,7 +42,7 @@
 - [x] 改良：数据库层 `UNIQUE(order_no)` 兜底 + 重号自动避让
 - [x] 改良：批量导入保留原编号并还原流水号，列表「生成订单编号」批量补号
 - [x] 改良：搜索框默认过滤域加入 `order_no`
-- [x] 改良：PDF 文件名包含 `order_no`（覆盖 `action_report_saleorder` / `action_report_pro_forma_invoice` 的 `print_report_name`），报表正文显示在 1.3.0 已具备
+- [x] 改良：PDF 文件名包含 `order_no`（覆盖 `sale.action_report_saleorder` / `sale.action_report_pro_forma_invoice` / `sale_pdf_quote_builder.action_report_saleorder_raw` 的 `print_report_name`，用 `<function>` + 自定义 `_force_order_no_print_name` 按所有语言写入）
 - [x] 改良：客户门户预览页面的面包屑与 H2 标题也用 `order_no`（绕过 `_compute_display_name` 的两处 `sale_order.name` 已被显式覆盖）
 - [x] 配套文档：`README.md` / `CHANGELOG.md` / `AGENTS.md` / 迁移脚本
 - [ ] **待目标环境验证**（验证清单见本条目末尾）
@@ -53,7 +53,7 @@
 - [ ] `order_no` 重复时阻止保存并给出中文提示
 - [ ] 表单标题、列表、打印报表统一显示 `order_no`
 - [ ] 打印询价单/报价单/销售订单时，PDF 文件名包含 `order_no`（如 `Quotation - DZ2602.pdf`）
-- [ ] 打印形式发票时，PDF 文件名为 `PRO-FORMA - DZ2602.pdf`
+- [ ] 打印形式发票时，PDF 文件名为 `Proforma - DZ2602.pdf`
 - [ ] 未分配 `order_no` 的单据打印时，文件名回退到系统编号不报错
 - [ ] 后台「客户门户预览」页面的面包屑尾与 H2 标题都显示 `order_no`
 - [ ] Many2one 下拉输入 `DZ2602` 能搜到对应单据

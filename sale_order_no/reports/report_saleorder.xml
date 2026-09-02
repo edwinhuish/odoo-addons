@@ -36,7 +36,14 @@
 
     <function model="ir.actions.report" name="_force_order_no_print_name">
         <value model="ir.actions.report" eval="ref('sale.action_report_pro_forma_invoice')"/>
-        <value eval="&quot;'PRO-FORMA - %s' % (object.order_no or object.name)&quot;"/>
+        <value eval="&quot;'Proforma - %s' % (object.order_no or object.name)&quot;"/>
+    </function>
+
+    <!-- sale_pdf_quote_builder 模块新建的报表动作：report_name='sale.report_saleorder_raw' -->
+    <!-- "打印 → 报价单/订单" 菜单项指向此动作（"打印 → PDF 询价" 指向 sale.action_report_saleorder） -->
+    <function model="ir.actions.report" name="_force_order_no_print_name">
+        <value model="ir.actions.report" eval="ref('sale_pdf_quote_builder.action_report_saleorder_raw')"/>
+        <value eval="&quot;(object.state in ('draft', 'sent') and 'Quotation - %s' % (object.order_no or object.name)) or 'Order - %s' % (object.order_no or object.name)&quot;"/>
     </function>
 
 </odoo>
