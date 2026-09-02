@@ -26,54 +26,22 @@
 
 ---
 
+## 模块进度速查
+
+| 状态 | 模块 | 版本 | 作用 |
+|------|------|------|------|
+| ✅ | `sale_order_no` | 19.0.1.7.0 | 销售订单/报价单自定义编号（客户编码+年份+流水号），含 PDF 文件名与门户预览定制 |
+| 🚧 | `product_model` | — | 产品多型号 + 可搜索（T-002） |
+| 🚧 | `image_uploader` | 19.0.1.0.0 | 图片粘贴上传，待迁移+增强（T-003） |
+| 🚧 | `product_multi_image` | — | 产品多图图库（T-004） |
+| 🚧 | `web_multi_tabs` | 19.0.1.0.0 | 后台多标签页，未迁移按需（T-005） |
+
+
+---
+
 ## 进行中
 
-### T-001 ｜ `sale_order_no` ｜ P0 ｜ 自定义销售订单号（迁移 + 改良）
-
-> 状态：代码已交付（`19.0.1.3.0`），仓库内无 Odoo 运行环境，**待目标环境安装/升级后验证**。
-> 验证通过后再把本条整条移入「已完成」。
-
-- [x] 从本地备份目录迁移 `sale_order_no` 到本仓库
-- [x] Odoo 19 兼容性核对与改造（对照 19.0 源码逐项确认，见模块 CHANGELOG）
-  - [x] 删除 `name_get()`（Odoo 19 已从核心移除），收敛到 `_compute_display_name()`
-  - [x] 新增 `_search_display_name()`，Many2one 下拉/搜索建议可按编号命中
-  - [x] `web_search_read()` 按 19 的签名重写
-  - [x] 报表改为只继承 `sale.report_saleorder_document`，变量 `o.name` → `doc.name`
-- [x] 改良：数据库层 `UNIQUE(order_no)` 兜底 + 重号自动避让
-- [x] 改良：批量导入保留原编号并还原流水号，列表「生成订单编号」批量补号
-- [x] 改良：搜索框默认过滤域加入 `order_no`
-- [x] 改良：PDF 文件名包含 `order_no`（覆盖 `sale.action_report_saleorder` / `sale.action_report_pro_forma_invoice` / `sale_pdf_quote_builder.action_report_saleorder_raw` 的 `print_report_name`，用 `<function>` + 自定义 `_force_order_no_print_name` 按所有语言写入）
-- [x] 改良：客户门户预览页面的面包屑与 H2 标题也用 `order_no`（绕过 `_compute_display_name` 的两处 `sale_order.name` 已被显式覆盖）
-- [x] 配套文档：`README.md` / `CHANGELOG.md` / `AGENTS.md` / 迁移脚本
-- [ ] **待目标环境验证**（验证清单见本条目末尾）
-
-验收标准：
-
-- [ ] 新建报价单/销售订单自动生成 `order_no`（如 `DZ2602`），可手动编辑
-- [ ] `order_no` 重复时阻止保存并给出中文提示
-- [ ] 表单标题、列表、打印报表统一显示 `order_no`
-- [ ] 打印询价单/报价单/销售订单时，PDF 文件名包含 `order_no`（如 `Quotation - DZ2602.pdf`）
-- [ ] 打印形式发票时，PDF 文件名为 `Proforma - DZ2602.pdf`
-- [ ] 未分配 `order_no` 的单据打印时，文件名回退到系统编号不报错
-- [ ] 后台「客户门户预览」页面的面包屑尾与 H2 标题都显示 `order_no`
-- [ ] Many2one 下拉输入 `DZ2602` 能搜到对应单据
-- [ ] 复制单据重新分配编号，旧编号保留；作废单据仍占用流水号
-- [ ] 列表勾选缺号单据 → 动作 → 生成订单编号，能批量补号
-- [ ] 联系人 `ref` 保存为小写时自动转大写，含数字时报错提示
-- [ ] 原生 `sale.order.name`（`SOxxxx`）继续作为内部主键，不被改写
-
-待验证清单（在目标环境执行）：
-
-```bash
-odoo -d <db> -i sale_order_no --stop-after-init     # 全新安装
-odoo -d <db> -u sale_order_no --stop-after-init     # 代码改动后升级（前端资源需强刷）
-```
-
-- 全新库安装一次；已有数据的库升级一次，重点看升级日志里 `-DUP` warning（历史重复编号）
-- 若安装/升级报视图 xpath 找不到锚点，优先核对 `sale.view_order_form`、`sale.sale_order_tree`、
-  `sale.report_saleorder_document` 三处结构是否被其他模块改动
-
-回滚方式：卸载模块即可（不删列）；若已产生重复编号改写，需依据日志人工恢复 `order_no`。
+（空）
 
 ---
 
@@ -143,7 +111,14 @@ odoo -d <db> -u sale_order_no --stop-after-init     # 代码改动后升级（�
 
 ## 已完成
 
-（空）
+### T-001 ｜ `sale_order_no` ｜ P0 ｜ 自定义销售订单号（迁移 + 改良）
+
+- 完成日期：2026-09-02
+- 落地版本：`19.0.1.7.0`
+- 功能：销售订单/报价单自定义编号（`order_no`，客户编码+两位年份+年度流水），含客户编码格式校验、报表正文替换、PDF 文件名定制（三个报表动作）、客户门户预览定制、批量补号
+- 验证状态：目标环境已验证 PDF 文件名（中英文界面）、门户预览、编号生成、唯一校验均正常
+- 依赖：`sale`、`sale_pdf_quote_builder`（Odoo 19 企业版标准模块）
+- 仅支持全新安装（已删除 `migrations/` 目录）
 
 ---
 
