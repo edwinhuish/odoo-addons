@@ -251,10 +251,18 @@ export class ProductImageGallery extends Component {
             return;
         }
         const list = this.galleryList;
-        if (rec.isNew) {
+        if (!list) {
+            return;
+        }
+        // 已保存记录：用 list.deleteRecords 走 orm.unlink + 从 records 移除
+        // 新记录（未保存）：直接从 records 数组移除（_removeRecords 私有但稳定）
+        if (!rec.isNew && rec.resId && list.deleteRecords) {
+            await list.deleteRecords([rec]);
+        } else if (list._removeRecords) {
+            list._removeRecords([rec.id]);
+        } else if (list.removeRecord) {
+            // DynamicRecordList 兼容路径
             list.removeRecord(rec);
-        } else {
-            await rec.delete();
         }
         this._clampIndex();
     }
