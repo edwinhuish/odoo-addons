@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 型号明细模型：独立列表/表单视图（便于管理员单独检索与维护）   -->
+    <!-- ============================================================ -->
+
+    <record id="product_model_code_list_view" model="ir.ui.view">
+        <field name="name">product.model.code.list</field>
+        <field name="model">product.model.code</field>
+        <field name="arch" type="xml">
+            <list string="产品型号" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="model_code" required="1"/>
+                <field name="model_type"/>
+                <field name="product_tmpl_id" readonly="1"/>
+                <field name="active" widget="boolean_toggle"/>
+                <field name="note"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="product_model_code_form_view" model="ir.ui.view">
+        <field name="name">product.model.code.form</field>
+        <field name="model">product.model.code</field>
+        <field name="arch" type="xml">
+            <form string="产品型号">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="model_code" required="1"
+                                   placeholder="如 MODEL-A、SKU-1234"/>
+                            <field name="model_type"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="product_tmpl_id"/>
+                            <field name="sequence"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="note"
+                               placeholder="可选，如对应客户 / 版本 / 生效日期"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="product_model_code_search_view" model="ir.ui.view">
+        <field name="name">product.model.code.search</field>
+        <field name="model">product.model.code</field>
+        <field name="arch" type="xml">
+            <search string="产品型号">
+                <field name="model_code"/>
+                <field name="model_type"/>
+                <field name="product_tmpl_id"/>
+                <separator/>
+                <filter string="启用" name="active"
+                        domain="[('active', '=', True)]"/>
+                <filter string="停用" name="inactive"
+                        domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_product_model_code" model="ir.actions.act_window">
+        <field name="name">产品型号</field>
+        <field name="res_model">product.model.code</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="product_model_code_search_view"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                创建一条产品型号
+            </p>
+            <p>
+                一个产品可挂多条型号（客户型号 / 工厂型号 / 别名）。
+                通常在产品表单的「型号」页内维护，此处用于批量检索与维护。
+            </p>
+        </field>
+    </record>
+
+</odoo>

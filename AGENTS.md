@@ -17,6 +17,9 @@
   仅作为迁移参考，**不纳入本仓库、不直接在该目录开发**。
 - **本仓库不含 Odoo 源码与数据库**，模块无法在仓库内独立运行；改动需挂到目标 Odoo 环境安装/升级后验证，
   交付时给出「待验证清单」。
+- **查阅 Odoo 源码**：应前往 `/tmp/odoo` 目录进行查阅；若该目录不存在，则需重新执行
+  `cd /tmp && git clone --depth 1 -b 19.0 git@github.com:odoo/odoo.git` 命令进行克隆，
+  不要每次都 curl GitHub 以免触发限流。
 - 模块目录骨架：
 
 ```text
@@ -58,7 +61,7 @@
 - `_sql_constraints` 已废弃，改用模型属性：`_xxx_unique = models.Constraint("UNIQUE(field)", "提示")`、`models.Index(...)`、`models.UniqueIndex(...)`。
 - `web_search_read(domain, specification, offset, limit, order, count_limit)` 定义在 `web` 模块的 `_inherit='base'` 上，所有模型可用。
 - 视图继承：扩展祖先视图（extension）对其所有 primary 子视图生效，改列表要继承基础列表而非某个 primary 子视图。
-- 改动前先核对目标结构：GitHub 原始文件可直接 `curl https://raw.githubusercontent.com/odoo/odoo/19.0/<路径>` 查看。
+- 改动前先核对目标结构：查阅 Odoo 源码时，应前往 `/tmp/odoo` 目录进行查阅；若该目录不存在，则需重新执行 `cd /tmp && git clone --depth 1 -b 19.0 git@github.com:odoo/odoo.git` 命令进行克隆，避免每次直连 GitHub 触发限流。
 
 ## 5. 前端规范
 
@@ -91,7 +94,7 @@
 | `sale_order_no` | 19.0.1.3.0 | 销售订单 / 报价单自定义编号（`order_no`，客户编码 + 两位年份 + 年度流水），含客户编码格式校验、报表替换、批量补号 | 已迁入，待环境验证（T-001） |
 | `image_uploader` | 19.0.1.0.0 | 后台图片字段支持剪贴板 `Ctrl+V` / `Cmd+V` 粘贴上传 | 待迁移 + 增强（T-003） |
 | `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | 未迁移，按需（T-005） |
-| `product_model` | — | 产品多型号 + 可搜索 | 待开发（T-002） |
+| `product_model` | 19.0.1.0.0 | 产品多型号 + 可搜索（One2many 明细 / 冗余 trigram 索引 / 命中提示） | 已交付，待环境验证（T-002） |
 | `product_multi_image` | — | 产品多图图库（排序 / 主图） | 待开发（T-004） |
 
 ## 9. 验证流程

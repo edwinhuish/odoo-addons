@@ -44,7 +44,7 @@ odoo-addons/           # 本目录即 addons_path
 | [`sale_order_no`](sale_order_no/README.md) | 19.0.1.3.0 | 销售订单 / 报价单自定义编号：客户编码 + 两位年份 + 年度流水（如 `DZ2602`）；含客户编码格式校验、报表替换、批量补号 | 已迁入，**待目标环境验证** |
 | `image_uploader` | 19.0.1.0.0 | 后台图片字段支持剪贴板 `Ctrl+V` / `Cmd+V` 粘贴上传 | 待迁移 + 增强 |
 | `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | 未迁移，按需 |
-| `product_model` | — | 产品多型号 + 可在列表 / 选产品时按型号搜索 | 待开发 |
+| `product_model` | 19.0.1.0.0 | 产品多型号 + 可在列表 / 选产品时按型号搜索 | 已交付，**待目标环境验证** |
 | `product_multi_image` | — | 产品多图图库（排序 / 指定主图） | 待开发 |
 
 历史模块（`sale_order_no`、`image_uploader`、`web_multi_tabs`）来自仓库之外的本地备份目录，

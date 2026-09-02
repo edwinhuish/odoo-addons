@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 产品表单视图：在「常规信息」页之后新增「型号」页               -->
+    <!-- 继承基础视图 product.product_template_form_view，对其所有     -->
+    <!-- primary 子视图（如 product_template_only_form_view）同步生效   -->
+    <!-- ============================================================ -->
+    <record id="product_template_form_inherit" model="ir.ui.view">
+        <field name="name">product.template.form.inherit.model.code</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//page[@name='general_information']" position="after">
+                <page string="型号" name="model_codes">
+                    <field name="model_code_line_ids" widget="one2many">
+                        <list string="型号明细" editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="model_code"
+                                   placeholder="如 MODEL-A、SKU-1234"
+                                   required="1"/>
+                            <field name="model_type"/>
+                            <field name="active" widget="boolean_toggle"/>
+                            <field name="note" placeholder="可选，如对应客户 / 版本 / 生效日期"/>
+                        </list>
+                    </field>
+                    <p class="text-muted small oe_edit_only">
+                        提示：同一产品内型号不可重复；不同产品间可重复。
+                        搜索产品时按任一型号均可命中本产品。
+                    </p>
+                </page>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- 产品列表视图：新增「型号」列（可选显示）                       -->
+    <!-- ============================================================ -->
+    <record id="product_template_list_inherit" model="ir.ui.view">
+        <field name="name">product.template.list.inherit.model.code</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_tree_view"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//field[@name='default_code']" position="after">
+                <field name="model_code_index" string="型号"
+                       optional="show"
+                       widget="text"
+                       readonly="1"/>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- 搜索视图：顶部搜索框并入型号搜索；新增「型号」独立搜索项       -->
+    <!-- ============================================================ -->
+    <record id="product_template_search_inherit" model="ir.ui.view">
+        <field name="name">product.template.search.inherit.model.code</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_search_view"/>
+        <field name="arch" type="xml">
+
+            <!-- 顶部搜索框：在原生 default_code/变体/barcode 之外并入 model_code_index -->
+            <xpath expr="//field[@name='name']" position="attributes">
+                <attribute name="filter_domain">[
+                    '|', '|', '|', '|',
+                    ('default_code', 'ilike', self),
+                    ('product_variant_ids.default_code', 'ilike', self),
+                    ('name', 'ilike', self),
+                    ('barcode', 'ilike', self),
+                    ('model_code_index', 'ilike', self)
+                ]</attribute>
+            </xpath>
+
+            <!-- 独立的「型号」搜索项，便于精确过滤 -->
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="model_code_index" string="型号"
+                       filter_domain="[('model_code_index', 'ilike', self)]"/>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>
