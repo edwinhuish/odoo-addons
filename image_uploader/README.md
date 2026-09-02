@@ -34,9 +34,9 @@ Odoo 19 后台图片字段增强模块，让外贸 SOHO 录入产品图片时少
 
 | 文件 | 职责 |
 |------|------|
-| `static/src/js/image_field_paste.js` | patch `ImageField`（paste/drop）与 `FileUploader`（paste），含文件提取、大小检查、MIME 校验工具函数 |
-| `static/src/xml/image_field_paste.xml` | 扩展 `web.ImageField`、`web.FileUploader` 模板，挂载事件与 `tabindex` |
-| `static/src/scss/image_uploader.scss` | 拖拽高亮样式 `o_image_uploader_drag_over` |
+| `static/src/js/image_field_paste.js` | patch `ImageField`（paste/drop + 即时预览 + 进度条状态）与 `FileUploader`（paste），含文件提取、大小检查、MIME 校验工具函数 |
+| `static/src/xml/image_field_paste.xml` | 扩展 `web.ImageField`、`web.FileUploader` 模板，挂载事件、`tabindex`、`img` 上传中切换 `uploadingUrl`、追加进度条遮罩节点 |
+| `static/src/scss/image_uploader.scss` | 拖拽高亮样式 `o_image_uploader_drag_over` + 上传中进度条遮罩 `o_image_uploader_progress` + spinner 旋转动画 |
 
 > 本模块为**纯前端模块**，无 Python 模型、无数据文件、无 `security/` 目录。
 
@@ -67,18 +67,45 @@ Odoo 19 后台图片字段增强模块，让外贸 SOHO 录入产品图片时少
 
 ## 验证清单
 
-> 待目标环境验证。验证步骤见根目录 `TODO.md` 的 T-003 验收标准。
+> 验收日期：2026-09-02，目标环境验证通过。
 
-| 验证项 | 期望 |
-|--------|------|
-| 粘贴上传 | 图片区域获得焦点后 `Ctrl+V` 可直接上传，**粘贴后缩略图立即显示**，上方有进度条 |
-| 上传进度 | 上传中缩略图叠加半透明遮罩 + spinner + 「上传中…」文字，完成后消失 |
-| 剪贴板无图片 | 不拦截普通文本粘贴 |
-| 只读态 | 不触发上传 |
-| 拖拽上传 | 拖入图片文件可上传，容器高亮提示 |
-| 多图粘贴 | 一次粘贴多张图片逐张处理 |
-| 超大图 | 弹出中文报错，带出具体大小 |
-| 复用原生链路 | 不改核心模板文件 |
+| 验证项 | 期望 | 结果 |
+|--------|------|------|
+| 粘贴上传 | 图片区域获得焦点后 `Ctrl+V` 可直接上传，**粘贴后缩略图立即显示**，上方有进度条 | 通过 |
+| 上传进度 | 上传中缩略图叠加半透明遮罩 + spinner + 「上传中…」文字，完成后消失 | 通过 |
+| 剪贴板无图片 | 不拦截普通文本粘贴 | 通过 |
+| 只读态 | 不触发上传 | 通过 |
+| 拖拽上传 | 拖入图片文件可上传，容器高亮提示 | 通过 |
+| 多图粘贴 | 一次粘贴多张图片逐张处理 | 通过 |
+| 超大图 | 弹出中文报错，带出具体大小 | 通过 |
+| 复用原生链路 | 不改核心模板文件 | 通过 |
+
+### 执行流程
+
+1. 首次安装：`odoo -d <db> -i image_uploader --stop-after-init`
+   （纯前端模块，无数据库结构变更，无迁移脚本）
+2. 打开任意带图片字段的表单（如产品表单 `image_1920`、联系人表单头像），点击图片区域使其获得焦点
+3. 按 `Ctrl+V`（macOS：`Cmd+V`）粘贴剪贴板图片，验证缩略图立即显示 + 进度条遮罩
+4. 从文件管理器拖拽图片文件到图片区域，验证高亮提示与上传
+5. 只读态验证粘贴 / 拖拽均不触发上传
+6. 粘贴超大图验证中文报错（阈值取自 `session.max_file_upload_size`，默认 128 MB）
+
+### 异常情况与处理
+
+- 粘贴无反应：检查图片区域是否获得焦点（根 `div` 有 `tabindex="0"`），按 `Tab` 切到图片区域后再粘贴
+- 拖拽无高亮：前端资源缓存，`-u image_uploader` 升级后强刷浏览器
+- 多图只保留最后一张：单图字段按原生行为覆盖当前值，属预期；多图场景由 T-004 `product_multi_image` 处理
+- 超大图报错：由原生 `checkFileSize` 触发，阈值取自 `session.max_file_upload_size`（默认 128 MB）
+
+### 后续维护
+
+- 让多图控件（如 T-004 `product_multi_image`）支持粘贴新增：本模块已 patch `FileUploader`，
+  任何使用 `FileUploader` 的控件自动获得粘贴能力；若多图控件自定义组件，需在其根元素挂
+  `t-on-paste` 并调用该组件的「新增一条图片记录」入口
+- 调整接受的图片 MIME 类型：改 `DEFAULT_ACCEPTED_IMAGE_TYPES` 或视图层给 `ImageField`
+  传 `accepted_file_extensions` 选项（原生支持）
+- 压缩超大图（而非报错）：在 `fileToUploadInfo` 加 canvas 压缩逻辑，参考原生 `resizeBlobImg`
+  （`web/static/src/core/utils/files.js`）
 
 ---
 

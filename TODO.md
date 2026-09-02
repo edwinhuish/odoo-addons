@@ -32,7 +32,7 @@
 |------|------|------|------|
 | ✅ | `sale_order_no` | 19.0.1.7.0 | 销售订单/报价单自定义编号（客户编码+年份+流水号），含 PDF 文件名与门户预览定制 |
 | ✅ | `product_model` | 19.0.1.0.0 | 产品多型号 + 可搜索（T-002），目标环境已验证 |
-| 🚧 | `image_uploader` | 19.0.1.0.0 | 图片粘贴 / 拖拽上传，即时预览 + 进度条，一次多图，超大图报错（T-003，待验证） |
+| ✅ | `image_uploader` | 19.0.1.0.0 | 图片粘贴 / 拖拽上传，即时预览 + 进度条，一次多图，超大图报错（T-003，已验证） |
 | 🚧 | `product_multi_image` | — | 产品多图图库（T-004） |
 | 🚧 | `web_multi_tabs` | 19.0.1.0.0 | 后台多标签页，未迁移按需（T-005） |
 
@@ -41,37 +41,7 @@
 
 ## 进行中
 
-### T-003 ｜ `image_uploader` ｜ P1 ｜ 图片支持粘贴上传（迁移 + 增强）
-
-现状：历史备份目录不可用，基于 Odoo 19 原生 `FileUploader` / `ImageField` 组件重新实现并增强。
-
-本次做的事：
-
-- [x] 基于 Odoo 19 原生上传组件重新实现 `image_uploader`（纯前端模块，依赖 `web`）
-- [x] patch `ImageField`：根 `div` 挂 `t-on-paste` / `t-on-dragover` / `t-on-dragleave` / `t-on-drop`，复用原生 `onFileUploaded(info)`
-- [x] patch `FileUploader`：根 `div` 挂 `t-on-paste`，让所有使用 `FileUploader` 的场景都获得粘贴能力
-- [x] 增强：拖拽上传（含高亮提示）、一次粘贴 / 拖拽多图、超大图走原生 `checkFileSize` 报错（带出具体大小）
-- [x] 只读态处理器入口直接 `return`；剪贴板无图片时不 `preventDefault`（放行文本粘贴）
-- [x] 复用 Odoo 原生上传链路（`getDataURLFromFile` → `onUploaded`），不改核心模板文件
-
-验收标准：
-
-- [ ] 图片区域获得焦点后 `Ctrl+V` 可直接上传，效果与点选文件一致
-- [ ] **粘贴后缩略图立即显示**（本地 base64 预览），无"无反应"空窗期
-- [ ] **上传中缩略图叠加进度条遮罩**（spinner + 「上传中…」），完成后消失
-- [ ] 剪贴板无图片时不拦截普通文本粘贴
-- [ ] 只读态不触发上传
-- [ ] 拖拽图片文件到图片区域可上传，容器高亮提示
-- [ ] 一次粘贴 / 拖拽多张图片逐张处理
-- [ ] 超大图弹出中文报错，带出具体大小
-- [ ] 复用 Odoo 原生上传链路，不改核心模板文件
-
-### T-003 待验证清单
-
-- 改了什么：新增纯前端模块 `image_uploader`，patch `ImageField` 与 `FileUploader`，扩展两个 QWeb 模板挂事件，新增拖拽高亮样式
-- 在哪验证：任意带图片字段的表单（如产品表单 `image_1920`、联系人表单头像）
-- 怎么验：见上方「验收标准」7 项
-- 回滚方式：卸载模块 `odoo -d <db> -u image_uploader --stop-after-init` 后在应用列表卸载；或直接从 `addons_path` 移除目录后重启
+（空）
 
 ---
 
@@ -142,6 +112,47 @@
   - 改变型号拼接分隔符只改 `_sync_template_index`（当前用 `\n`），改后需触发一次同步
   - 新增型号类型只改 `model_type` 的 `selection`，无需改搜索逻辑
   - 让型号出现在其他单据的 Many2one 下拉无需额外改动，只要指向 `product.template`
+- 文档同步：`__manifest__.py`、`CHANGELOG.md`、`AGENTS.md`、`README.md`、根 `TODO.md`/`README.md`/`AGENTS.md`
+
+### T-003 ｜ `image_uploader` ｜ P1 ｜ 图片支持粘贴上传（迁移 + 增强）
+
+- 完成日期：2026-09-02
+- 落地版本：`19.0.1.0.0`
+- 功能：后台图片字段（`ImageField`）在编辑态获得焦点后，`Ctrl+V` / `Cmd+V` 可直接粘贴剪贴板图片上传，
+  **粘贴后缩略图立即显示**（本地 base64 预览，无需等服务器），上传中叠加**进度条遮罩**
+  （半透明黑底 + 旋转 spinner + 「上传中…」文字），后台 webp 转换 / 多尺寸附件生成完成后自动消失；
+  支持拖拽图片文件到图片区域上传（拖拽时容器高亮提示）；一次粘贴 / 拖拽可上传多张图片；
+  超过服务器 `max_file_upload_size` 的图片给出中文报错带出具体大小；
+  只读态不触发上传；剪贴板无图片时不拦截普通文本粘贴；
+  复用 Odoo 原生上传链路（`getDataURLFromFile` → `onFileUploaded` / `onUploaded`），不改核心模板文件。
+- 实现方式：历史备份目录不可用，基于 Odoo 19 原生 `FileUploader` / `ImageField` 组件重新实现并增强
+  （纯前端模块，仅依赖 `web`，无 Python 模型 / 数据文件 / `security/` 目录）
+- 验收标准（全部通过）：
+  - [x] 图片区域获得焦点后 `Ctrl+V` 可直接上传，效果与点选文件一致
+  - [x] **粘贴后缩略图立即显示**（本地 base64 预览），无"无反应"空窗期
+  - [x] **上传中缩略图叠加进度条遮罩**（spinner + 「上传中…」），完成后消失
+  - [x] 剪贴板无图片时不拦截普通文本粘贴
+  - [x] 只读态不触发上传
+  - [x] 拖拽图片文件到图片区域可上传，容器高亮提示
+  - [x] 一次粘贴 / 拖拽多张图片逐张处理
+  - [x] 超大图弹出中文报错，带出具体大小
+  - [x] 复用 Odoo 原生上传链路，不改核心模板文件
+- 验证状态：目标环境已验证上述九项验收标准全部通过
+- 依赖：`web`（最小化，不依赖 `product` / `sale`）
+- 仅支持全新安装（纯前端模块，无数据库结构变更，无迁移脚本）
+- 异常情况与处理：
+  - 粘贴无反应：检查图片区域是否获得焦点（根 `div` 有 `tabindex="0"`），按 `Tab` 切到图片区域后再粘贴
+  - 拖拽无高亮：前端资源缓存，`-u image_uploader` 升级后强刷浏览器
+  - 多图只保留最后一张：单图字段按原生行为覆盖当前值，属预期；多图场景由 T-004 处理
+  - 超大图报错：由原生 `checkFileSize` 触发，阈值取自 `session.max_file_upload_size`（默认 128 MB）
+- 后续维护：
+  - 让多图控件（如 T-004 `product_multi_image`）支持粘贴新增：本模块已 patch `FileUploader`，
+    任何使用 `FileUploader` 的控件自动获得粘贴能力；若多图控件自定义组件，需在其根元素挂
+    `t-on-paste` 并调用该组件的「新增一条图片记录」入口
+  - 调整接受的图片 MIME 类型：改 `DEFAULT_ACCEPTED_IMAGE_TYPES` 或视图层给 `ImageField`
+    传 `accepted_file_extensions` 选项（原生支持）
+  - 压缩超大图（而非报错）：在 `fileToUploadInfo` 加 canvas 压缩逻辑，参考原生 `resizeBlobImg`
+    （`web/static/src/core/utils/files.js`）
 - 文档同步：`__manifest__.py`、`CHANGELOG.md`、`AGENTS.md`、`README.md`、根 `TODO.md`/`README.md`/`AGENTS.md`
 
 ---

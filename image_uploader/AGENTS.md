@@ -62,9 +62,9 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 模块元数据、依赖（`web`）、`assets` 资源声明 |
-| `static/src/js/image_field_paste.js` | patch `ImageField` 与 `FileUploader`，含文件提取 / 大小检查 / MIME 校验工具函数 |
-| `static/src/xml/image_field_paste.xml` | 扩展 `web.ImageField`、`web.FileUploader` 模板，挂载事件与 `tabindex` |
-| `static/src/scss/image_uploader.scss` | 拖拽高亮样式 `o_image_uploader_drag_over` |
+| `static/src/js/image_field_paste.js` | patch `ImageField`（paste/drop + 即时预览 + 进度条状态）与 `FileUploader`（paste），含文件提取 / 大小检查 / MIME 校验工具函数 |
+| `static/src/xml/image_field_paste.xml` | 扩展 `web.ImageField`、`web.FileUploader` 模板，挂载事件、`tabindex`、`img` 上传中切换 `uploadingUrl`、追加进度条遮罩节点 |
+| `static/src/scss/image_uploader.scss` | 拖拽高亮样式 `o_image_uploader_drag_over` + 上传中进度条遮罩 `o_image_uploader_progress` + spinner 旋转动画 |
 
 ---
 
