@@ -16,6 +16,23 @@
                 <attribute name="widget">product_image_gallery</attribute>
             </xpath>
 
+            <!-- 声明图库 One2many 字段（不可见），为 widget 提供字段元数据上下文 -->
+            <!-- 不声明则新建图库记录时 activeFields/fields 为空，update 报错 -->
+            <xpath expr="//field[@name='image_1920'][hasclass('oe_avatar')]" position="after">
+                <field name="image_gallery_ids" invisible="1">
+                    <!-- 内嵌 list 视图：声明需要参与新建/读取的字段，保证 activeFields 含 image_1920 等 -->
+                    <list editable="bottom">
+                        <field name="sequence" widget="handle"/>
+                        <field name="image_1920" widget="image"
+                               options="{'convert_to_webp': True, 'preview_image': 'image_128', 'zoom': True}"/>
+                        <field name="name"/>
+                        <field name="is_main" readonly="1"/>
+                        <field name="active"/>
+                        <field name="note"/>
+                    </list>
+                </field>
+            </xpath>
+
         </field>
     </record>
 
