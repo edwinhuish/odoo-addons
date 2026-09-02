@@ -33,7 +33,7 @@
 | ✅ | `sale_order_no` | 19.0.1.7.0 | 销售订单/报价单自定义编号（客户编码+年份+流水号），含 PDF 文件名与门户预览定制 |
 | ✅ | `product_model` | 19.0.1.0.0 | 产品多型号 + 可搜索（T-002），目标环境已验证 |
 | ✅ | `image_uploader` | 19.0.1.0.0 | 图片粘贴 / 拖拽上传，即时预览 + 进度条，一次多图，超大图报错（T-003，已验证） |
-| 🚧 | `product_multi_image` | 19.0.1.0.0 | 产品多图图库（T-004），待目标环境验证 |
+| 🚧 | `product_multi_image` | 19.0.1.0.0 | 产品多图（T-004）：原位多图浏览（不新增页签）/ 左右切换 / 缩略图 / 粘贴新增，待目标环境验证 |
 | 🚧 | `web_multi_tabs` | 19.0.1.0.0 | 后台多标签页，未迁移按需（T-005） |
 
 
@@ -137,18 +137,21 @@
     （`web/static/src/core/utils/files.js`）
 - 文档同步：`__manifest__.py`、`CHANGELOG.md`、`AGENTS.md`、`README.md`、根 `TODO.md`/`README.md`/`AGENTS.md`
 
-### T-004 ｜ `product_multi_image`（新） ｜ P1 ｜ 产品多图图库
+### T-004 ｜ `product_multi_image`（新） ｜ P1 ｜ 产品多图
 
 - 完成日期：2026-09-02（代码完成，待目标环境验证）
 - 落地版本：`19.0.1.0.0`
-- 功能：产品图库，多图并存、拖拽排序、首图即主图、图库内粘贴即新增
-  - 新建 `product.image.gallery` 明细模型，继承 `image.mixin` 复用多尺寸（1920/1024/512/256/128）与 webp 转换
+- 功能：在原有图片位置（头像区域）直接支持多图浏览，不新增页签，保持界面简洁
+  - 新建 `product.image.gallery` 明细模型，继承 `image.mixin` 复用多尺寸（1920/1024/512/256/128）
   - 模型名刻意避开 `website_sale` 的 `product.image`，仅依赖 `product`，避免与 eCommerce 冲突
   - 扩展 `product.template`：`One2many` 挂图库行、`image_gallery_count` 计算字段
   - 首图（排序最前，id 兜底）自动同步到产品主图 `image_1920`，保留与原生主图关系；`is_main` 自动判定
   - 同一产品内图片名称不可重复：`@api.constrains` 中文提示
-  - 图库区域粘贴图片即新增一条记录（patch `X2ManyField`，仅对 comodel 为 `product.image.gallery` 生效，联动 T-003）
-  - 产品表单「常规信息」页之后新增「图库」页；产品列表新增「图片数」列；图库独立列表/表单/搜索视图与动作
+  - 自定义 `product_image_gallery` widget 替换产品表单原生 `image_1920` 字段 widget：
+    同一位置渲染当前图片 + 左右切换 + 计数指示（2/5）+ 缩略图条；上传即新增图库记录并设为当前图；
+    删除当前图后自动切换相邻图；头像区域 Ctrl+V 粘贴剪贴板图片即新增图库记录（内建，无需 image_uploader）；
+    浏览切换为纯前端状态，不写产品主图
+  - 产品列表新增「图片数」列；图库独立列表/表单/搜索视图与动作
   - 图片行 `ondelete='cascade'`，删除产品时无孤儿数据
 - 验收标准：
   - [ ] 产品表单内可查看/新增/删除多张图片
@@ -157,18 +160,18 @@
   - [ ] 产品列表/看板展示主图
   - [ ] 报价单、销售订单行可引用产品图片（此项可后置）
 - 验证状态：待目标环境验证（已附待验证清单，见模块 `CHANGELOG.md`）
-- 依赖：`product`（最小化，不依赖 `sale` / `website_sale`）；粘贴新增需配合 `image_uploader`（T-003）
+- 依赖：`product`（最小化，不依赖 `sale` / `website_sale`）；粘贴新增内建，无需 `image_uploader`
 - 仅支持全新安装（首次安装自动建 `product.image.gallery` 表与 `product.template.image_gallery_ids` 列）
 - 异常情况与处理：
   - 图库为空：产品主图 `image_1920` 被清空，避免残留陈旧主图（预期行为）
-  - 历史产品无图库：`image_gallery_ids` 为空，不影响原生主图字段使用
+  - 历史产品无图库：`image_gallery_ids` 为空，头像区域显示占位图，不影响原生主图字段使用
   - 同一产品重复图片名称：`@api.constrains` 阻止并中文提示带出具体值与产品名
-  - 粘贴无反应：检查图库区域是否获得焦点（根 div 有 `tabindex="0"`），按 `Tab` 切到图库区域后再粘贴
-  - 粘贴新增失效：前端资源缓存，`-u product_multi_image` 升级后强刷浏览器
+  - 粘贴无反应：检查头像区域是否获得焦点（根 div 有 `tabindex="0"`），按 `Tab` 切到图片区域后再粘贴
+  - widget 不生效：前端资源缓存，`-u product_multi_image` 升级后强刷浏览器
   - `is_main` 未刷新：检查 `@api.depends` 是否覆盖触发字段
 - 后续维护：
   - 改变首图判定规则只改 `_compute_is_main` 与 `_get_main_image`，改后触发一次重算
-  - 让其他模型支持图库粘贴新增：patch `X2ManyField` 的 `isImageGallery` 判断扩展 comodel 白名单
+  - widget 行为调整改 `static/src/js/product_image_gallery.js` 与 QWeb 模板
   - 与 `website_sale` 共存：模型名不同，互不干扰；若要复用其 `product.image`（含视频），另写桥接模块
 - 文档同步：`__manifest__.py`、`CHANGELOG.md`、`AGENTS.md`、`README.md`、根 `TODO.md`/`README.md`/`AGENTS.md`
 

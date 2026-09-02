@@ -2,9 +2,8 @@
 <odoo>
 
     <!-- ============================================================ -->
-    <!-- 产品表单视图：在「常规信息」页之后新增「图库」页               -->
-    <!-- 继承基础视图 product.product_template_form_view，对其所有      -->
-    <!-- primary 子视图（如 product_template_only_form_view）同步生效    -->
+    <!-- 产品表单视图：把原生头像区域的 image_1920 字段改为多图 widget -->
+    <!-- 同一位置切换/浏览多张图片，不新增页签，保持界面简洁          -->
     <!-- ============================================================ -->
     <record id="product_template_form_inherit" model="ir.ui.view">
         <field name="name">product.template.form.inherit.image.gallery</field>
@@ -12,26 +11,9 @@
         <field name="inherit_id" ref="product.product_template_form_view"/>
         <field name="arch" type="xml">
 
-            <xpath expr="//page[@name='general_information']" position="after">
-                <page string="图库" name="image_gallery">
-                    <field name="image_gallery_ids" widget="one2many">
-                        <list string="图片图库" editable="bottom">
-                            <field name="sequence" widget="handle"/>
-                            <field name="image_1920" widget="image"
-                                   options="{'convert_to_webp': True, 'preview_image': 'image_128', 'zoom': True}"
-                                   nolabel="1" string="图片"
-                                   help="点击选择图片文件，或在图库区域 Ctrl+V 粘贴新增"/>
-                            <field name="is_main" widget="boolean_toggle" readonly="1"/>
-                            <field name="name" placeholder="可选，如 正面 / 细节 / 包装"/>
-                            <field name="active" widget="boolean_toggle"/>
-                            <field name="note" placeholder="可选，对该图片的补充说明"/>
-                        </list>
-                    </field>
-                    <p class="text-muted small oe_edit_only">
-                        提示：拖拽「排序」列可调整顺序；首图（排序最前）自动作为产品主图。
-                        在图库区域按 Ctrl+V 可直接粘贴剪贴板图片新增一条记录（需 image_uploader 模块）。
-                    </p>
-                </page>
+            <!-- 替换原生头像图片字段的 widget 为多图图库 widget -->
+            <xpath expr="//field[@name='image_1920'][hasclass('oe_avatar')]" position="attributes">
+                <attribute name="widget">product_image_gallery</attribute>
             </xpath>
 
         </field>
@@ -54,10 +36,5 @@
 
         </field>
     </record>
-
-    <!-- ============================================================ -->
-    <!-- 产品看板视图：原生已展示 image_128（即主图缩略），无需改动      -->
-    <!-- 主图由首图自动同步到 product.template.image_1920/128          -->
-    <!-- ============================================================ -->
 
 </odoo>

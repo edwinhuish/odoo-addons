@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+    <!-- 产品多图图库 widget：在原生头像位置渲染多图浏览 -->
+    <t t-name="product_multi_image.ProductImageGallery">
+        <div class="o_product_image_gallery position-relative d-inline-block"
+             t-att-tabindex="props.readonly ? undefined : 0"
+             t-on-paste="onPaste">
+            <!-- 当前图片 -->
+            <img loading="lazy"
+                 t-att-class="imgClass"
+                 t-att-alt="props.alt"
+                 t-att-src="currentImageUrl"
+                 t-att-height="props.height"
+                 t-att-width="props.width"
+                 t-att-style="sizeStyle"/>
+
+            <!-- 编辑态控件：上传 / 删除（复用原生 FileUploader 链路） -->
+            <div t-if="!props.readonly"
+                 class="o_image_uploader_container position-absolute d-flex justify-content-between w-100 bottom-0 opacity-0 opacity-100-hover">
+                <FileUploader
+                    acceptedFileExtensions="props.acceptedFileExtensions"
+                    onUploaded.bind="onFileUploaded"
+                    multiUpload="true">
+                    <t t-set-slot="toggler">
+                        <button class="o_select_file_button btn btn-light border-0 rounded-circle m-1 p-1"
+                                data-tooltip="新增图片"
+                                aria-label="新增图片">
+                            <i class="fa fa-pencil fa-fw"/>
+                        </button>
+                    </t>
+                    <button t-if="currentImageData"
+                            class="o_clear_file_button btn btn-light border-0 rounded-circle m-1 p-1"
+                            data-tooltip="删除当前图片"
+                            aria-label="删除当前图片"
+                            t-on-click="onFileRemove">
+                        <i class="fa fa-trash-o fa-fw"/>
+                    </button>
+                </FileUploader>
+            </div>
+
+            <!-- 多图导航：上一张 / 计数 / 下一张 -->
+            <div t-if="hasMultiple"
+                 class="o_gallery_nav position-absolute d-flex align-items-center justify-content-between w-100 bottom-0"
+                 style="pointer-events: none;">
+                <button class="o_gallery_prev btn btn-light border-0 rounded-circle m-1 p-1"
+                        data-tooltip="上一张"
+                        aria-label="上一张"
+                        t-on-click="onPrev"
+                        style="pointer-events: auto;">
+                    <i class="fa fa-chevron-left fa-fw"/>
+                </button>
+                <span class="o_gallery_counter bg-dark bg-opacity-50 text-white px-2 rounded small"
+                      style="pointer-events: auto;">
+                    <t t-esc="currentPosition"/> / <t t-esc="totalCount"/>
+                </span>
+                <button class="o_gallery_next btn btn-light border-0 rounded-circle m-1 p-1"
+                        data-tooltip="下一张"
+                        aria-label="下一张"
+                        t-on-click="onNext"
+                        style="pointer-events: auto;">
+                    <i class="fa fa-chevron-right fa-fw"/>
+                </button>
+            </div>
+
+            <!-- 缩略图条 -->
+            <div t-if="hasMultiple"
+                 class="o_gallery_thumbnails d-flex gap-1 mt-1 overflow-auto">
+                <t t-foreach="galleryRecords" t-as="thumb" t-key="thumb_index">
+                    <img loading="lazy"
+                         t-att-src="getUrl(thumb, 'image_128')"
+                         t-att-class="'o_gallery_thumb rounded border' + (thumb_index === state.currentIndex ? ' border-primary border-2' : ' opacity-50')"
+                         style="width: 40px; height: 40px; object-fit: cover; cursor: pointer;"
+                         t-on-click="() => this.onSelectByIndex(thumb_index)"
+                         t-att-alt="thumb.data.name || ''"/>
+                </t>
+            </div>
+        </div>
+    </t>
+
+</templates>
