@@ -48,7 +48,7 @@ export class ProductImageGallery extends Component {
     static defaultProps = {
         acceptedFileExtensions: "image/*",
         alt: _t("产品图片"),
-        imgClass: "oe_avatar",
+        imgClass: "",
         reload: true,
     };
 
@@ -136,25 +136,39 @@ export class ProductImageGallery extends Component {
     }
 
     /**
-     * 生成图片 URL：图库记录的 image_128 缩略用于展示，避免传大图。
+     * 生成图片 URL。
+     *
+     * 对未保存的新记录或 image_128（related 字段，保存后才生成）为空时，
+     * 回退到 image_1920 源数据（base64 data URL），保证用户刚上传的图片
+     * 在保存前也能预览。已保存记录优先用 image_128 节省带宽。
      */
     getUrl(record, fieldName) {
-        if (!record || !record.data[fieldName]) {
+        if (!record) {
             return placeholder;
         }
-        const data = record.data[fieldName];
-        // 已保存记录走 imageUrl（带缓存 key）；新记录走 data URL
-        if (record.isNew || !isBinarySize(data)) {
-            const magic = fileTypeMagicWordMap[data[0]] || "png";
-            return `data:image/${magic};base64,${data}`;
+        let data = record.data[fieldName];
+        // 优先请求的字段；为空时回退到 image_1920 源数据
+        if (!data && fieldName !== "image_1920") {
+            data = record.data.image_1920;
         }
-        return imageUrl("product.image.gallery", record.resId, fieldName, {
-            unique: record.data.write_date,
-        });
+        if (!data) {
+            return placeholder;
+        }
+        // 已保存记录且字段是数据库存储的 binary size 形式 → 走 imageUrl（带缓存 key）
+        if (!record.isNew && isBinarySize(data) && record.resId) {
+            const urlField = (fieldName === "image_1920" || !record.data[fieldName]) ? "image_1920" : fieldName;
+            return imageUrl("product.image.gallery", record.resId, urlField, {
+                unique: record.data.write_date,
+            });
+        }
+        // 新记录或 base64 字符串 → data URL
+        const magic = fileTypeMagicWordMap[data[0]] || "png";
+        return `data:image/${magic};base64,${data}`;
     }
 
     get currentImageUrl() {
         const rec = this.currentRecord;
+        // 优先 image_128（已保存记录的缩略，节省带宽），回退 image_1920 源数据
         return this.getUrl(rec, "image_128");
     }
 
@@ -339,7 +353,7 @@ export const productImageGalleryField = {
         alt: attrs.alt,
         enableZoom: options.zoom,
         convertToWebp: options.convert_to_webp,
-        imgClass: options.img_class || "oe_avatar",
+        imgClass: options.img_class || "",
         zoomDelay: options.zoom_delay,
         previewImage: options.preview_image,
         acceptedFileExtensions: options.accepted_file_extensions,

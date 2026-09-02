@@ -3,12 +3,18 @@
 
     <!-- 产品多图图库 widget：在原生头像位置渲染多图浏览 -->
     <t t-name="product_multi_image.ProductImageGallery">
-        <div class="o_product_image_gallery position-relative d-inline-block"
+        <!--
+            外层 wrapper 继承原生 oe_avatar 样式（width/height 由 .oe_avatar .img CSS 决定）。
+            原生用法：外层 class="oe_avatar"，内层 img class="img img-fluid"。
+            之前把 oe_avatar 误放到 img class 上导致主图不可见（CSS 选择器 .oe_avatar .img 不匹配）。
+        -->
+        <div class="o_product_image_gallery oe_avatar position-relative d-inline-block"
+             style="min-width: 90px; min-height: 90px;"
              t-att-tabindex="props.readonly ? undefined : 0"
              t-on-paste="onPaste">
-            <!-- 当前图片 -->
+            <!-- 当前图片（class 不含 oe_avatar，由外层 wrapper 提供尺寸上下文） -->
             <img loading="lazy"
-                 t-att-class="imgClass"
+                 class="img img-fluid"
                  t-att-alt="props.alt"
                  t-att-src="currentImageUrl"
                  t-att-height="props.height"
@@ -41,8 +47,8 @@
 
             <!-- 多图导航：上一张 / 计数 / 下一张 -->
             <div t-if="hasMultiple"
-                 class="o_gallery_nav position-absolute d-flex align-items-center justify-content-between w-100 bottom-0"
-                 style="pointer-events: none;">
+                 class="o_gallery_nav position-absolute d-flex align-items-center justify-content-between w-100"
+                 style="pointer-events: none; top: 0;">
                 <button class="o_gallery_prev btn btn-light border-0 rounded-circle m-1 p-1"
                         data-tooltip="上一张"
                         aria-label="上一张"
