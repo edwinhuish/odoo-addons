@@ -6,3 +6,31 @@
     background-color: rgba(124, 123, 173, 0.08);
     transition: outline 0.15s ease, background-color 0.15s ease;
 }
+
+/* 上传中进度条遮罩：半透明黑底 + 居中 spinner + 文字 */
+.o_image_uploader_progress {
+    background-color: rgba(0, 0, 0, 0.45);
+    z-index: 2;
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+.o_image_uploader_progress_inner {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.25rem;
+}
+
+.o_image_uploader_spinner {
+    width: 22px;
+    height: 22px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: o_image_uploader_spin 0.8s linear infinite;
+}
+
+@keyframes o_image_uploader_spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

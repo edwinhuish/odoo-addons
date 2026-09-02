@@ -49,6 +49,12 @@
    - `ImageField` 原生未定义 `rootRef`，patch 里也不要新增
    - 拖拽高亮通过 `ev.currentTarget.classList` 操作
 
+8. **粘贴 / 拖拽即时预览，不允许出现"无反应"空窗期**
+   - 粘贴开始时先用 base64 写入 `props.record.update({ [name]: info.data })` 触发缩略图重渲染
+   - `state.isUploading` 标记上传中，模板 `img` 在上传中优先用 `uploadingUrl`（本地 `data:` URL）
+   - 模板在上传中叠加进度条遮罩（`.o_image_uploader_progress`），`onFileUploaded` 完成后置回 `false`
+   - 禁止先跑完 `onFileUploaded` 全部异步逻辑才更新字段
+
 ---
 
 ## 文件职责

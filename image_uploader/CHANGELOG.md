@@ -6,6 +6,8 @@
 
 - 初始版本，实现图片粘贴 / 拖拽上传增强：
   - patch `ImageField`：在根 `div` 挂 `t-on-paste` / `t-on-dragover` / `t-on-dragleave` / `t-on-drop` 事件，复用原生 `onFileUploaded(info)` 处理上传（含 webp 转换、多尺寸附件生成）
+  - **即时预览**：粘贴 / 拖拽开始时先用 base64 写入 `props.record` 触发缩略图立即渲染，无需等服务器；`state.isUploading` 标记上传中
+  - **进度条遮罩**：上传中在缩略图上叠加半透明黑底 + spinner + 「上传中…」文字，`onFileUploaded` 完成后自动消失
   - patch `FileUploader`：在根 `div` 挂 `t-on-paste`，让所有使用 `FileUploader` 的场景（Many2many binary、附件上传等）都获得粘贴能力
   - 模板扩展：`t-inherit` + `t-inherit-mode="extension"` 给根元素挂事件与 `tabindex="0"`（让图片区域可获焦点）
   - 工具函数：`extractImageFilesFromClipboard` / `extractImageFilesFromDrop` / `fileToUploadInfo` / `isAcceptedImageType`

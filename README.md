@@ -42,7 +42,7 @@ odoo-addons/           # 本目录即 addons_path
 | 模块 | 版本 | 作用 | 状态 |
 |------|------|------|------|
 | [`sale_order_no`](sale_order_no/README.md) | 19.0.1.3.0 | 销售订单 / 报价单自定义编号：客户编码 + 两位年份 + 年度流水（如 `DZ2602`）；含客户编码格式校验、报表替换、批量补号 | 已迁入，**待目标环境验证** |
-| [`image_uploader`](image_uploader/README.md) | 19.0.1.0.0 | 后台图片字段支持剪贴板 `Ctrl+V` / `Cmd+V` 粘贴与拖拽上传，一次多图，超大图报错 | 已开发，**待目标环境验证** |
+| [`image_uploader`](image_uploader/README.md) | 19.0.1.0.0 | 后台图片字段支持剪贴板 `Ctrl+V` / `Cmd+V` 粘贴与拖拽上传，即时预览 + 进度条，一次多图，超大图报错 | 已开发，**待目标环境验证** |
 | `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | 未迁移，按需 |
 | `product_model` | 19.0.1.0.0 | 产品多型号 + 可在列表 / 选产品时按型号搜索 | 已交付，目标环境已验证 |
 | `product_multi_image` | — | 产品多图图库（排序 / 指定主图） | 待开发 |

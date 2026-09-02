@@ -6,6 +6,7 @@ import { patch } from "@web/core/utils/patch";
 import { _t } from "@web/core/l10n/translation";
 import { getDataURLFromFile } from "@web/core/utils/urls";
 import { checkFileSize } from "@web/core/utils/files";
+import { fileTypeMagicWordMap } from "@web/views/fields/image/image_field";
 
 /**
  * 图片粘贴 / 拖拽上传增强
@@ -18,8 +19,11 @@ import { checkFileSize } from "@web/core/utils/files";
  * - 剪贴板无图片时不拦截普通文本粘贴（只处理 image/* 类型）
  * - 一次粘贴 / 拖拽可上传多张图片
  *
- * 在 ImageField 根 div 上挂 paste / drop / dragover 事件，复用 ImageField 已有的
- * onFileUploaded(info) 方法（含 webp 转换、多尺寸附件生成等原生逻辑）。
+ * 粘贴 / 拖拽即时反馈：
+ * - 粘贴开始时先把 base64 直接写入 props.record 触发缩略图即时渲染
+ *   （对 base64 字段走 getUrl 的 magic-word data: URL 分支）
+ * - state.isUploading 标记上传中，模板显示进度条与遮罩
+ * - 后台继续执行原生 onFileUploaded 的 webp 转换 / 多尺寸附件生成
  */
 
 const DEFAULT_ACCEPTED_IMAGE_TYPES = [
@@ -108,7 +112,6 @@ function isAcceptedImageType(file, allowedFileExtensions) {
     if (!patterns.length) {
         return DEFAULT_ACCEPTED_IMAGE_TYPES.includes(file.type);
     }
-    // image/* 通配：所有 image/* 都接受
     if (patterns.includes("image/*")) {
         return file.type.startsWith("image/");
     }
@@ -122,12 +125,28 @@ function isAcceptedImageType(file, allowedFileExtensions) {
 }
 
 /* ---------------------------------------------------------------------------
- * 1) ImageField：挂 paste / drop 事件，复用原生 onFileUploaded
+ * 1) ImageField：挂 paste / drop 事件，即时预览 + 上传中进度条
+ *
+ * setup patch：在 state 上新增 isUploading / previewDataUrl，供模板渲染
+ * 缩略图与进度条。
  * ------------------------------------------------------------------------- */
 patch(ImageField.prototype, {
+
     /**
-     * 粘贴事件：剪贴板含图片时上传，否则放行（不拦截文本粘贴）。
+     * 拦截原生 setup，在其执行后追加 isUploading / previewDataUrl 状态。
+     * 注意：patch 里直接覆写 setup，先调 super.setup() 保留原生初始化。
+     */
+    setup() {
+        super.setup(...arguments);
+        // 复用原生已存在的 state（isValid），追加上传状态
+        this.state.isUploading = false;
+        this.state.previewDataUrl = null;
+    },
+
+    /**
+     * 粘贴：剪贴板含图片时上传，否则放行（不拦截文本粘贴）。
      * 只读态直接返回，不触发任何写操作。
+     * 粘贴开始时立即写 base64 到 record 触发缩略图渲染，并标记 isUploading。
      */
     async onPaste(ev) {
         if (this.props.readonly) {
@@ -135,7 +154,7 @@ patch(ImageField.prototype, {
         }
         const files = extractImageFilesFromClipboard(ev);
         if (!files.length) {
-            return; // 非图片，放行浏览器默认行为（粘贴文本等）
+            return; // 非图片，放行浏览器默认行为
         }
         ev.preventDefault();
         ev.stopPropagation(); // 防止冒泡到祖先元素重复处理
@@ -149,15 +168,12 @@ patch(ImageField.prototype, {
             return;
         }
         for (const file of accepted) {
-            const info = await fileToUploadInfo(file, this.notification);
-            if (info) {
-                await this.onFileUploaded(info);
-            }
+            await this._processImageFile(file);
         }
     },
 
     /**
-     * 拖拽进入时阻止浏览器默认打开文件，并给容器加高亮样式。
+     * 拖拽进入：阻止浏览器默认打开文件，并给容器加高亮样式。
      * 用 ev.currentTarget 拿到绑事件的根元素，无需依赖组件 ref。
      */
     onDragOver(ev) {
@@ -177,7 +193,7 @@ patch(ImageField.prototype, {
     },
 
     /**
-     * 拖拽离开时移除高亮样式。
+     * 拖拽离开：移除高亮样式。
      */
     onDragLeave(ev) {
         if (this.props.readonly) {
@@ -210,11 +226,44 @@ patch(ImageField.prototype, {
             return;
         }
         for (const file of accepted) {
-            const info = await fileToUploadInfo(file, this.notification);
-            if (info) {
-                await this.onFileUploaded(info);
-            }
+            await this._processImageFile(file);
         }
+    },
+
+    /**
+     * 处理单张图片文件：
+     * 1) 大小检查 + base64 转换
+     * 2) 立即把 base64 写入 record 字段，缩略图即时渲染（走 getUrl 的 magic-word data: URL 分支）
+     * 3) 标记 isUploading，模板显示进度条遮罩
+     * 4) 调用原生 onFileUploaded 完成 webp 转换 / 多尺寸附件生成
+     * 5) 完成后置回 isUploading=false
+     */
+    async _processImageFile(file) {
+        const info = await fileToUploadInfo(file, this.notification);
+        if (!info) {
+            return;
+        }
+        // 即时预览：先把 base64 写入字段触发缩略图重渲染
+        this.props.record.update({ [this.props.name]: info.data });
+        // 标记上传中，模板显示进度条
+        this.state.isUploading = true;
+        this.state.previewDataUrl = `data:${info.type};base64,${info.data}`;
+        try {
+            await this.onFileUploaded(info);
+        } finally {
+            this.state.isUploading = false;
+            this.state.previewDataUrl = null;
+        }
+    },
+
+    /**
+     * 上传中时的缩略图 URL：优先用本地预览数据，否则走原生 getUrl。
+     */
+    get uploadingUrl() {
+        if (this.state.isUploading && this.state.previewDataUrl) {
+            return this.state.previewDataUrl;
+        }
+        return this.getUrl(this.props.previewImage || this.props.name);
     },
 });
 

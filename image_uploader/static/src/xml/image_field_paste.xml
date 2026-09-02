@@ -4,6 +4,7 @@
     <!--
         ImageField 根 div 绑定 paste / dragover / dragleave / drop 事件
         不替换原模板，只通过 t-inherit extension 模式添加事件处理器
+        + 上传中进度条遮罩
     -->
     <t t-name="image_uploader.ImageField" t-inherit="web.ImageField" t-inherit-mode="extension">
         <xpath expr="//div[hasclass('opacity-trigger-hover')]" position="attributes">
@@ -12,6 +13,21 @@
             <attribute name="t-on-dragleave">onDragLeave</attribute>
             <attribute name="t-on-drop.prevent">onDrop</attribute>
             <attribute name="tabindex">0</attribute>
+        </xpath>
+
+        <!-- 上传中：img 用本地预览 data URL 即时渲染 -->
+        <xpath expr="//img" position="attributes">
+            <attribute name="t-att-src">state.isUploading and uploadingUrl or this.getUrl(props.previewImage or props.name)</attribute>
+        </xpath>
+
+        <!-- 上传中：在 img 之后追加进度条遮罩 -->
+        <xpath expr="//img" position="after">
+            <div t-if="state.isUploading" class="o_image_uploader_progress position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center">
+                <div class="o_image_uploader_progress_inner text-center">
+                    <div class="o_image_uploader_spinner mx-auto mb-1"/>
+                    <span class="small text-light">上传中…</span>
+                </div>
+            </div>
         </xpath>
     </t>
 
