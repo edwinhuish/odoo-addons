@@ -1,7 +1,7 @@
 {
     "name": "订单编号",
-    "version": "19.0.1.4.0",
-    "summary": "按客户编码+年份生成订单编号，支持手动编辑、批量补号、全局唯一校验与PDF文件名定制",
+    "version": "19.0.1.5.0",
+    "summary": "按客户编码+年份生成订单编号，支持手动编辑、批量补号、全局唯一校验、PDF文件名与门户预览定制",
     "description": """
         外贸SOHO场景下的销售订单/报价单编号定制模块。
 
@@ -24,6 +24,7 @@
         - 列表视图提供"生成订单编号"批量补号动作
         - 打印预览与PDF正文优先显示订单编号，未分配时回退到系统编号
         - PDF文件名（报价单/订单/形式发票）包含订单编号，替代原生SOxxxx命名规则
+        - 客户门户预览页面的面包屑与 H2 标题也使用订单编号
     """,
     "category": "Sales",
     "author": "SOHO外贸",
@@ -31,6 +32,7 @@
     "data": [
         "views/partner_views.xml",
         "views/sale_order_views.xml",
+        "views/portal_templates_inherit.xml",
         "data/sale_order_actions.xml",
         "reports/report_saleorder.xml",
     ],

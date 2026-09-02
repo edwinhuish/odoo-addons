@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 客户门户模板：把面包屑与标题里的 sale_order.name 替换为     -->
+    <!-- sale_order.order_no，未分配时回退到 sale_order.name。         -->
+    <!-- 这两处原本直接 t-out sale_order.name，绕过了               -->
+    <!-- _compute_display_name() 的优先显示 order_no 逻辑，           -->
+    <!-- 所以必须显式覆盖。                                          -->
+    <!-- ============================================================ -->
+
+    <!-- 面包屑：销售订单/报价单列表与详情页通用 -->
+    <template id="portal_my_home_menu_sale_inherit"
+              inherit_id="sale.portal_my_home_menu_sale"
+              priority="99">
+
+        <xpath expr="//li[hasclass('breadcrumb-item') and hasclass('active')]/t[@t-out='sale_order.name']" position="replace">
+            <!-- 优先显示订单编号，未分配时回退到系统编号 -->
+            <t t-out="sale_order.order_no or sale_order.name"/>
+        </xpath>
+
+    </template>
+
+    <!-- 客户门户详情页：H2 标题（"Quotation - S00026" / "Order - S00026"） -->
+    <template id="sale_order_portal_content_inherit"
+              inherit_id="sale.sale_order_portal_content"
+              priority="99">
+
+        <xpath expr="//h2/em[@t-out='sale_order.name']" position="replace">
+            <!-- 优先显示订单编号，未分配时回退到系统编号 -->
+            <em t-out="sale_order.order_no or sale_order.name"/>
+        </xpath>
+
+    </template>
+
+</odoo>

@@ -28,6 +28,7 @@ Odoo 19 销售模块扩展，用于在外贸 SOHO 场景下为报价单/销售�
 | 批量补号 | 列表视图“动作 → 生成订单编号”，为尚未编号的单据补号 |
 | 打印预览显示 | 报价单/订单/形式发票打印报表正文优先显示 `order_no`，未分配时回退到系统编号 |
 | PDF 文件名 | 打印生成的 PDF 文件名包含 `order_no`（如 `Quotation - DZ2602.pdf`），替代原生 `SOxxxx` 命名 |
+| 门户预览 | 后台预览客户门户（带“返回编辑模式”提示）时，门户页面的面包屑与 H2 标题也使用 `order_no` |
 
 ---
 
@@ -62,6 +63,7 @@ Odoo 19 销售模块扩展，用于在外贸 SOHO 场景下为报价单/销售�
 - **销售订单搜索视图**：顶部搜索框直接匹配订单编号，另有独立的“订单编号”筛选项
 - **打印报表**：报价单、销售订单、形式发票统一用 `订单编号` 替代系统原生编号
 - **PDF 文件名**：覆盖原生 `ir.actions.report` 的 `print_report_name`，下载文件名形如 `Quotation - DZ2602.pdf` / `Order - DZ2602.pdf` / `PRO-FORMA - DZ2602.pdf`，未分配编号时回退到系统编号
+- **客户门户预览**：扩展 `sale.portal_my_home_menu_sale` 与 `sale.sale_order_portal_content`，门户页面的面包屑与 H2 标题也使用 `order_no`（避免被 `sale_order.name` 覆盖）
 
 ---
 

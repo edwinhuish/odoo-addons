@@ -1,5 +1,27 @@
 # 变更日志
 
+## [19.0.1.5.0] - 2026-09-02
+
+### 变更
+
+- 客户门户预览页面：
+  - 新增 `views/portal_templates_inherit.xml`，扩展 `sale.portal_my_home_menu_sale` 与 `sale.sale_order_portal_content`
+  - 面包屑尾（`销售订单 / 报价单 XXXXX`）从 `sale_order.name` 改为 `sale_order.order_no or sale_order.name`
+  - 详情页 H2 标题（`报价单 - XXXXX`）从 `sale_order.name` 改为 `sale_order.order_no or sale_order.name`
+  - 后台用户预览客户门户时（包括 `portal_back_in_edit_mode` 包装层）也能看到自定义订单编号
+
+### 影响
+
+- 这两处原本直接 `t-out sale_order.name`，绕过了 `_compute_display_name()` 的优先显示 `order_no` 逻辑，必须显式覆盖
+- 不涉及数据库结构变更，无需迁移脚本
+- 未分配 `order_no` 的单据（理论上新建未保存状态下才出现）回退到 `sale_order.name`，保证不显示空白
+
+### 文档
+
+- 同步更新 `README.md`、`__manifest__.py`
+
+---
+
 ## [19.0.1.4.0] - 2026-09-02
 
 ### 变更
