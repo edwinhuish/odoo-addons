@@ -27,8 +27,8 @@
                      t-att-alt="props.alt"
                      t-att-src="mainImageUrl"
                      style="width: 180px; height: 180px; object-fit: contain;"/>
-                <!-- 无图占位提示 -->
-                <div t-if="!hasImages"
+                <!-- 无图占位提示（图库与原生主图均无值时） -->
+                <div t-if="!hasMainImage"
                      class="o_gallery_empty position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-muted small"
                      style="pointer-events: none;">
                     <span>暂无图片</span>
@@ -36,7 +36,7 @@
             </div>
 
             <!-- ============ 悬浮放大预览（左侧 / 下侧 / 右侧） ============ -->
-            <div t-if="state.hoverZoom and hasImages"
+            <div t-if="state.hoverZoom and hasMainImage"
                  class="o_gallery_hover_zoom bg-white border shadow"
                  t-att-style="hoverStyle">
                 <img loading="lazy"

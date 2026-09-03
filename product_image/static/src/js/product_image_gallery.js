@@ -118,6 +118,15 @@ export class ProductImageGallery extends Component {
         return this.galleryRecords.length > 0;
     }
 
+    /**
+     * 是否有可显示的主图：图库有记录，或原生 image_1920 字段有值（历史产品）。
+     * 历史产品在装模块前就有 image_1920 主图但无图库记录，需回退显示字段值，
+     * 否则原主图会被 widget「吞掉」显示占位。
+     */
+    get hasMainImage() {
+        return this.hasImages || Boolean(this.props.record.data[this.props.name]);
+    }
+
     get totalCount() {
         return this.galleryRecords.length;
     }
@@ -132,6 +141,9 @@ export class ProductImageGallery extends Component {
      * 对未保存的新记录或相关尺寸字段（image_128/1024）为空时，
      * 回退到 image_1920 源数据（base64 data URL），保证刚上传的图片
      * 在保存前也能预览。已保存记录优先用请求字段以节省带宽。
+     *
+     * record 既可以是图库记录（product.image.gallery），也可以是主记录
+     * （product.template）——后者用于图库为空时回退显示原生 image_1920 字段值。
      */
     getUrl(record, fieldName) {
         if (!record) {
@@ -147,7 +159,7 @@ export class ProductImageGallery extends Component {
         if (!record.isNew && isBinarySize(data) && record.resId) {
             const urlField =
                 fieldName === "image_1920" || !record.data[fieldName] ? "image_1920" : fieldName;
-            return imageUrl("product.image.gallery", record.resId, urlField, {
+            return imageUrl(record.resModel || "product.image.gallery", record.resId, urlField, {
                 unique: record.data.write_date,
             });
         }
@@ -155,14 +167,26 @@ export class ProductImageGallery extends Component {
         return `data:image/${magic};base64,${data}`;
     }
 
-    /** 主图：优先 image_1024（180px 显示足够，比 image_128 清晰），回退 image_1920 源数据。 */
+    /**
+     * 主图：图库有记录时取首图 image_1024（180px 显示足够，比 image_128 清晰）；
+     * 图库为空时回退到原生 image_1920 字段值（历史产品主图不丢失）。
+     */
     get mainImageUrl() {
-        return this.getUrl(this.currentRecord, "image_1024");
+        if (this.hasImages) {
+            return this.getUrl(this.currentRecord, "image_1024");
+        }
+        return this.getUrl(this.props.record, this.props.name);
     }
 
-    /** 悬浮放大 / 预览弹窗：用 image_1920 源数据，最大化清晰度。 */
+    /**
+     * 悬浮放大 / 预览弹窗：图库有记录时取首图 image_1920 源数据；
+     * 图库为空时回退到原生 image_1920 字段值。
+     */
     get fullImageUrl() {
-        return this.getUrl(this.currentRecord, "image_1920");
+        if (this.hasImages) {
+            return this.getUrl(this.currentRecord, "image_1920");
+        }
+        return this.getUrl(this.props.record, this.props.name);
     }
 
     get currentName() {
@@ -196,7 +220,7 @@ export class ProductImageGallery extends Component {
     // ------------------------------------------------------------------
 
     onHoverEnter() {
-        if (!this.hasImages) {
+        if (!this.hasMainImage) {
             return;
         }
         // 计算放置位置与像素坐标（position:fixed 需相对视口的 top/left）。
@@ -248,7 +272,7 @@ export class ProductImageGallery extends Component {
     // ------------------------------------------------------------------
 
     onMainClick() {
-        if (!this.hasImages) {
+        if (!this.hasMainImage) {
             return;
         }
         this.state.hoverZoom = false;

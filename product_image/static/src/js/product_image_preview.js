@@ -47,12 +47,17 @@ export class ProductImagePreviewDialog extends Component {
             angle: 0,
             isCopying: false,
             copyState: "", // "" | "ok" | "fail"
+            imageLoaded: false,
         });
     }
 
     // ------------------------------------------------------------------
     // 缩放与旋转
     // ------------------------------------------------------------------
+
+    onImageLoaded() {
+        this.state.imageLoaded = true;
+    }
 
     get displayName() {
         return this.props.name || _t("产品图片");
@@ -106,6 +111,8 @@ export class ProductImagePreviewDialog extends Component {
         }
         style +=
             "background: repeating-conic-gradient(#ccc 0deg 90deg, #fff 90deg 180deg) 50% / 20px 20px;";
+        // opacity 必须放进 imageStyle，避免 t-att-style 重渲染时被重置回 0 导致图片消失
+        style += `opacity: ${this.state.imageLoaded ? 1 : 0};`;
         return style;
     }
 

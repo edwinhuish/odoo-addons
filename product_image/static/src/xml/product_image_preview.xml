@@ -39,7 +39,7 @@
                          t-att-style="imageStyle"
                          t-att-alt="props.name"
                          draggable="false"
-                         t-on-load="(ev) => { ev.target.style.opacity = 1; }"
+                         t-on-load="onImageLoaded"
                          t-on-click.stop=""
                          t-on-wheel.prevent="onWheelImage"
                          t-on-mousedown.stop="onMousedownImage"

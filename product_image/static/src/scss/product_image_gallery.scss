@@ -96,7 +96,8 @@
     }
 
     .o_product_image_preview-img {
-        opacity: 0;
+        // opacity 由组件 imageStyle getter 控制（imageLoaded 后置 1），
+        // 不在 SCSS 写 opacity:0，避免与 t-att-style 重渲染冲突导致图片消失
         transition: opacity 0.15s ease;
         user-select: none;
     }

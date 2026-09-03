@@ -1,5 +1,23 @@
 # 变更日志
 
+## [19.0.2.0.1] - 2026-09-03（待验证）
+
+### 变更
+
+- **修复预览弹窗放大/缩小/旋转后图片消失**：`<img>` 初始 `opacity:0` 靠 `t-on-load` 置 1，但每次 `scale`/`angle` 变化触发 `imageStyle` getter 重算、`t-att-style` 重设整个 style 时把 `opacity` 重置回 0。改为把 `opacity` 纳入 `imageStyle`（由 `state.imageLoaded` 控制），`t-on-load` 调 `onImageLoaded` 设状态；SCSS 不再写 `opacity:0`。
+- **修复历史产品原主图看不到**：widget 原先只看 `image_gallery_ids`，装模块前就有 `image_1920` 主图但无图库记录的产品会显示「暂无图片」，原主图被吞掉。新增 `hasMainImage`（图库有记录 或 原生 `image_1920` 字段有值），`mainImageUrl`/`fullImageUrl` 在图库为空时回退 `getUrl(this.props.record, this.props.name)` 显示原生主图 URL；悬浮放大与点击预览也对历史主图生效。`getUrl` 用 `record.resModel` 适配图库记录与主记录两类。
+
+### 影响
+
+- 仅前端 widget 与预览组件改动，模型 / 字段 / 视图 / 权限未变。
+- 历史产品（有 `image_1920` 无图库）现可正常显示主图、悬浮放大、点击预览；如对其上传第一张图库图片，仍按「首图即主图」同步覆盖 `image_1920`（预期行为）。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本号；CHANGELOG 补本条。
+
+---
+
 ## [19.0.2.0.0] - 2026-09-03（待验证）
 
 ### 变更
