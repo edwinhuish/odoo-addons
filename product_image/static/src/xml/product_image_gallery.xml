@@ -3,11 +3,12 @@
 
     <!--
         产品多图图库 widget：在原生头像位置渲染多图浏览
-        - 主图 180x180（2 倍于原生 90x90 头像）
-        - 无上一张/下一张按钮、无序号
-        - 悬浮主图在左侧（或下侧）显示放大图
-        - 点击主图弹出全屏预览（放大/缩小/复制）
-        - 右侧竖排缩略图，每张带删除按钮；末端有上传占位符（编辑态）
+        - 主图与图库解耦：原生主图 image_1920 独立，列表/看板展示它
+        - 展示序列：[原生主图（若有）] + [图库图片按 sequence 升序]，主图永远第一张
+        - 主图 180x180（2 倍于原生 90x90 头像），无上一张/下一张按钮、无序号
+        - 悬浮主图在左侧（或下侧/右侧）显示放大图
+        - 点击主图弹出全屏预览（放大/缩小/旋转）
+        - 右侧竖排缩略图：主图项带替换/删除，图库项带删除；末端有上传占位符（编辑态）
         - 缩略图溢出时上下显示滚动按钮
     -->
     <t t-name="product_image.ProductImageGallery">
@@ -27,8 +28,8 @@
                      t-att-alt="props.alt"
                      t-att-src="mainImageUrl"
                      style="width: 180px; height: 180px; object-fit: contain;"/>
-                <!-- 无图占位提示（图库与原生主图均无值时） -->
-                <div t-if="!hasMainImage"
+                <!-- 无图占位提示（主图与图库均无值时） -->
+                <div t-if="!hasItems"
                      class="o_gallery_empty position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-muted small"
                      style="pointer-events: none;">
                     <span>暂无图片</span>
@@ -36,7 +37,7 @@
             </div>
 
             <!-- ============ 悬浮放大预览（左侧 / 下侧 / 右侧） ============ -->
-            <div t-if="state.hoverZoom and hasMainImage"
+            <div t-if="state.hoverZoom and hasItems"
                  class="o_gallery_hover_zoom bg-white border shadow"
                  t-att-style="hoverStyle">
                 <img loading="lazy"
@@ -64,21 +65,55 @@
                 <div class="o_gallery_thumb_scroll d-flex flex-column align-items-center"
                      t-ref="thumbScroll"
                      t-on-scroll="onThumbScroll">
-                    <t t-foreach="galleryRecords" t-as="thumb" t-key="thumb_index">
+                    <t t-foreach="displayItems" t-as="item" t-key="item_index">
                         <div class="o_gallery_thumb_wrap position-relative mb-1"
-                             t-att-class="thumb_index === state.currentIndex ? 'is-active' : ''">
+                             t-att-class="item_index === state.currentIndex ? 'is-active' : ''">
                             <img loading="lazy"
-                                 t-att-src="getUrl(thumb, 'image_128')"
+                                 t-att-src="getThumbUrl(item)"
                                  class="o_gallery_thumb img rounded border"
-                                 t-att-alt="thumb.data.name || ''"
-                                 t-on-click="() => this.onSelectByIndex(thumb_index)"
+                                 t-att-alt="item.name"
+                                 t-on-click="() => this.onSelectItem(item_index)"
                                  style="width: 56px; height: 56px; object-fit: cover; cursor: pointer; display: block;"/>
-                            <!-- 删除按钮（编辑态） -->
-                            <button t-if="!props.readonly"
+
+                            <!-- 主图项标记 -->
+                            <span t-if="item.type === 'main'"
+                                  class="o_gallery_thumb_badge position-absolute bottom-0 start-0 end-0 text-center text-white small"
+                                  style="background: rgba(13,110,253,0.8); line-height: 1.2; pointer-events: none;">
+                                主图
+                            </span>
+
+                            <!-- 主图项：替换按钮（编辑态，FileUploader 写主图字段） -->
+                            <FileUploader t-if="!props.readonly and item.type === 'main'"
+                                         acceptedFileExtensions="props.acceptedFileExtensions"
+                                         onUploaded.bind="onMainFileUploaded"
+                                         multiUpload="false">
+                                <t t-set-slot="toggler">
+                                    <span class="o_gallery_thumb_replace btn btn-light border-0 rounded-circle p-0"
+                                          style="position: absolute; top: -6px; left: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.6rem; cursor: pointer;"
+                                          title="替换主图"
+                                          aria-label="替换主图">
+                                        <i class="fa fa-pencil"/>
+                                    </span>
+                                </t>
+                            </FileUploader>
+
+                            <!-- 主图项：删除按钮（清空主图，编辑态） -->
+                            <button t-if="!props.readonly and item.type === 'main'"
                                     class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle p-0"
                                     type="button"
-                                    t-on-click="(ev) => this.onThumbRemove(thumb_index, ev)"
-                                    title="删除"
+                                    t-on-click="(ev) => this.onMainRemove(ev)"
+                                    title="清空主图"
+                                    aria-label="清空主图"
+                                    style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.65rem;">
+                                <i class="fa fa-times"/>
+                            </button>
+
+                            <!-- 图库项：删除按钮（删图库记录，编辑态） -->
+                            <button t-if="!props.readonly and item.type === 'gallery'"
+                                    class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle p-0"
+                                    type="button"
+                                    t-on-click="(ev) => this.onGalleryRemove(item_index, ev)"
+                                    title="删除该图片"
                                     aria-label="删除该图片"
                                     style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.65rem;">
                                 <i class="fa fa-times"/>
@@ -86,7 +121,7 @@
                         </div>
                     </t>
 
-                    <!-- 上传占位符（编辑态，末端） -->
+                    <!-- 上传占位符（编辑态，末端，新增图库记录） -->
                     <FileUploader t-if="!props.readonly"
                                  acceptedFileExtensions="props.acceptedFileExtensions"
                                  onUploaded.bind="onFileUploaded"

@@ -1,21 +1,18 @@
 /** @odoo-module **/
 
 import { Component, useRef, useState } from "@odoo/owl";
-import { useAutofocus, useService } from "@web/core/utils/hooks";
-import { browser } from "@web/core/browser/browser";
+import { useAutofocus } from "@web/core/utils/hooks";
 import { _t } from "@web/core/l10n/translation";
 
 /**
  * 产品图片预览弹窗。
  *
  * 点击产品主图后弹出的全屏预览：
- * - 放大 / 缩小（按钮 + 鼠标滚轮）+ 重置
- * - 复制图片到系统剪贴板（navigator.clipboard.write + ClipboardItem）
+ * - 放大 / 缩小（按钮 + 鼠标滚轮）+ 重置 + 旋转
  * - 拖拽平移（放大后查看局部）
  * - Esc / 点击背景关闭
  *
- * 不复用原生 web.FileViewer：原生无「复制」功能，且全局 patch FileViewer 会影响
- * 所有附件预览。本弹窗仅服务于产品图片，行为收敛在模块内部。
+ * 不复用原生 web.FileViewer：本弹窗仅服务于产品图片，行为收敛在模块内部。
  */
 export class ProductImagePreviewDialog extends Component {
     static template = "product_image.ProductImagePreviewDialog";
@@ -27,8 +24,6 @@ export class ProductImagePreviewDialog extends Component {
 
     setup() {
         useAutofocus();
-        this.notification = useService("notification");
-        this.ui = useService("ui");
         this.imageRef = useRef("image");
         this.zoomerRef = useRef("zoomer");
 
@@ -45,8 +40,6 @@ export class ProductImagePreviewDialog extends Component {
         this.state = useState({
             scale: 1,
             angle: 0,
-            isCopying: false,
-            copyState: "", // "" | "ok" | "fail"
             imageLoaded: false,
         });
     }
@@ -61,41 +54,6 @@ export class ProductImagePreviewDialog extends Component {
 
     get displayName() {
         return this.props.name || _t("产品图片");
-    }
-
-    /** 复制按钮标题（按当前状态切换）。 */
-    get copyTitle() {
-        if (this.state.copyState === "ok") {
-            return _t("已复制，可再点一次复制");
-        }
-        return _t("复制到剪贴板");
-    }
-
-    /** 复制按钮文字（按当前状态切换）。 */
-    get copyLabel() {
-        if (this.state.isCopying) {
-            return _t("复制中");
-        }
-        if (this.state.copyState === "ok") {
-            return _t("已复制");
-        }
-        if (this.state.copyState === "fail") {
-            return _t("复制失败");
-        }
-        return _t("复制");
-    }
-
-    get copyIconClass() {
-        if (this.state.isCopying) {
-            return "fa fa-spinner fa-spin fa-fw";
-        }
-        if (this.state.copyState === "ok") {
-            return "fa fa-check fa-fw text-success";
-        }
-        if (this.state.copyState === "fail") {
-            return "fa fa-times fa-fw text-danger";
-        }
-        return "fa fa-clone fa-fw";
     }
 
     get imageStyle() {
@@ -236,54 +194,6 @@ export class ProductImagePreviewDialog extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 复制图片到剪贴板
-    // ------------------------------------------------------------------
-
-    /**
-     * 把当前预览图片复制到系统剪贴板。
-     *
-     * data: URL 与同源 web/image URL 都能通过 fetch → blob 统一处理。
-     * 跨域附件 URL 不可复制时给出中文提示，回退建议用户用「下载」。
-     */
-    async onCopy() {
-        if (this.state.isCopying) {
-            return;
-        }
-        this.state.isCopying = true;
-        this.state.copyState = "";
-        try {
-            const response = await fetch(this.props.url, { credentials: "same-origin" });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            const blob = await response.blob();
-            if (!blob || !blob.size) {
-                throw new Error("empty blob");
-            }
-            const ClipboardItemCtor = browser.ClipboardItem || window.ClipboardItem;
-            if (!ClipboardItemCtor || !browser.navigator?.clipboard?.write) {
-                throw new Error("unsupported");
-            }
-            await browser.navigator.clipboard.write([
-                new ClipboardItemCtor({ [blob.type]: blob }),
-            ]);
-            this.state.copyState = "ok";
-            this.notification.add(_t("图片已复制到剪贴板，可在其他位置 Ctrl+V 粘贴。"), {
-                type: "success",
-            });
-        } catch (err) {
-            this.state.copyState = "fail";
-            this.notification.add(
-                _t("复制图片失败，浏览器可能不支持该功能。可改用「下载」获取图片。"),
-                { type: "danger" }
-            );
-            browser.console?.warn?.(err);
-        } finally {
-            this.state.isCopying = false;
-        }
-    }
-
-    // ------------------------------------------------------------------
     // 关闭
     // ------------------------------------------------------------------
 
@@ -291,3 +201,4 @@ export class ProductImagePreviewDialog extends Component {
         this.props.close();
     }
 }
+

@@ -20,18 +20,23 @@ const placeholder = "/web/static/img/placeholder.png";
  * 产品多图图库 widget
  *
  * 替换原生 image_1920 字段的 widget，在同一位置（头像区域）渲染多图浏览：
+ * - 主图与图库解耦：产品主图 image_1920 由原生字段独立管理（列表 / 看板 / 报价单展示它），
+ *   图库 product.image.gallery 只存补充图，不反向同步 / 不覆盖 / 不清空主图
+ * - 展示序列：[原生主图（若有）] + [图库图片按 sequence 升序]，主图永远是第一张
  * - 主图放大 2 倍显示（180x180），无上一张/下一张按钮、无序号
- * - 鼠标悬浮主图时在左侧（空间不足时下侧）显示放大的图片
- * - 点击主图弹出全屏预览弹窗（放大/缩小/复制，见 product_image_preview.js）
- * - 缩略图竖向排列于主图右侧，每张带删除按钮
+ * - 鼠标悬浮主图区在左侧（空间不足转下侧/右侧）显示放大图
+ * - 点击主图区弹出全屏预览弹窗（放大/缩小/旋转，见 product_image_preview.js）
+ * - 缩略图竖向排列于主图右侧：
+ *   · 主图项缩略图带「替换」「删除」按钮（编辑态），分别写 / 清空原生主图字段
+ *   · 图库项缩略图带「删除」按钮（编辑态），删除对应图库记录
+ *   · 末端有上传占位符（编辑态），点击新增图库记录
  * - 缩略图总高超出主图高度时，顶部/底部出现上下滚动按钮
- * - 缩略图末端有上传占位符（编辑态），点击即新增图片
  * - 头像区域 Ctrl+V 粘贴剪贴板图片即新增图库记录
- * - 浏览切换为纯前端状态，不写产品主图；上传/删除走 One2many record 操作
- * - 产品主图 image_1920 由后端 create/write 同步首图，列表/看板/报价单沿用
+ * - 浏览切换为纯前端状态，不写库；上传/删除才写库
  *
- * 数据来源：product.template.image_gallery_ids（One2many → product.image.gallery）
- * image.gallery 继承 image.mixin，image_1920/1024/128 自动生成多尺寸。
+ * 数据来源：
+ * - 主图：props.record（product.template）的 image_1920 字段（this.props.name）
+ * - 图库：product.template.image_gallery_ids（One2many → product.image.gallery）
  */
 export class ProductImageGallery extends Component {
     static template = "product_image.ProductImageGallery";
@@ -70,15 +75,27 @@ export class ProductImageGallery extends Component {
             thumbCanScrollUp: false,
             thumbCanScrollDown: false,
         });
-        // 主图容器与缩略图滚动容器引用，用于位置/溢出计算
         this.mainRef = useRef("main");
         this.thumbScrollRef = useRef("thumbScroll");
 
-        // 记录 / 容器尺寸变化后重算缩略图溢出与 currentIndex 边界
+        // 展示序列变化或选中项变化后重算缩略图溢出与索引边界
         useEffect(() => {
             this._updateThumbOverflow();
             this._clampIndex();
-        }, () => [this.galleryRecords.length, this.state.currentIndex]);
+        }, () => [this.displayItems.length, this.state.currentIndex]);
+    }
+
+    // ------------------------------------------------------------------
+    // 原生主图值
+    // ------------------------------------------------------------------
+
+    /** 原生主图字段（image_1920）当前值，为空表示无主图。 */
+    get mainFieldValue() {
+        return this.props.record.data[this.props.name];
+    }
+
+    get hasMainImage() {
+        return Boolean(this.mainFieldValue);
     }
 
     // ------------------------------------------------------------------
@@ -90,7 +107,7 @@ export class ProductImageGallery extends Component {
     }
 
     /**
-     * 当前图库所有图片记录（按 sequence/id 升序，与后端 _order 一致）。
+     * 图库所有图片记录（按 sequence/id 升序，与后端 _order 一致）。
      */
     get galleryRecords() {
         const list = this.galleryList;
@@ -105,30 +122,50 @@ export class ProductImageGallery extends Component {
         });
     }
 
-    get currentRecord() {
-        const records = this.galleryRecords;
-        if (!records.length) {
-            return null;
-        }
-        const idx = Math.min(this.state.currentIndex, records.length - 1);
-        return records[idx] || null;
-    }
-
-    get hasImages() {
-        return this.galleryRecords.length > 0;
-    }
+    // ------------------------------------------------------------------
+    // 展示序列：[原生主图] + [图库图片按序]
+    // ------------------------------------------------------------------
 
     /**
-     * 是否有可显示的主图：图库有记录，或原生 image_1920 字段有值（历史产品）。
-     * 历史产品在装模块前就有 image_1920 主图但无图库记录，需回退显示字段值，
-     * 否则原主图会被 widget「吞掉」显示占位。
+     * 展示序列：原生主图（若有值）永远在第一项，其后为图库图片（按 sequence 升序）。
+     * 每项结构：{ type: 'main'|'gallery', record, name }
+     *   - main: record 为 product.template 主记录，操作写 image_1920 字段
+     *   - gallery: record 为 product.image.gallery 记录，操作走 One2many
      */
-    get hasMainImage() {
-        return this.hasImages || Boolean(this.props.record.data[this.props.name]);
+    get displayItems() {
+        const items = [];
+        if (this.hasMainImage) {
+            items.push({
+                type: "main",
+                record: this.props.record,
+                name: _t("主图"),
+            });
+        }
+        for (const rec of this.galleryRecords) {
+            items.push({
+                type: "gallery",
+                record: rec,
+                name: rec.data.name || "",
+            });
+        }
+        return items;
+    }
+
+    get hasItems() {
+        return this.displayItems.length > 0;
     }
 
     get totalCount() {
-        return this.galleryRecords.length;
+        return this.displayItems.length;
+    }
+
+    get currentItem() {
+        const items = this.displayItems;
+        if (!items.length) {
+            return null;
+        }
+        const idx = Math.min(this.state.currentIndex, items.length - 1);
+        return items[idx] || null;
     }
 
     // ------------------------------------------------------------------
@@ -138,12 +175,10 @@ export class ProductImageGallery extends Component {
     /**
      * 生成图片 URL。
      *
-     * 对未保存的新记录或相关尺寸字段（image_128/1024）为空时，
-     * 回退到 image_1920 源数据（base64 data URL），保证刚上传的图片
-     * 在保存前也能预览。已保存记录优先用请求字段以节省带宽。
-     *
      * record 既可以是图库记录（product.image.gallery），也可以是主记录
-     * （product.template）——后者用于图库为空时回退显示原生 image_1920 字段值。
+     *（product.template）——后者用于展示原生主图。
+     * 对未保存的新记录或相关尺寸字段为空时回退到 image_1920 源数据（base64 data URL），
+     * 保证刚上传的图片在保存前也能预览。已保存记录优先用请求字段以节省带宽。
      */
     getUrl(record, fieldName) {
         if (!record) {
@@ -167,45 +202,51 @@ export class ProductImageGallery extends Component {
         return `data:image/${magic};base64,${data}`;
     }
 
-    /**
-     * 主图：图库有记录时取首图 image_1024（180px 显示足够，比 image_128 清晰）；
-     * 图库为空时回退到原生 image_1920 字段值（历史产品主图不丢失）。
-     */
-    get mainImageUrl() {
-        if (this.hasImages) {
-            return this.getUrl(this.currentRecord, "image_1024");
+    /** 统一取展示项的图片 URL（主图项与图库项都走同一逻辑）。 */
+    getItemUrl(item, fieldName) {
+        if (!item) {
+            return placeholder;
         }
-        return this.getUrl(this.props.record, this.props.name);
+        // 主图项：始终用主图字段（image_1920），忽略请求的尺寸字段；
+        // product.template 继承 image.mixin，image_1024/128 为 related，可正常取
+        if (item.type === "main") {
+            return this.getUrl(item.record, this.props.name);
+        }
+        return this.getUrl(item.record, fieldName);
     }
 
-    /**
-     * 悬浮放大 / 预览弹窗：图库有记录时取首图 image_1920 源数据；
-     * 图库为空时回退到原生 image_1920 字段值。
-     */
+    /** 主图区大图：优先 image_1024（180px 显示足够，比 image_128 清晰），回退 image_1920。 */
+    get mainImageUrl() {
+        return this.getItemUrl(this.currentItem, "image_1024");
+    }
+
+    /** 悬浮放大 / 预览弹窗：用 image_1920 源数据，最大化清晰度。 */
     get fullImageUrl() {
-        if (this.hasImages) {
-            return this.getUrl(this.currentRecord, "image_1920");
-        }
-        return this.getUrl(this.props.record, this.props.name);
+        return this.getItemUrl(this.currentItem, "image_1920");
+    }
+
+    /** 缩略图 URL：用 image_128。 */
+    getThumbUrl(item) {
+        return this.getItemUrl(item, "image_128");
     }
 
     get currentName() {
-        return this.currentRecord?.data.name || "";
+        return this.currentItem?.name || "";
     }
 
     // ------------------------------------------------------------------
-    // 选择缩略图（纯前端状态，不写库）
+    // 选择展示项（纯前端状态，不写库）
     // ------------------------------------------------------------------
 
-    onSelectByIndex(index) {
-        if (index < 0 || index >= this.galleryRecords.length) {
+    onSelectItem(index) {
+        if (index < 0 || index >= this.displayItems.length) {
             return;
         }
         this.state.currentIndex = index;
     }
 
     _clampIndex() {
-        const total = this.galleryRecords.length;
+        const total = this.displayItems.length;
         if (total === 0) {
             this.state.currentIndex = 0;
         } else if (this.state.currentIndex >= total) {
@@ -220,11 +261,9 @@ export class ProductImageGallery extends Component {
     // ------------------------------------------------------------------
 
     onHoverEnter() {
-        if (!this.hasMainImage) {
+        if (!this.hasItems) {
             return;
         }
-        // 计算放置位置与像素坐标（position:fixed 需相对视口的 top/left）。
-        // 优先左侧；左侧空间不足放下方；下方又超出视口底部且右侧有空间则放右侧。
         const el = this.mainRef.el;
         if (!el) {
             this.state.hoverZoom = true;
@@ -247,7 +286,6 @@ export class ProductImageGallery extends Component {
             this.state.hoverLeft = Math.round(rect.right + gap);
             this.state.hoverTop = Math.round(rect.top);
         } else {
-            // 兜底：下方
             this.state.hoverSide = "below";
             this.state.hoverLeft = Math.round(rect.left);
             this.state.hoverTop = Math.round(rect.bottom + gap);
@@ -259,7 +297,6 @@ export class ProductImageGallery extends Component {
         this.state.hoverZoom = false;
     }
 
-    /** 悬浮放大浮层的内联样式（position:fixed + 视口坐标）。 */
     get hoverStyle() {
         return (
             `position: fixed; left: ${this.state.hoverLeft}px; top: ${this.state.hoverTop}px; ` +
@@ -268,11 +305,11 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 点击主图 → 弹出预览
+    // 点击主图区 → 弹出预览
     // ------------------------------------------------------------------
 
     onMainClick() {
-        if (!this.hasMainImage) {
+        if (!this.hasItems) {
             return;
         }
         this.state.hoverZoom = false;
@@ -284,7 +321,30 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 上传：新增一条图库记录，并设为当前图
+    // 主图项编辑：替换 / 清空原生主图字段（image_1920）
+    // ------------------------------------------------------------------
+
+    async onMainFileUploaded(info) {
+        // 写入原生主图字段，不触碰图库
+        await this.props.record.update({ [this.props.name]: info.data });
+        // 主图项始终是 displayItems[0]（替换后仍在首位），保持选中
+        this.state.currentIndex = 0;
+    }
+
+    async onMainRemove(ev) {
+        ev?.stopPropagation?.();
+        ev?.preventDefault?.();
+        if (this.props.readonly) {
+            return;
+        }
+        // 清空原生主图字段；主图项从展示序列移除，自动切到下一项
+        await this.props.record.update({ [this.props.name]: false });
+        this._clampIndex();
+        requestAnimationFrame(() => this._updateThumbOverflow());
+    }
+
+    // ------------------------------------------------------------------
+    // 图库项编辑：新增 / 删除图库记录
     // ------------------------------------------------------------------
 
     async onFileUploaded(info) {
@@ -295,42 +355,35 @@ export class ProductImageGallery extends Component {
         }
         const newRecord = await galleryList.addNewRecord(false);
         await newRecord.update({ image_1920: info.data });
-        this.state.currentIndex = this.galleryRecords.length - 1;
+        // 选中新加的图库项（位于序列末尾）
+        this.state.currentIndex = this.displayItems.length - 1;
         this._clampIndex();
     }
 
-    // ------------------------------------------------------------------
-    // 删除：移除指定缩略图对应的图库记录（不限于当前主图）
-    // ------------------------------------------------------------------
-
-    async onThumbRemove(index, ev) {
-        // 阻止冒泡触发缩略图选中
+    async onGalleryRemove(index, ev) {
         ev?.stopPropagation?.();
         ev?.preventDefault?.();
         if (this.props.readonly) {
             return;
         }
-        const records = this.galleryRecords;
-        const rec = records[index];
-        if (!rec) {
+        const items = this.displayItems;
+        const item = items[index];
+        if (!item || item.type !== "gallery") {
             return;
         }
+        const rec = item.record;
         const list = this.galleryList;
         if (!list) {
             return;
         }
-        // 通过主 record 的 update + x2ManyCommands 删除图库记录，
-        // 由 Odoo 内部 _preprocessX2manyChanges 统一处理（已保存走 DELETE/orm.unlink，
-        // 新记录走 UNLINK/从 records 移除）。
+        // 通过主 record 的 update + x2ManyCommands 删除图库记录
         const command = rec.isNew
             ? x2ManyCommands.unlink(rec.id) // (3, id) 移除关联
             : x2ManyCommands.delete(rec.resId); // (2, id) 删除已保存记录
         await this.props.record.update({
             image_gallery_ids: [command],
         });
-        // 删除后维持可视位置：若删除的是当前或之前的索引，索引可能需要前移
         this._clampIndex();
-        // 等下一帧 DOM 更新后重算溢出
         requestAnimationFrame(() => this._updateThumbOverflow());
     }
 
@@ -366,7 +419,6 @@ export class ProductImageGallery extends Component {
         this._updateThumbOverflow();
     }
 
-    /** 计算缩略图是否超出容器，决定上下按钮显隐。 */
     _updateThumbOverflow() {
         const el = this.thumbScrollRef.el;
         if (!el) {

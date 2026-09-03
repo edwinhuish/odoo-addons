@@ -11,9 +11,9 @@
 - 新建模型：`product.image.gallery`（模型名保持不变，避免与 `website_sale` 的 `product.image` 冲突）
 - 继承模型：`product.template`
 - 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单原生 `image_1920` 字段 widget）
-- 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/复制）
+- 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `image_uploader`）
-- 当前版本：`19.0.2.0.0`
+- 当前版本：`19.0.2.0.3`
 
 ---
 
@@ -34,14 +34,16 @@
    - 若日后与 `website_sale` 共存，两者模型互不干扰
    - **注意**：模块技术名虽为 `product_image`，但模型名是 `product.image.gallery`，二者不必一致
 
-4. **首图自动同步到产品主图，禁止手工双写**
-   - 首图定义：`active=True` 中 `sequence` 最小、`id` 最小兜底
-   - `product.image.gallery` 的 create/write/unlink 触发 `product.template._sync_main_image_from_template`
-   - 图库为空时清空主图，避免残留陈旧主图
+4. **主图与图库完全解耦，禁止图库反向写产品主图**
+   - 产品主图 `image_1920` 由原生字段独立管理，列表 / 看板 / 报价单展示它
+   - 图库 `product.image.gallery` 只存补充图，**不反向同步 / 不覆盖 / 不清空**产品主图
+   - 已移除 `_sync_main_image_from_template`、`is_main`、`_get_main_image`、gallery 的 create/write/unlink override
+   - 前端展示时由 widget 把「原生主图」拼到浏览序列第一位，其余图库图片按 `sequence` 跟在后面
+   - 主图在 widget 内可替换（写 `image_1920` 字段）/ 清空（清 `image_1920`），通过主图项缩略图上的按钮
 
-5. **`is_main` 由排序与 active 自动判定，禁止手工编辑**
-   - `@api.depends("sequence", "product_tmpl_id", "active")` 计算
-   - `store=True` 便于列表展示与过滤
+5. **`is_main` / 首图概念已移除**
+   - 主图独立后图库不再有「首图即主图」语义，`is_main` 字段、`_compute_is_main`、`_get_main_image` 均已删除
+   - 图库图片按 `sequence` 排序仅用于缩略图展示顺序（主图始终在最前）
 
 6. **浏览切换为纯前端状态，禁止切换即写库**
    - widget 用 `state.currentIndex` 维护当前选中图，切换不触发 `record.update`
@@ -49,9 +51,8 @@
    - 悬浮放大、点击预览、复制图片均为只读行为，不写库（只读态也允许）
 
 7. **预览弹窗不全局 patch `web.FileViewer`，禁止影响其他附件预览**
-   - 用模块内置 `ProductImagePreviewDialog` 独立组件实现放大/缩小/复制
-   - 复制走 `navigator.clipboard.write` + `ClipboardItem`（经 `browser` 抽象）
-   - data URL 与同源 `web/image` URL 统一走 `fetch → blob`，避免对两类 URL 分别处理
+   - 用模块内置 `ProductImagePreviewDialog` 独立组件实现放大/缩小/旋转
+   - 不再提供「复制到剪贴板」功能（已于 19.0.2.0.2 移除）
 
 8. **同一产品内图片名称不可重复**
    - `@api.constrains("name", "product_tmpl_id")` 中文提示带出具体值与产品名
@@ -74,13 +75,13 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 模块元数据、依赖、数据文件声明、前端资源登记 |
-| `models/product_image.py` | 图片明细模型：字段、主图判定、主图同步触发、名称去重、级联 |
-| `models/product_template.py` | 扩展 `product.template`：One2many、图片数量、主图同步入口 |
+| `models/product_image.py` | 图片明细模型：字段、名称去重、级联（与主图解耦，无同步） |
+| `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口） |
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
-| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 右侧缩略图（删除/滚动/上传占位）/ 粘贴新增 |
+| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（主图替换清空·图库删除·滚动·上传占位）/ 粘贴新增 |
 | `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗挂载 |
-| `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转/复制到剪贴板 |
+| `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |
 | `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条） |
 | `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |
@@ -101,7 +102,6 @@
 
 改 `static/src/js/product_image_preview.js` 与 `static/src/xml/product_image_preview.xml`：
 - 缩放步长 / 最小缩放：`zoomStep` / `scrollZoomStep` / `minScale`
-- 复制文案：`copyLabel` / `copyTitle` / `copyIconClass` getter
 
 ### 复用原生 webp 转换链路
 
@@ -109,14 +109,11 @@
 如需报告用 webp/JPEG 附件（对应原生 `ImageField.onFileUploaded` 的 canvas 逻辑），
 可在 `onFileUploaded` 内调用原生 `ImageField` 的 canvas 处理后写入。
 
-### 改变首图判定规则
+### 改变图库排序规则
 
-只改 `product_image.py` 的 `_compute_is_main` 与 `_get_main_image`；改后对历史数据需触发一次重算：
-```python
-env['product.image.gallery'].search([])._compute_is_main()
-templates = env['product.image.gallery'].search([]).mapped('product_tmpl_id')
-templates._sync_main_image_from_template()
-```
+图库图片按 `sequence` 升序展示（主图始终在最前，由 widget 拼到序列首位，不参与 `sequence` 排序）。
+改排序规则只改 `product.image.gallery` 的 `_order` 与 widget `galleryRecords` getter 的排序逻辑。
+主图与图库解耦，不涉及任何主图同步。
 
 ### 与 `website_sale` 共存
 
@@ -131,11 +128,11 @@ templates._sync_main_image_from_template()
 - 主图没放大：检查 SCSS 是否加载（`-u` 升级），主图尺寸由模板内联 style 控制
 - 悬浮放大位置错乱：检查 `onHoverEnter` 的 `getBoundingClientRect` 计算与 `hoverStyle` getter
 - 缩略图不滚动：检查 `.o_gallery_thumb_scroll` 的 `flex:1 1 auto; min-height:0; overflow-y:auto`
-- 复制失败：浏览器非 HTTPS 或不支持 `ClipboardItem`，控制台查 `browser.navigator.clipboard`
 - 上传后未新增：检查 `galleryList.addNewRecord` 是否成功，看控制台报错
-- 主图未同步：检查图片行的 `sequence` 与 `active`，首图判定依赖两者
+- 主图不在序列首位：主图有值时 widget `displayItems` 第一项即主图；若主图项缺失，检查 `hasMainImage`（`props.record.data[image_1920]`）是否有值
+- 主图替换/清空无效：检查主图项缩略图的 `onMainFileUploaded` / `onMainRemove` 是否写入 `this.props.name`（image_1920）字段
 - 粘贴无反应：确认头像区域获得焦点（根 div 有 `tabindex="0"`）
-- 看板无主图：确认首图存在且 `image_1920` 已同步到 `product.template`
+- 看板无主图：产品主图 `image_1920` 为空时看板无图；主图独立，需直接上传/设置主图字段
 
 ---
 

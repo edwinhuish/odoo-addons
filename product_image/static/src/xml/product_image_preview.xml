@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <templates xml:space="preserve">
 
-    <!-- 产品图片预览弹窗：全屏 modal，支持放大/缩小/复制 -->
+    <!-- 产品图片预览弹窗：全屏 modal，支持放大/缩小/旋转 -->
     <t t-name="product_image.ProductImagePreviewDialog">
         <div class="o_product_image_preview modal modal-fullscreen d-flex"
              tabindex="0"
@@ -9,18 +9,10 @@
              t-ref="autofocus"
              t-on-click.self="close"
              t-on-mousemove="onMousemoveView">
-            <!-- 顶部工具条：标题 + 复制 + 关闭 -->
+            <!-- 顶部工具条：标题 + 关闭 -->
             <div class="o_product_image_preview-header position-absolute top-0 start-0 end-0 d-flex align-items-center px-3 py-2">
                 <span class="text-truncate me-3 text-white small" t-out="displayName"/>
                 <div class="flex-grow-1"/>
-                <button class="btn btn-sm btn-light me-2"
-                        t-att-class="{'disabled opacity-50': state.isCopying}"
-                        t-on-click.stop="onCopy"
-                        t-att-title="copyTitle"
-                        aria-label="复制到剪贴板">
-                    <i t-att-class="copyIconClass"/>
-                    <span class="ms-1" t-out="copyLabel"/>
-                </button>
                 <button class="btn btn-sm btn-light"
                         t-on-click.stop="close"
                         title="关闭 (Esc)"
@@ -65,9 +57,6 @@
                     </button>
                     <button class="btn btn-light" t-on-click.stop="rotate" title="旋转 (r)" aria-label="旋转">
                         <i class="fa fa-repeat"/>
-                    </button>
-                    <button class="btn btn-light" t-on-click.stop="onCopy" title="复制到剪贴板" aria-label="复制">
-                        <i class="fa fa-clone"/>
                     </button>
                 </div>
             </div>

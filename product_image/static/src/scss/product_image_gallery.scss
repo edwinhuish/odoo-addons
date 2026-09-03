@@ -48,12 +48,14 @@
                 outline: 2px solid #0d6efd;
                 outline-offset: 1px;
             }
-            // 删除按钮：默认隐藏，悬浮缩略图时显示
-            .o_gallery_thumb_del {
+            // 删除 / 替换按钮：默认隐藏，悬浮缩略图时显示
+            .o_gallery_thumb_del,
+            .o_gallery_thumb_replace {
                 opacity: 0;
                 transition: opacity 0.1s ease;
             }
-            &:hover .o_gallery_thumb_del {
+            &:hover .o_gallery_thumb_del,
+            &:hover .o_gallery_thumb_replace {
                 opacity: 1;
             }
         }
