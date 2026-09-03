@@ -321,7 +321,7 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 主图项编辑：替换 / 清空原生主图字段（image_1920）
+    // 主图项编辑：替换 / 删除（删除时自动提升图库首张为主图）
     // ------------------------------------------------------------------
 
     async onMainFileUploaded(info) {
@@ -331,14 +331,53 @@ export class ProductImageGallery extends Component {
         this.state.currentIndex = 0;
     }
 
+    /**
+     * 删除主图：图库非空时自动提升首张图库图为主图。
+     *
+     * 提升即「移动」：把图库首张图的图片数据写入主图字段（image_1920），
+     * 并删除该图库记录——不复制、不重复展示。
+     * 已保存图库记录的 image_1920 可能是 binary size（懒加载），需从服务端
+     * ORM 读取真实 base64 后再写入主图，避免写入占位字符串。
+     * 图库为空时直接清空主图字段。
+     */
     async onMainRemove(ev) {
         ev?.stopPropagation?.();
         ev?.preventDefault?.();
         if (this.props.readonly) {
             return;
         }
-        // 清空原生主图字段；主图项从展示序列移除，自动切到下一项
-        await this.props.record.update({ [this.props.name]: false });
+        const gallery = this.galleryRecords;
+        if (gallery.length) {
+            const first = gallery[0];
+            let imgData = first.data.image_1920;
+            // 已保存记录的 image_1920 可能是 binary size（懒加载），读真实 base64
+            if ((!imgData || isBinarySize(imgData)) && first.resId && !first.isNew) {
+                try {
+                    const result = await this.orm.read("product.image.gallery", [first.resId], ["image_1920"]);
+                    imgData = result[0]?.image_1920;
+                } catch (_e) {
+                    imgData = false;
+                }
+            }
+            if (imgData) {
+                // 提升：图库首张图数据 → 主图字段，并删除该图库记录（移动，不重复）
+                const command = first.isNew
+                    ? x2ManyCommands.unlink(first.id)
+                    : x2ManyCommands.delete(first.resId);
+                await this.props.record.update({
+                    [this.props.name]: imgData,
+                    image_gallery_ids: [command],
+                });
+            } else {
+                // 取不到图数据，降级为清空主图
+                await this.props.record.update({ [this.props.name]: false });
+            }
+        } else {
+            // 图库为空：直接清空主图
+            await this.props.record.update({ [this.props.name]: false });
+        }
+        // 删除后新主图（提升的图库图或空）位于序列首位
+        this.state.currentIndex = 0;
         this._clampIndex();
         requestAnimationFrame(() => this._updateThumbOverflow());
     }
@@ -347,7 +386,21 @@ export class ProductImageGallery extends Component {
     // 图库项编辑：新增 / 删除图库记录
     // ------------------------------------------------------------------
 
+    /**
+     * 上传新增图片。
+     *
+     * 主图为空时，上传的图直接作为主图（写 image_1920 字段，位于序列首位）；
+     * 主图已有值时，追加为图库记录（不影响主图）。
+     * 即「列表第一位的图片默认为主图」：首张上传的图即主图。
+     */
     async onFileUploaded(info) {
+        if (!this.hasMainImage) {
+            // 主图为空：上传图直接作为主图
+            await this.props.record.update({ [this.props.name]: info.data });
+            this.state.currentIndex = 0;
+            this._clampIndex();
+            return;
+        }
         const galleryList = this.galleryList;
         if (!galleryList) {
             this.notification.add(_t("图库不可用，无法新增图片。"), { type: "danger" });

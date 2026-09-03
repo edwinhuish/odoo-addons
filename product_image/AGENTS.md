@@ -13,7 +13,7 @@
 - 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单原生 `image_1920` 字段 widget）
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `image_uploader`）
-- 当前版本：`19.0.2.0.3`
+- 当前版本：`19.0.2.0.4`
 
 ---
 
@@ -34,12 +34,15 @@
    - 若日后与 `website_sale` 共存，两者模型互不干扰
    - **注意**：模块技术名虽为 `product_image`，但模型名是 `product.image.gallery`，二者不必一致
 
-4. **主图与图库完全解耦，禁止图库反向写产品主图**
+4. **主图与图库解耦，但删除主图时由 widget 主动提升图库首张为主图**
    - 产品主图 `image_1920` 由原生字段独立管理，列表 / 看板 / 报价单展示它
-   - 图库 `product.image.gallery` 只存补充图，**不反向同步 / 不覆盖 / 不清空**产品主图
+   - 图库 `product.image.gallery` 只存补充图，**后端不反向同步 / 不覆盖 / 不清空**产品主图
    - 已移除 `_sync_main_image_from_template`、`is_main`、`_get_main_image`、gallery 的 create/write/unlink override
-   - 前端展示时由 widget 把「原生主图」拼到浏览序列第一位，其余图库图片按 `sequence` 跟在后面
-   - 主图在 widget 内可替换（写 `image_1920` 字段）/ 清空（清 `image_1920`），通过主图项缩略图上的按钮
+   - 前端展示序列 = [原生主图（若有）] + [图库图片按 `sequence` 升序]，主图永远在第一位（无角标，靠首位隐含）
+   - 主图项缩略图：铅笔「替换主图」按钮（写 `image_1920` 字段）、×「删除主图」按钮
+   - **删除主图时**：图库非空 → 把图库首张（`sequence` 升序）图片数据移动到 `image_1920` 字段并删除该图库记录（提升，不复制不重复）；图库为空 → 清空 `image_1920`
+   - **上传时主图为空** → 上传图直接写 `image_1920`（成为首位主图）；主图已有值 → 追加为图库记录（不影响主图）
+   - 已保存图库记录提升时 `image_1920` 若为 binary size（懒加载），通过 ORM `read` 取真实 base64 再写主图
 
 5. **`is_main` / 首图概念已移除**
    - 主图独立后图库不再有「首图即主图」语义，`is_main` 字段、`_compute_is_main`、`_get_main_image` 均已删除
@@ -79,7 +82,7 @@
 | `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口） |
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
-| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（主图替换清空·图库删除·滚动·上传占位）/ 粘贴新增 |
+| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（主图替换·删除提升·图库删除·滚动·上传占位首图即主图）/ 粘贴新增 |
 | `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗挂载 |
 | `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |

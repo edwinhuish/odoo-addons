@@ -75,13 +75,6 @@
                                  t-on-click="() => this.onSelectItem(item_index)"
                                  style="width: 56px; height: 56px; object-fit: cover; cursor: pointer; display: block;"/>
 
-                            <!-- 主图项标记 -->
-                            <span t-if="item.type === 'main'"
-                                  class="o_gallery_thumb_badge position-absolute bottom-0 start-0 end-0 text-center text-white small"
-                                  style="background: rgba(13,110,253,0.8); line-height: 1.2; pointer-events: none;">
-                                主图
-                            </span>
-
                             <!-- 主图项：替换按钮（编辑态，FileUploader 写主图字段） -->
                             <FileUploader t-if="!props.readonly and item.type === 'main'"
                                          acceptedFileExtensions="props.acceptedFileExtensions"
@@ -97,13 +90,13 @@
                                 </t>
                             </FileUploader>
 
-                            <!-- 主图项：删除按钮（清空主图，编辑态） -->
+                            <!-- 主图项：删除按钮（删除主图；图库非空时自动提升首张图库图为主图） -->
                             <button t-if="!props.readonly and item.type === 'main'"
                                     class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle p-0"
                                     type="button"
                                     t-on-click="(ev) => this.onMainRemove(ev)"
-                                    title="清空主图"
-                                    aria-label="清空主图"
+                                    title="删除主图"
+                                    aria-label="删除主图"
                                     style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.65rem;">
                                 <i class="fa fa-times"/>
                             </button>
