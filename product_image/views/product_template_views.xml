@@ -26,7 +26,6 @@
                         <field name="image_1920" widget="image"
                                options="{'convert_to_webp': True, 'preview_image': 'image_128', 'zoom': True}"/>
                         <field name="name"/>
-                        <field name="is_main" readonly="1"/>
                         <field name="active"/>
                         <field name="note"/>
                     </list>
