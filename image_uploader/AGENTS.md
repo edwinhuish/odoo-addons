@@ -70,7 +70,7 @@
 
 ## 常见扩展场景
 
-### 让多图控件（如 T-004 `product_multi_image`）支持粘贴新增
+### 让多图控件（如 T-004 `product_image`）支持粘贴新增
 
 本模块已 patch `FileUploader`，任何使用 `FileUploader` 的控件自动获得粘贴能力。
 若多图控件不走 `FileUploader` 而是自定义组件，需在其根元素挂 `t-on-paste` 并在处理器里调用该组件的「新增一条图片记录」入口。

@@ -1,0 +1,123 @@
+// 产品多图图库 widget 样式
+//
+// 设计要点：
+// - 主图 180x180（2 倍于原生 90x90 头像），尺寸由模板内联 style 给定（inline 优先级
+//   高于 .oe_avatar .img 的 90px，无需 !important 覆盖，避免误伤缩略图）
+// - 缩略图竖向排列于主图右侧；溢出时显示上下滚动按钮
+// - 悬浮放大浮层用 position:fixed，避免被表单容器裁切
+
+.o_product_image_gallery {
+    // 主图占位区背景（透明棋盘格，便于看清 PNG 透明边）
+    .o_gallery_main {
+        background: repeating-conic-gradient(#f0f0f0 0deg 90deg, #ffffff 90deg 180deg) 50% / 16px 16px;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        overflow: hidden;
+
+        .o_gallery_main_img {
+            background: #fff;
+        }
+    }
+
+    // 缩略图列：flex 列布局，滚动区填满剩余空间
+    .o_gallery_thumbs {
+        // 上下滚动按钮
+        .o_gallery_thumb_nav {
+            min-width: 56px;
+            border-radius: 0.25rem;
+        }
+
+        // 缩略图滚动容器：填满列内剩余空间，超出滚动；隐藏滚动条保持简洁
+        .o_gallery_thumb_scroll {
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            &::-webkit-scrollbar {
+                display: none;
+            }
+        }
+
+        // 缩略图容器：选中态高亮
+        .o_gallery_thumb_wrap {
+            .o_gallery_thumb {
+                background: #fff;
+            }
+            &.is-active .o_gallery_thumb {
+                outline: 2px solid #0d6efd;
+                outline-offset: 1px;
+            }
+            // 删除按钮：默认隐藏，悬浮缩略图时显示
+            .o_gallery_thumb_del {
+                opacity: 0;
+                transition: opacity 0.1s ease;
+            }
+            &:hover .o_gallery_thumb_del {
+                opacity: 1;
+            }
+        }
+
+        // 上传占位符
+        .o_gallery_thumb_upload {
+            background: #fafafa;
+            transition: border-color 0.1s ease, color 0.1s ease;
+            &:hover {
+                border-color: #0d6efd !important;
+                color: #0d6efd;
+            }
+        }
+    }
+}
+
+// 悬浮放大浮层（position:fixed，脱离表单容器）
+.o_gallery_hover_zoom {
+    border-radius: 0.25rem;
+    img {
+        display: block;
+    }
+}
+
+// 全屏预览弹窗
+.o_product_image_preview {
+    background: rgba(0, 0, 0, 0.85);
+
+    .o_product_image_preview-header {
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 2;
+    }
+
+    .o_product_image_preview-main {
+        z-index: 1;
+    }
+
+    .o_product_image_preview-zoomer {
+        transition: transform 0.05s ease-out;
+    }
+
+    .o_product_image_preview-img {
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        user-select: none;
+    }
+
+    .o_product_image_preview-toolbar {
+        z-index: 2;
+        .btn-group {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            .btn {
+                border-radius: 0;
+                &:first-child {
+                    border-top-left-radius: 0.5rem;
+                    border-bottom-left-radius: 0.5rem;
+                }
+                &:last-child {
+                    border-top-right-radius: 0.5rem;
+                    border-bottom-right-radius: 0.5rem;
+                }
+            }
+        }
+    }
+}

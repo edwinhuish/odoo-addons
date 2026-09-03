@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+    <!--
+        产品多图图库 widget：在原生头像位置渲染多图浏览
+        - 主图 180x180（2 倍于原生 90x90 头像）
+        - 无上一张/下一张按钮、无序号
+        - 悬浮主图在左侧（或下侧）显示放大图
+        - 点击主图弹出全屏预览（放大/缩小/复制）
+        - 右侧竖排缩略图，每张带删除按钮；末端有上传占位符（编辑态）
+        - 缩略图溢出时上下显示滚动按钮
+    -->
+    <t t-name="product_image.ProductImageGallery">
+        <div class="o_product_image_gallery oe_avatar position-relative d-inline-flex align-items-start"
+             t-att-tabindex="props.readonly ? undefined : 0"
+             t-on-paste="onPaste">
+
+            <!-- ============ 主图区域 ============ -->
+            <div class="o_gallery_main position-relative"
+                 t-ref="main"
+                 t-on-mouseenter="onHoverEnter"
+                 t-on-mouseleave="onHoverLeave"
+                 t-on-click="onMainClick"
+                 style="width: 180px; height: 180px; cursor: zoom-in;">
+                <img loading="lazy"
+                     class="img img-fluid o_gallery_main_img"
+                     t-att-alt="props.alt"
+                     t-att-src="mainImageUrl"
+                     style="width: 180px; height: 180px; object-fit: contain;"/>
+                <!-- 无图占位提示 -->
+                <div t-if="!hasImages"
+                     class="o_gallery_empty position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-muted small"
+                     style="pointer-events: none;">
+                    <span>暂无图片</span>
+                </div>
+            </div>
+
+            <!-- ============ 悬浮放大预览（左侧 / 下侧 / 右侧） ============ -->
+            <div t-if="state.hoverZoom and hasImages"
+                 class="o_gallery_hover_zoom bg-white border shadow"
+                 t-att-style="hoverStyle">
+                <img loading="lazy"
+                     t-att-src="fullImageUrl"
+                     t-att-alt="currentName || props.alt"
+                     style="max-width: 320px; max-height: 320px; object-fit: contain; display: block;"/>
+            </div>
+
+            <!-- ============ 右侧竖排缩略图列 ============ -->
+            <div class="o_gallery_thumbs d-flex flex-column align-items-center ms-1 position-relative"
+                 style="height: 180px;">
+
+                <!-- 上滚按钮 -->
+                <button t-if="thumbCanScrollUp"
+                        class="o_gallery_thumb_nav o_gallery_thumb_up btn btn-light border py-0 px-1 mb-1"
+                        type="button"
+                        t-on-click="onThumbScrollUp"
+                        title="上移"
+                        aria-label="上移缩略图"
+                        style="line-height: 1; font-size: 0.75rem;">
+                    <i class="fa fa-chevron-up"/>
+                </button>
+
+                <!-- 缩略图滚动容器 -->
+                <div class="o_gallery_thumb_scroll d-flex flex-column align-items-center"
+                     t-ref="thumbScroll"
+                     t-on-scroll="onThumbScroll">
+                    <t t-foreach="galleryRecords" t-as="thumb" t-key="thumb_index">
+                        <div class="o_gallery_thumb_wrap position-relative mb-1"
+                             t-att-class="thumb_index === state.currentIndex ? 'is-active' : ''">
+                            <img loading="lazy"
+                                 t-att-src="getUrl(thumb, 'image_128')"
+                                 class="o_gallery_thumb img rounded border"
+                                 t-att-alt="thumb.data.name || ''"
+                                 t-on-click="() => this.onSelectByIndex(thumb_index)"
+                                 style="width: 56px; height: 56px; object-fit: cover; cursor: pointer; display: block;"/>
+                            <!-- 删除按钮（编辑态） -->
+                            <button t-if="!props.readonly"
+                                    class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle p-0"
+                                    type="button"
+                                    t-on-click="(ev) => this.onThumbRemove(thumb_index, ev)"
+                                    title="删除"
+                                    aria-label="删除该图片"
+                                    style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.65rem;">
+                                <i class="fa fa-times"/>
+                            </button>
+                        </div>
+                    </t>
+
+                    <!-- 上传占位符（编辑态，末端） -->
+                    <FileUploader t-if="!props.readonly"
+                                 acceptedFileExtensions="props.acceptedFileExtensions"
+                                 onUploaded.bind="onFileUploaded"
+                                 multiUpload="true">
+                        <t t-set-slot="toggler">
+                            <div class="o_gallery_thumb_upload d-flex flex-column align-items-center justify-content-center text-muted mb-1"
+                                 style="width: 56px; height: 56px; cursor: pointer; border: 1px dashed #adb5bd; border-radius: 0.25rem;"
+                                 title="新增图片"
+                                 aria-label="新增图片">
+                                <i class="fa fa-plus" style="font-size: 1rem;"/>
+                            </div>
+                        </t>
+                    </FileUploader>
+                </div>
+
+                <!-- 下滚按钮 -->
+                <button t-if="thumbCanScrollDown"
+                        class="o_gallery_thumb_nav o_gallery_thumb_down btn btn-light border py-0 px-1 mt-1"
+                        type="button"
+                        t-on-click="onThumbScrollDown"
+                        title="下移"
+                        aria-label="下移缩略图"
+                        style="line-height: 1; font-size: 0.75rem;">
+                    <i class="fa fa-chevron-down"/>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============ 全屏预览弹窗 ============ -->
+        <ProductImagePreviewDialog t-if="state.previewOpen"
+                                   url="fullImageUrl"
+                                   name="currentName || props.alt"
+                                   close.bind="closePreview"/>
+    </t>
+
+</templates>

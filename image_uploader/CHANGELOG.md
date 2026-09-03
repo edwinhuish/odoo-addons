@@ -31,12 +31,12 @@
 
 - 粘贴无反应：检查图片区域是否获得焦点（根 `div` 有 `tabindex="0"`），按 `Tab` 切到图片区域后再粘贴
 - 拖拽无高亮：前端资源缓存，`-u image_uploader` 升级后强刷浏览器
-- 多图只保留最后一张：单图字段按原生行为覆盖当前值，属预期；多图场景由 T-004 `product_multi_image` 处理
+- 多图只保留最后一张：单图字段按原生行为覆盖当前值，属预期；多图场景由 T-004 `product_image` 处理
 - 超大图报错：由原生 `checkFileSize` 触发，阈值取自 `session.max_file_upload_size`（默认 128 MB）
 
 ### 后续维护说明
 
-- 让多图控件（如 T-004 `product_multi_image`）支持粘贴新增：本模块已 patch `FileUploader`，
+- 让多图控件（如 T-004 `product_image`）支持粘贴新增：本模块已 patch `FileUploader`，
   任何使用 `FileUploader` 的控件自动获得粘贴能力；若多图控件自定义组件，需在其根元素挂
   `t-on-paste` 并调用该组件的「新增一条图片记录」入口
 - 调整接受的图片 MIME 类型：改 `DEFAULT_ACCEPTED_IMAGE_TYPES` 或视图层给 `ImageField`

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+    <!-- 产品图片预览弹窗：全屏 modal，支持放大/缩小/复制 -->
+    <t t-name="product_image.ProductImagePreviewDialog">
+        <div class="o_product_image_preview modal modal-fullscreen d-flex"
+             tabindex="0"
+             t-on-keydown.stop="(ev) => this.onKeydown(ev)"
+             t-ref="autofocus"
+             t-on-click.self="close"
+             t-on-mousemove="onMousemoveView">
+            <!-- 顶部工具条：标题 + 复制 + 关闭 -->
+            <div class="o_product_image_preview-header position-absolute top-0 start-0 end-0 d-flex align-items-center px-3 py-2">
+                <span class="text-truncate me-3 text-white small" t-out="displayName"/>
+                <div class="flex-grow-1"/>
+                <button class="btn btn-sm btn-light me-2"
+                        t-att-class="{'disabled opacity-50': state.isCopying}"
+                        t-on-click.stop="onCopy"
+                        t-att-title="copyTitle"
+                        aria-label="复制到剪贴板">
+                    <i t-att-class="copyIconClass"/>
+                    <span class="ms-1" t-out="copyLabel"/>
+                </button>
+                <button class="btn btn-sm btn-light"
+                        t-on-click.stop="close"
+                        title="关闭 (Esc)"
+                        aria-label="关闭">
+                    <i class="fa fa-times fa-fw"/>
+                </button>
+            </div>
+
+            <!-- 中央图片区（含缩放层） -->
+            <div class="o_product_image_preview-main position-absolute top-0 bottom-0 start-0 end-0 d-flex align-items-center justify-content-center overflow-hidden">
+                <div class="o_product_image_preview-zoomer position-absolute d-flex align-items-center justify-content-center w-100 h-100"
+                     t-ref="zoomer">
+                    <img t-ref="image"
+                         class="o_product_image_preview-img mw-100 mh-100"
+                         t-att-src="props.url"
+                         t-att-style="imageStyle"
+                         t-att-alt="props.name"
+                         draggable="false"
+                         t-on-load="(ev) => { ev.target.style.opacity = 1; }"
+                         t-on-click.stop=""
+                         t-on-wheel.prevent="onWheelImage"
+                         t-on-mousedown.stop="onMousedownImage"
+                         t-on-mouseup.stop="onMouseupImage"/>
+                </div>
+            </div>
+
+            <!-- 底部缩放工具条 -->
+            <div class="o_product_image_preview-toolbar position-absolute bottom-0 start-0 end-0 d-flex justify-content-center p-3">
+                <div class="btn-group">
+                    <button class="btn btn-light" t-on-click.stop="zoomIn" title="放大 (+)" aria-label="放大">
+                        <i class="fa fa-plus"/>
+                    </button>
+                    <button class="btn btn-light" t-on-click.stop="resetZoom"
+                            t-att-class="{'disabled opacity-50': state.scale === 1}"
+                            title="重置 (0)" aria-label="重置">
+                        <i class="fa fa-search"/>
+                    </button>
+                    <button class="btn btn-light" t-on-click.stop="zoomOut"
+                            t-att-class="{'disabled opacity-50': state.scale === minScale}"
+                            title="缩小 (-)" aria-label="缩小">
+                        <i class="fa fa-minus"/>
+                    </button>
+                    <button class="btn btn-light" t-on-click.stop="rotate" title="旋转 (r)" aria-label="旋转">
+                        <i class="fa fa-repeat"/>
+                    </button>
+                    <button class="btn btn-light" t-on-click.stop="onCopy" title="复制到剪贴板" aria-label="复制">
+                        <i class="fa fa-clone"/>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </t>
+
+</templates>

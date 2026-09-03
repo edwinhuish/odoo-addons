@@ -5,12 +5,14 @@ import { useService } from "@web/core/utils/hooks";
 import { getDataURLFromFile, imageUrl } from "@web/core/utils/urls";
 import { checkFileSize } from "@web/core/utils/files";
 import { isBinarySize } from "@web/core/utils/binary";
+import { x2ManyCommands } from "@web/core/orm_service";
 import { fileTypeMagicWordMap } from "@web/views/fields/image/image_field";
 import { FileUploader } from "@web/views/fields/file_handler";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { registry } from "@web/core/registry";
 
-import { Component, useState } from "@odoo/owl";
+import { Component, useState, useRef, useEffect } from "@odoo/owl";
+import { ProductImagePreviewDialog } from "./product_image_preview";
 
 const placeholder = "/web/static/img/placeholder.png";
 
@@ -18,19 +20,22 @@ const placeholder = "/web/static/img/placeholder.png";
  * 产品多图图库 widget
  *
  * 替换原生 image_1920 字段的 widget，在同一位置（头像区域）渲染多图浏览：
- * - 当前图片 + 左右切换按钮 + 计数指示（如 2/5）+ 缩略图条
- * - 上传即新增一条图库记录（image_gallery_ids），并设为当前图
- * - 删除当前图库记录，自动切换到相邻图
- * - 粘贴剪贴板图片即新增图库记录（联动 T-003 的粘贴体验）
+ * - 主图放大 2 倍显示（180x180），无上一张/下一张按钮、无序号
+ * - 鼠标悬浮主图时在左侧（空间不足时下侧）显示放大的图片
+ * - 点击主图弹出全屏预览弹窗（放大/缩小/复制，见 product_image_preview.js）
+ * - 缩略图竖向排列于主图右侧，每张带删除按钮
+ * - 缩略图总高超出主图高度时，顶部/底部出现上下滚动按钮
+ * - 缩略图末端有上传占位符（编辑态），点击即新增图片
+ * - 头像区域 Ctrl+V 粘贴剪贴板图片即新增图库记录
  * - 浏览切换为纯前端状态，不写产品主图；上传/删除走 One2many record 操作
  * - 产品主图 image_1920 由后端 create/write 同步首图，列表/看板/报价单沿用
  *
  * 数据来源：product.template.image_gallery_ids（One2many → product.image.gallery）
- * image.gallery 继承 image.mixin，image_1920/128 自动生成多尺寸。
+ * image.gallery 继承 image.mixin，image_1920/1024/128 自动生成多尺寸。
  */
 export class ProductImageGallery extends Component {
-    static template = "product_multi_image.ProductImageGallery";
-    static components = { FileUploader };
+    static template = "product_image.ProductImageGallery";
+    static components = { FileUploader, ProductImagePreviewDialog };
     static props = {
         ...standardFieldProps,
         acceptedFileExtensions: { type: String, optional: true },
@@ -56,18 +61,30 @@ export class ProductImageGallery extends Component {
         this.orm = useService("orm");
         this.state = useState({
             currentIndex: 0,
-            isValid: true,
-            isUploading: false,
+            hoverZoom: false,
+            hoverSide: "left", // "left" | "below" | "right"
+            hoverLeft: 0,
+            hoverTop: 0,
+            previewOpen: false,
+            // 缩略图滚动状态
+            thumbCanScrollUp: false,
+            thumbCanScrollDown: false,
         });
+        // 主图容器与缩略图滚动容器引用，用于位置/溢出计算
+        this.mainRef = useRef("main");
+        this.thumbScrollRef = useRef("thumbScroll");
+
+        // 记录 / 容器尺寸变化后重算缩略图溢出与 currentIndex 边界
+        useEffect(() => {
+            this._updateThumbOverflow();
+            this._clampIndex();
+        }, () => [this.galleryRecords.length, this.state.currentIndex]);
     }
 
     // ------------------------------------------------------------------
     // 图库数据访问
     // ------------------------------------------------------------------
 
-    /**
-     * 图库 One2many 记录列表（DynamicRecordList）。
-     */
     get galleryList() {
         return this.props.record.data.image_gallery_ids;
     }
@@ -80,7 +97,6 @@ export class ProductImageGallery extends Component {
         if (!list || !list.records) {
             return [];
         }
-        // 复制后排序，避免改原数组
         return [...list.records].sort((a, b) => {
             const sa = a.data.sequence ?? 10;
             const sb = b.data.sequence ?? 10;
@@ -89,9 +105,6 @@ export class ProductImageGallery extends Component {
         });
     }
 
-    /**
-     * 当前选中的图库记录。
-     */
     get currentRecord() {
         const records = this.galleryRecords;
         if (!records.length) {
@@ -101,107 +114,64 @@ export class ProductImageGallery extends Component {
         return records[idx] || null;
     }
 
-    /**
-     * 当前图片的 base64 数据（来自当前图库记录的 image_1920）。
-     */
-    get currentImageData() {
-        const rec = this.currentRecord;
-        return rec ? rec.data.image_1920 : false;
-    }
-
-    // ------------------------------------------------------------------
-    // 图片 URL（复用原生 ImageField 的 URL 生成逻辑）
-    // ------------------------------------------------------------------
-
-    get sizeStyle() {
-        let style = "";
-        if (this.props.width) {
-            style += `max-width: ${this.props.width}px;`;
-            if (!this.props.height) {
-                style += "height: auto; max-height: 100%;";
-            }
-        }
-        if (this.props.height) {
-            style += `max-height: ${this.props.height}px;`;
-            if (!this.props.width) {
-                style += "width: auto; max-width: 100%;";
-            }
-        }
-        return style;
-    }
-
-    get imgClass() {
-        return ["img", "img-fluid"].concat((this.props.imgClass || "").split(" ")).join(" ");
-    }
-
-    /**
-     * 生成图片 URL。
-     *
-     * 对未保存的新记录或 image_128（related 字段，保存后才生成）为空时，
-     * 回退到 image_1920 源数据（base64 data URL），保证用户刚上传的图片
-     * 在保存前也能预览。已保存记录优先用 image_128 节省带宽。
-     */
-    getUrl(record, fieldName) {
-        if (!record) {
-            return placeholder;
-        }
-        let data = record.data[fieldName];
-        // 优先请求的字段；为空时回退到 image_1920 源数据
-        if (!data && fieldName !== "image_1920") {
-            data = record.data.image_1920;
-        }
-        if (!data) {
-            return placeholder;
-        }
-        // 已保存记录且字段是数据库存储的 binary size 形式 → 走 imageUrl（带缓存 key）
-        if (!record.isNew && isBinarySize(data) && record.resId) {
-            const urlField = (fieldName === "image_1920" || !record.data[fieldName]) ? "image_1920" : fieldName;
-            return imageUrl("product.image.gallery", record.resId, urlField, {
-                unique: record.data.write_date,
-            });
-        }
-        // 新记录或 base64 字符串 → data URL
-        const magic = fileTypeMagicWordMap[data[0]] || "png";
-        return `data:image/${magic};base64,${data}`;
-    }
-
-    get currentImageUrl() {
-        const rec = this.currentRecord;
-        // 优先 image_128（已保存记录的缩略，节省带宽），回退 image_1920 源数据
-        return this.getUrl(rec, "image_128");
-    }
-
-    get hasMultiple() {
-        return this.galleryRecords.length > 1;
+    get hasImages() {
+        return this.galleryRecords.length > 0;
     }
 
     get totalCount() {
         return this.galleryRecords.length;
     }
 
-    get currentPosition() {
-        return this.galleryRecords.length ? this.state.currentIndex + 1 : 0;
+    // ------------------------------------------------------------------
+    // 图片 URL（复用原生 ImageField 的 URL 生成逻辑）
+    // ------------------------------------------------------------------
+
+    /**
+     * 生成图片 URL。
+     *
+     * 对未保存的新记录或相关尺寸字段（image_128/1024）为空时，
+     * 回退到 image_1920 源数据（base64 data URL），保证刚上传的图片
+     * 在保存前也能预览。已保存记录优先用请求字段以节省带宽。
+     */
+    getUrl(record, fieldName) {
+        if (!record) {
+            return placeholder;
+        }
+        let data = record.data[fieldName];
+        if (!data && fieldName !== "image_1920") {
+            data = record.data.image_1920;
+        }
+        if (!data) {
+            return placeholder;
+        }
+        if (!record.isNew && isBinarySize(data) && record.resId) {
+            const urlField =
+                fieldName === "image_1920" || !record.data[fieldName] ? "image_1920" : fieldName;
+            return imageUrl("product.image.gallery", record.resId, urlField, {
+                unique: record.data.write_date,
+            });
+        }
+        const magic = fileTypeMagicWordMap[data[0]] || "png";
+        return `data:image/${magic};base64,${data}`;
+    }
+
+    /** 主图：优先 image_1024（180px 显示足够，比 image_128 清晰），回退 image_1920 源数据。 */
+    get mainImageUrl() {
+        return this.getUrl(this.currentRecord, "image_1024");
+    }
+
+    /** 悬浮放大 / 预览弹窗：用 image_1920 源数据，最大化清晰度。 */
+    get fullImageUrl() {
+        return this.getUrl(this.currentRecord, "image_1920");
+    }
+
+    get currentName() {
+        return this.currentRecord?.data.name || "";
     }
 
     // ------------------------------------------------------------------
-    // 导航：上一张 / 下一张（纯前端状态，不写库）
+    // 选择缩略图（纯前端状态，不写库）
     // ------------------------------------------------------------------
-
-    onPrev() {
-        if (!this.hasMultiple) {
-            return;
-        }
-        const total = this.galleryRecords.length;
-        this.state.currentIndex = (this.state.currentIndex - 1 + total) % total;
-    }
-
-    onNext() {
-        if (!this.hasMultiple) {
-            return;
-        }
-        const total = this.galleryRecords.length;
-        this.state.currentIndex = (this.state.currentIndex + 1) % total;
-    }
 
     onSelectByIndex(index) {
         if (index < 0 || index >= this.galleryRecords.length) {
@@ -210,17 +180,83 @@ export class ProductImageGallery extends Component {
         this.state.currentIndex = index;
     }
 
-    /**
-     * 图库记录变化后校正 currentIndex（避免越界）。
-     * 由 onUploaded / onRemove 调用。
-     */
     _clampIndex() {
         const total = this.galleryRecords.length;
         if (total === 0) {
             this.state.currentIndex = 0;
         } else if (this.state.currentIndex >= total) {
             this.state.currentIndex = total - 1;
+        } else if (this.state.currentIndex < 0) {
+            this.state.currentIndex = 0;
         }
+    }
+
+    // ------------------------------------------------------------------
+    // 悬浮放大
+    // ------------------------------------------------------------------
+
+    onHoverEnter() {
+        if (!this.hasImages) {
+            return;
+        }
+        // 计算放置位置与像素坐标（position:fixed 需相对视口的 top/left）。
+        // 优先左侧；左侧空间不足放下方；下方又超出视口底部且右侧有空间则放右侧。
+        const el = this.mainRef.el;
+        if (!el) {
+            this.state.hoverZoom = true;
+            return;
+        }
+        const rect = el.getBoundingClientRect();
+        const panelW = 320;
+        const panelH = 320;
+        const gap = 8;
+        if (rect.left >= panelW + gap) {
+            this.state.hoverSide = "left";
+            this.state.hoverLeft = Math.round(rect.left - panelW - gap);
+            this.state.hoverTop = Math.round(rect.top);
+        } else if (rect.bottom + panelH + gap <= window.innerHeight) {
+            this.state.hoverSide = "below";
+            this.state.hoverLeft = Math.round(rect.left);
+            this.state.hoverTop = Math.round(rect.bottom + gap);
+        } else if (rect.right + panelW + gap <= window.innerWidth) {
+            this.state.hoverSide = "right";
+            this.state.hoverLeft = Math.round(rect.right + gap);
+            this.state.hoverTop = Math.round(rect.top);
+        } else {
+            // 兜底：下方
+            this.state.hoverSide = "below";
+            this.state.hoverLeft = Math.round(rect.left);
+            this.state.hoverTop = Math.round(rect.bottom + gap);
+        }
+        this.state.hoverZoom = true;
+    }
+
+    onHoverLeave() {
+        this.state.hoverZoom = false;
+    }
+
+    /** 悬浮放大浮层的内联样式（position:fixed + 视口坐标）。 */
+    get hoverStyle() {
+        return (
+            `position: fixed; left: ${this.state.hoverLeft}px; top: ${this.state.hoverTop}px; ` +
+            `max-width: 320px; max-height: 320px; z-index: 1080; pointer-events: none;`
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 点击主图 → 弹出预览
+    // ------------------------------------------------------------------
+
+    onMainClick() {
+        if (!this.hasImages) {
+            return;
+        }
+        this.state.hoverZoom = false;
+        this.state.previewOpen = true;
+    }
+
+    closePreview() {
+        this.state.previewOpen = false;
     }
 
     // ------------------------------------------------------------------
@@ -233,20 +269,25 @@ export class ProductImageGallery extends Component {
             this.notification.add(_t("图库不可用，无法新增图片。"), { type: "danger" });
             return;
         }
-        // 新增一行图库记录
         const newRecord = await galleryList.addNewRecord(false);
         await newRecord.update({ image_1920: info.data });
-        // 选中新图
         this.state.currentIndex = this.galleryRecords.length - 1;
         this._clampIndex();
     }
 
     // ------------------------------------------------------------------
-    // 删除：移除当前图库记录，切换到相邻图
+    // 删除：移除指定缩略图对应的图库记录（不限于当前主图）
     // ------------------------------------------------------------------
 
-    async onFileRemove() {
-        const rec = this.currentRecord;
+    async onThumbRemove(index, ev) {
+        // 阻止冒泡触发缩略图选中
+        ev?.stopPropagation?.();
+        ev?.preventDefault?.();
+        if (this.props.readonly) {
+            return;
+        }
+        const records = this.galleryRecords;
+        const rec = records[index];
         if (!rec) {
             return;
         }
@@ -254,21 +295,68 @@ export class ProductImageGallery extends Component {
         if (!list) {
             return;
         }
-        // 已保存记录：用 list.deleteRecords 走 orm.unlink + 从 records 移除
-        // 新记录（未保存）：直接从 records 数组移除（_removeRecords 私有但稳定）
-        if (!rec.isNew && rec.resId && list.deleteRecords) {
-            await list.deleteRecords([rec]);
-        } else if (list._removeRecords) {
-            list._removeRecords([rec.id]);
-        } else if (list.removeRecord) {
-            // DynamicRecordList 兼容路径
-            list.removeRecord(rec);
-        }
+        // 通过主 record 的 update + x2ManyCommands 删除图库记录，
+        // 由 Odoo 内部 _preprocessX2manyChanges 统一处理（已保存走 DELETE/orm.unlink，
+        // 新记录走 UNLINK/从 records 移除）。
+        const command = rec.isNew
+            ? x2ManyCommands.unlink(rec.id) // (3, id) 移除关联
+            : x2ManyCommands.delete(rec.resId); // (2, id) 删除已保存记录
+        await this.props.record.update({
+            image_gallery_ids: [command],
+        });
+        // 删除后维持可视位置：若删除的是当前或之前的索引，索引可能需要前移
         this._clampIndex();
+        // 等下一帧 DOM 更新后重算溢出
+        requestAnimationFrame(() => this._updateThumbOverflow());
     }
 
     // ------------------------------------------------------------------
-    // 粘贴：剪贴板图片逐张新增图库记录（联动 T-003 体验）
+    // 缩略图滚动：上下按钮
+    // ------------------------------------------------------------------
+
+    get thumbCanScrollUp() {
+        return this.state.thumbCanScrollUp;
+    }
+
+    get thumbCanScrollDown() {
+        return this.state.thumbCanScrollDown;
+    }
+
+    onThumbScrollUp() {
+        const el = this.thumbScrollRef.el;
+        if (!el) {
+            return;
+        }
+        el.scrollBy({ top: -el.clientHeight * 0.8, behavior: "smooth" });
+    }
+
+    onThumbScrollDown() {
+        const el = this.thumbScrollRef.el;
+        if (!el) {
+            return;
+        }
+        el.scrollBy({ top: el.clientHeight * 0.8, behavior: "smooth" });
+    }
+
+    onThumbScroll() {
+        this._updateThumbOverflow();
+    }
+
+    /** 计算缩略图是否超出容器，决定上下按钮显隐。 */
+    _updateThumbOverflow() {
+        const el = this.thumbScrollRef.el;
+        if (!el) {
+            this.state.thumbCanScrollUp = false;
+            this.state.thumbCanScrollDown = false;
+            return;
+        }
+        this.state.thumbCanScrollUp = el.scrollTop > 1;
+        this.state.thumbCanScrollDown =
+            el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+    }
+
+    // ------------------------------------------------------------------
+    // 粘贴：剪贴板图片逐张新增图库记录
     // ------------------------------------------------------------------
 
     async onPaste(ev) {
@@ -323,7 +411,7 @@ function extractImageFiles(ev) {
 }
 
 // ------------------------------------------------------------------
-// 注册为字段 widget，复用原生 image 字段的 options 解析
+// 注册为字段 widget（registry key 保持 product_image_gallery，视图无需改动）
 // ------------------------------------------------------------------
 
 export const productImageGalleryField = {

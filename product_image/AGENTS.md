@@ -6,13 +6,14 @@
 
 ## 模块定位
 
-- 模块名：`产品多图`
-- 技术目录：`product_multi_image`
-- 新建模型：`product.image.gallery`
+- 模块名：`产品图片`（显示名）
+- 技术目录 / 模块技术名：`product_image`（原名 `product_multi_image`，于 19.0.2.0.0 改名）
+- 新建模型：`product.image.gallery`（模型名保持不变，避免与 `website_sale` 的 `product.image` 冲突）
 - 继承模型：`product.template`
-- 自定义 widget：`product_image_gallery`（替换产品表单原生 `image_1920` 字段 widget）
+- 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单原生 `image_1920` 字段 widget）
+- 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/复制）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `image_uploader`）
-- 当前版本：`19.0.1.0.0`
+- 当前版本：`19.0.2.0.0`
 
 ---
 
@@ -22,7 +23,7 @@
 
 1. **在原有图片位置支持多图，禁止新增页签**
    - 产品表单头像区域 `image_1920` 字段 widget 改为 `product_image_gallery`
-   - 同一位置渲染当前图片 + 导航 + 缩略图条，不新增「图库」页、不增加导航层级
+   - 同一位置渲染主图 + 右侧缩略图列，不新增「图库」页、不增加导航层级
 
 2. **图片用独立明细模型，禁止塞进产品主图字段做多图**
    - `product.image.gallery` + `One2many` 挂在 `product.template` 上
@@ -31,6 +32,7 @@
 3. **模型名避开 `product.image`，禁止与 `website_sale` 共用模型**
    - 用 `product.image.gallery`，使本模块可在不依赖 eCommerce 的环境独立安装
    - 若日后与 `website_sale` 共存，两者模型互不干扰
+   - **注意**：模块技术名虽为 `product_image`，但模型名是 `product.image.gallery`，二者不必一致
 
 4. **首图自动同步到产品主图，禁止手工双写**
    - 首图定义：`active=True` 中 `sequence` 最小、`id` 最小兜底
@@ -44,19 +46,26 @@
 6. **浏览切换为纯前端状态，禁止切换即写库**
    - widget 用 `state.currentIndex` 维护当前选中图，切换不触发 `record.update`
    - 只有上传 / 删除 / 设为主图 才走 One2many record 操作
+   - 悬浮放大、点击预览、复制图片均为只读行为，不写库（只读态也允许）
 
-7. **同一产品内图片名称不可重复**
+7. **预览弹窗不全局 patch `web.FileViewer`，禁止影响其他附件预览**
+   - 用模块内置 `ProductImagePreviewDialog` 独立组件实现放大/缩小/复制
+   - 复制走 `navigator.clipboard.write` + `ClipboardItem`（经 `browser` 抽象）
+   - data URL 与同源 `web/image` URL 统一走 `fetch → blob`，避免对两类 URL 分别处理
+
+8. **同一产品内图片名称不可重复**
    - `@api.constrains("name", "product_tmpl_id")` 中文提示带出具体值与产品名
    - 名称非必填，但若填了则同产品内唯一
 
-8. **删除产品级联清理图片**
+9. **删除产品级联清理图片**
    - `product_tmpl_id` 的 `ondelete='cascade'`，禁止改成 `set null` 或 `restrict`
 
-9. **Odoo 19 API 事实**
-   - `image.mixin` 提供 `image_1920` + related 的 1024/512/256/128，继承即得
-   - `name_get()` / `name_search()` 已移除，图库不需要自定义显示名
-   - `_sql_constraints` 已废弃，用 `models.Constraint`（本模块当前未用 DB 约束，名称唯一仅应用层）
-   - 自定义 widget 通过 `registry.category("fields").add` 注册，`fieldDependencies` 声明依赖字段
+10. **Odoo 19 API 事实**
+    - `image.mixin` 提供 `image_1920` + related 的 1024/512/256/128，继承即得
+    - `name_get()` / `name_search()` 已移除，图库不需要自定义显示名
+    - `_sql_constraints` 已废弃，用 `models.Constraint`（本模块当前未用 DB 约束，名称唯一仅应用层）
+    - 自定义 widget 通过 `registry.category("fields").add` 注册，`fieldDependencies` 声明依赖字段
+    - QWeb 模板内**不要**调用 `_t(...)`：翻译由构建期从 XML 字面量（`title=` / `aria-label=` / 元素文本）抽取，动态文案请在 JS 侧用 getter 返回 `_t(...)`
 
 ---
 
@@ -69,8 +78,11 @@
 | `models/product_template.py` | 扩展 `product.template`：One2many、图片数量、主图同步入口 |
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
-| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：多图浏览/上传/删除/粘贴新增 |
-| `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：当前图 + 导航 + 缩略图条 |
+| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 右侧缩略图（删除/滚动/上传占位）/ 粘贴新增 |
+| `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗挂载 |
+| `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转/复制到剪贴板 |
+| `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |
+| `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条） |
 | `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |
 
 ---
@@ -80,9 +92,16 @@
 ### 调整 widget 渲染
 
 改 `static/src/js/product_image_gallery.js` 与 `static/src/xml/product_image_gallery.xml`：
-- 缩略图尺寸：模板里 `style="width: 40px; height: 40px;"`
-- 导航按钮位置：模板里 `o_gallery_nav` 的 class 与 style
-- 当前图展示尺寸：`sizeStyle` getter 与 props 的 `width`/`height`
+- 主图尺寸：模板内联 `style="width: 180px; height: 180px"`（同时改 SCSS 中主图背景棋盘格）
+- 缩略图尺寸：模板内联 `style="width: 56px; height: 56px"`
+- 悬浮放大尺寸：`onHoverEnter` 中 `panelW`/`panelH` 与 `hoverStyle` getter 的 `max-width/max-height`
+- 缩略图滚动步长：`onThumbScrollUp/Down` 的 `scrollBy` 比例
+
+### 调整预览弹窗
+
+改 `static/src/js/product_image_preview.js` 与 `static/src/xml/product_image_preview.xml`：
+- 缩放步长 / 最小缩放：`zoomStep` / `scrollZoomStep` / `minScale`
+- 复制文案：`copyLabel` / `copyTitle` / `copyIconClass` getter
 
 ### 复用原生 webp 转换链路
 
@@ -108,8 +127,11 @@ templates._sync_main_image_from_template()
 
 ## 调试建议
 
-- 头像区域仍显示单图：检查 widget 是否生效，`-u product_multi_image` 升级后强刷浏览器
-- 多图切换不生效：检查 `state.currentIndex` 与 `galleryRecords` 排序，确认 `image_gallery_ids` 有数据
+- 头像区域仍显示单图：检查 widget 是否生效，`-u product_image` 升级后强刷浏览器
+- 主图没放大：检查 SCSS 是否加载（`-u` 升级），主图尺寸由模板内联 style 控制
+- 悬浮放大位置错乱：检查 `onHoverEnter` 的 `getBoundingClientRect` 计算与 `hoverStyle` getter
+- 缩略图不滚动：检查 `.o_gallery_thumb_scroll` 的 `flex:1 1 auto; min-height:0; overflow-y:auto`
+- 复制失败：浏览器非 HTTPS 或不支持 `ClipboardItem`，控制台查 `browser.navigator.clipboard`
 - 上传后未新增：检查 `galleryList.addNewRecord` 是否成功，看控制台报错
 - 主图未同步：检查图片行的 `sequence` 与 `active`，首图判定依赖两者
 - 粘贴无反应：确认头像区域获得焦点（根 div 有 `tabindex="0"`）
@@ -126,6 +148,6 @@ templates._sync_main_image_from_template()
 - `README.md` 的功能说明（若涉及用户可见功能）
 
 版本号建议：
-- 破坏性变更或架构调整：升第二位，如 `19.0.2.0.0`
-- 功能新增：升第三位，如 `19.0.1.1.0`
-- 修复或文档：升第四位，如 `19.0.1.0.1`
+- 破坏性变更或架构调整：升第二位，如 `19.0.3.0.0`
+- 功能新增：升第三位，如 `19.0.2.1.0`
+- 修复或文档：升第四位，如 `19.0.2.0.1`

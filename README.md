@@ -45,7 +45,7 @@ odoo-addons/           # 本目录即 addons_path
 | [`image_uploader`](image_uploader/README.md) | 19.0.1.0.0 | 后台图片字段支持剪贴板 `Ctrl+V` / `Cmd+V` 粘贴与拖拽上传，即时预览 + 进度条，一次多图，超大图报错 | 已交付，目标环境已验证 |
 | `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | 未迁移，按需 |
 | `product_model` | 19.0.1.0.0 | 产品多型号 + 可在列表 / 选产品时按型号搜索 | 已交付，目标环境已验证 |
-| `product_multi_image` | 19.0.1.0.0 | 产品多图：原位多图浏览（不新增页签）/ 左右切换 / 缩略图 / 粘贴新增，首图即主图 | 已交付，**待目标环境验证** |
+| `product_image` | 19.0.2.0.0 | 产品多图：原位多图浏览（不新增页签）/ 主图 2 倍 / 悬浮放大 / 点击预览（放大缩小复制）/ 右侧竖排缩略图（删除/滚动/上传占位）/ 粘贴新增，首图即主图 | 已交付，**待目标环境验证**（原名 `product_multi_image`） |
 
 历史模块（`sale_order_no`、`image_uploader`、`web_multi_tabs`）来自仓库之外的本地备份目录，
 仅作为迁移参考，**不纳入本仓库、不在其中开发**。迁移时把对应模块目录整体复制到本仓库根目录即可。
@@ -121,7 +121,7 @@ odoo -d <db> -u sale_order_no --stop-after-init     # 代码改动后升级
 1. **T-001 自定义销售订单号**（`sale_order_no`）— 代码已交付，待环境验证
 2. **T-002 产品多型号 + 可搜索**（`product_model`）
 3. **T-003 图片粘贴上传**（`image_uploader`）— 迁移并扩展到多图场景
-4. **T-004 产品多图图库**（`product_multi_image`）— 已交付，待目标环境验证
+4. **T-004 产品多图图库**（`product_image`，原名 `product_multi_image`）— 已交付，待目标环境验证
 
 新增需求请追加到 `TODO.md` 的「待办池」末尾，不要在对话里另立清单。
 
