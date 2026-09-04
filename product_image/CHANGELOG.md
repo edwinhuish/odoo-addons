@@ -1,5 +1,35 @@
 # 变更日志
 
+## [19.0.2.2.2] - 2026-09-04（待验证）
+
+### 变更
+
+- **关闭按钮始终最顶层**：`.o_product_image_preview-close` 的 `z-index` 由 20 提到 1000（绝对高位，高于主图 1 / 底部条 5 / 缩略图 10），并显式 `pointer-events:auto`，确保关闭按钮绝不被遮挡、始终可点击。
+
+### 影响
+
+- 仅前端 SCSS 一处改动；模型 / 字段 / 视图 / 权限未变。
+
+---
+
+## [19.0.2.2.1] - 2026-09-04（待验证）
+
+### 变更
+
+- **预览 topbar 精简**：移除顶部条的背景与标题，仅保留关闭按钮（`o_product_image_preview-close`，绝对定位右上角，无背景栏）。鼠标悬停关闭按钮时只高亮按钮自身（`.o_preview_iconbtn:hover` 背景），不影响其他部分。
+- **预览 bottombar 默认完全透明 + 显示动画**：底部工具条默认 `opacity:0`（完全透明），鼠标移入其区域时 `opacity:1` 显示，并加 `translateY(10px)→0` 上滑 + `0.22s ease` 过渡，过渡自然不突兀。
+- **图片初始大小避开 topbar / bottombar**：中央图片区上下内缩（`top:56px; bottom:80px;`），避开顶部关闭按钮区与底部工具条区，确保图片不被遮挡。右侧缩略图列同样上下内缩对齐（`top:56px; bottom:80px;`），避开关闭按钮与底部条。
+
+### 影响
+
+- 仅前端改动：`product_image_preview.xml` 移除 topbar 容器（改为独立关闭按钮）、图片区与缩略图列加上下内缩；SCSS 移除 topbar 规则、新增 `.o_product_image_preview-close`、bottombar 改为完全透明 + 淡入上滑动画。模型 / 字段 / 视图 / 权限未变。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本、`README.md`、`AGENTS.md`、根 `TODO.md` / `README.md` / `AGENTS.md`。
+
+---
+
 ## [19.0.2.2.0] - 2026-09-04（待验证）
 
 ### 变更

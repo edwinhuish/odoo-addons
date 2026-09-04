@@ -10,8 +10,9 @@
              t-on-click.self="close"
              t-on-mousemove="onMousemoveView">
 
-            <!-- 中央图片区（含缩放层） -->
-            <div class="o_product_image_preview-main position-absolute top-0 bottom-0 start-0 end-0 d-flex align-items-center justify-content-center overflow-hidden">
+            <!-- 中央图片区：避开顶部关闭按钮与底部工具条区域，确保图片不被遮挡 -->
+            <div class="o_product_image_preview-main position-absolute start-0 end-0 d-flex align-items-center justify-content-center overflow-hidden"
+                 style="top: 56px; bottom: 80px;">
                 <div class="o_product_image_preview-zoomer position-absolute d-flex align-items-center justify-content-center w-100 h-100"
                      t-ref="zoomer">
                     <img t-ref="image"
@@ -28,22 +29,19 @@
                 </div>
             </div>
 
-            <!-- 顶部条：标题 + 关闭（暗色半透明，悬浮才不透明） -->
-            <div class="o_product_image_preview-topbar position-absolute top-0 start-0 end-0 d-flex align-items-center px-3 py-2">
-                <span class="text-truncate me-3 small" t-out="displayName"/>
-                <div class="flex-grow-1"/>
-                <button type="button"
-                        class="o_preview_iconbtn"
-                        t-on-click.stop="close"
-                        title="关闭 (Esc)"
-                        aria-label="关闭">
-                    <i class="fa fa-times fa-lg"/>
-                </button>
-            </div>
+            <!-- 关闭按钮（无背景栏，仅按钮；悬浮只高亮按钮自身） -->
+            <button type="button"
+                    class="o_product_image_preview-close o_preview_iconbtn"
+                    t-on-click.stop="close"
+                    title="关闭 (Esc)"
+                    aria-label="关闭">
+                <i class="fa fa-times fa-lg"/>
+            </button>
 
-            <!-- 右侧缩略图列（始终在最上层，z-index 高于主图，避免被遮挡） -->
+            <!-- 右侧缩略图列（始终在最上层，避开顶部关闭按钮与底部工具条） -->
             <div t-if="hasMultiple"
-                 class="o_product_image_preview-thumbs position-absolute end-0 top-0 bottom-0 d-flex flex-column align-items-center justify-content-center gap-2 py-3 px-2">
+                 class="o_product_image_preview-thumbs position-absolute end-0 d-flex flex-column align-items-center justify-content-center gap-2 py-2 px-2"
+                 style="top: 56px; bottom: 80px;">
                 <t t-foreach="props.images" t-as="img" t-key="img_index">
                     <img loading="lazy"
                          t-att-src="img.url"
@@ -53,8 +51,8 @@
                 </t>
             </div>
 
-            <!-- 底部工具条（暗色半透明，悬浮才不透明） -->
-            <div class="o_product_image_preview-bottombar position-absolute bottom-0 start-0 end-0 d-flex justify-content-center align-items-center p-3">
+            <!-- 底部工具条（默认完全透明，鼠标移入区域时显示，淡入+上滑动画） -->
+            <div class="o_product_image_preview-bottombar position-absolute start-0 end-0 bottom-0 d-flex justify-content-center align-items-center p-3">
                 <div class="btn-group">
                     <button t-if="hasMultiple" type="button" class="o_preview_iconbtn" t-on-click.stop="prev" title="上一张 (←)" aria-label="上一张">
                         <i class="fa fa-chevron-left"/>

@@ -99,16 +99,27 @@
         user-select: none;
     }
 
-    // 顶部 / 底部条：暗色半透明，鼠标悬浮时才不透明（避免遮挡图片）
-    .o_product_image_preview-topbar,
+    // 关闭按钮：无背景栏（仅按钮），悬浮只高亮按钮自身；始终处于最顶层，绝不被遮挡
+    .o_product_image_preview-close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 1000;
+        // 透明底时仍保证可点击且不被缩略图列等覆盖
+        pointer-events: auto;
+    }
+
+    // 底部工具条：默认完全透明，鼠标移入其区域时显示（淡入 + 上滑动画，过渡自然）
     .o_product_image_preview-bottombar {
         z-index: 5;
-        background: rgba(0, 0, 0, 0.45);
-        opacity: 0.45;
-        transition: opacity 0.15s ease;
+        background: rgba(0, 0, 0, 0.55);
         color: #fff;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 0.22s ease, transform 0.22s ease;
         &:hover {
             opacity: 1;
+            transform: translateY(0);
         }
     }
 
