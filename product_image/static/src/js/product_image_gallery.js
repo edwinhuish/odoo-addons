@@ -394,6 +394,14 @@ export class ProductImageGallery extends Component {
         this.state.previewOpen = false;
     }
 
+    /** 预览弹窗的图片列表：所有展示项的 image_1920 全图 + 名称。 */
+    get previewImages() {
+        return this.displayItems.map((item) => ({
+            url: this.getItemUrl(item, "image_1920"),
+            name: item.name || "",
+        }));
+    }
+
     // ------------------------------------------------------------------
     // 上传弹窗：点击「新增图片」按钮打开（顶层 overlay，与 gallery 渲染树解耦）
     // 弹窗内点击/拖放/Ctrl+V 上传；Ctrl+V 粘贴上传后弹窗自动关闭

@@ -8,17 +8,18 @@ import { _t } from "@web/core/l10n/translation";
  * 产品图片预览弹窗。
  *
  * 点击产品主图后弹出的全屏预览：
+ * - 接收图片列表 images + 起始索引 startIndex，支持多图切换
+ * - 右侧缩略图列（始终在最上层，z-index 高于主图），点击切换；键盘 ←/→ 切换
  * - 放大 / 缩小（按钮 + 鼠标滚轮）+ 重置 + 旋转
  * - 拖拽平移（放大后查看局部）
+ * - 顶部关闭条 / 底部工具条：暗色半透明，鼠标悬浮时才不透明，避免遮挡图片
  * - Esc / 点击背景关闭
- *
- * 不复用原生 web.FileViewer：本弹窗仅服务于产品图片，行为收敛在模块内部。
  */
 export class ProductImagePreviewDialog extends Component {
     static template = "product_image.ProductImagePreviewDialog";
     static props = {
-        url: String,
-        name: { type: String, optional: true },
+        images: Array, // [{ url, name }]
+        startIndex: { type: Number, optional: true },
         close: Function,
     };
 
@@ -38,10 +39,61 @@ export class ProductImagePreviewDialog extends Component {
         this.minScale = 0.5;
 
         this.state = useState({
+            index: this.props.startIndex || 0,
             scale: 1,
             angle: 0,
             imageLoaded: false,
         });
+    }
+
+    // ------------------------------------------------------------------
+    // 当前图片
+    // ------------------------------------------------------------------
+
+    get hasMultiple() {
+        return (this.props.images?.length || 0) > 1;
+    }
+
+    get currentImage() {
+        return this.props.images?.[this.state.index] || null;
+    }
+
+    get currentUrl() {
+        return this.currentImage?.url || "";
+    }
+
+    get displayName() {
+        return this.currentImage?.name || _t("产品图片");
+    }
+
+    /** 切换图片：重置缩放 / 旋转 / 位移 / 加载状态。 */
+    selectImage(i) {
+        const total = this.props.images?.length || 0;
+        if (i < 0 || i >= total || i === this.state.index) {
+            return;
+        }
+        this.state.index = i;
+        this.state.scale = 1;
+        this.state.angle = 0;
+        this.state.imageLoaded = false;
+        this.translate.x = 0;
+        this.translate.y = 0;
+        this.translate.dx = 0;
+        this.translate.dy = 0;
+    }
+
+    next() {
+        const n = this.props.images?.length || 0;
+        if (n) {
+            this.selectImage((this.state.index + 1) % n);
+        }
+    }
+
+    prev() {
+        const n = this.props.images?.length || 0;
+        if (n) {
+            this.selectImage((this.state.index - 1 + n) % n);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -50,10 +102,6 @@ export class ProductImagePreviewDialog extends Component {
 
     onImageLoaded() {
         this.state.imageLoaded = true;
-    }
-
-    get displayName() {
-        return this.props.name || _t("产品图片");
     }
 
     get imageStyle() {
@@ -178,6 +226,12 @@ export class ProductImagePreviewDialog extends Component {
             case "q":
                 this.close();
                 break;
+            case "ArrowRight":
+                this.next();
+                break;
+            case "ArrowLeft":
+                this.prev();
+                break;
             case "+":
                 this.zoomIn();
                 break;
@@ -201,4 +255,3 @@ export class ProductImagePreviewDialog extends Component {
         this.props.close();
     }
 }
-

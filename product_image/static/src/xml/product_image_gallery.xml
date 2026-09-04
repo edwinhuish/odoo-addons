@@ -124,10 +124,10 @@
             </div>
         </div>
 
-        <!-- ============ 全屏预览弹窗 ============ -->
+        <!-- ============ 全屏预览弹窗（多图 + 右侧缩略图切换） ============ -->
         <ProductImagePreviewDialog t-if="state.previewOpen"
-                                   url="fullImageUrl"
-                                   name="currentName || props.alt"
+                                   images="previewImages"
+                                   startIndex="state.currentIndex"
                                    close.bind="closePreview"/>
         <!-- 上传弹窗走顶层 main_components 注册表（见 product_image_upload.js），不在此挂载 -->
     </t>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <templates xml:space="preserve">
 
-    <!-- 产品图片预览弹窗：全屏 modal，支持放大/缩小/旋转 -->
+    <!-- 产品图片预览弹窗：全屏 modal，放大/缩小/旋转 + 右侧缩略图切换 -->
     <t t-name="product_image.ProductImagePreviewDialog">
         <div class="o_product_image_preview modal modal-fullscreen d-flex"
              tabindex="0"
@@ -9,17 +9,6 @@
              t-ref="autofocus"
              t-on-click.self="close"
              t-on-mousemove="onMousemoveView">
-            <!-- 顶部工具条：标题 + 关闭 -->
-            <div class="o_product_image_preview-header position-absolute top-0 start-0 end-0 d-flex align-items-center px-3 py-2">
-                <span class="text-truncate me-3 text-white small" t-out="displayName"/>
-                <div class="flex-grow-1"/>
-                <button class="btn btn-sm btn-light"
-                        t-on-click.stop="close"
-                        title="关闭 (Esc)"
-                        aria-label="关闭">
-                    <i class="fa fa-times fa-fw"/>
-                </button>
-            </div>
 
             <!-- 中央图片区（含缩放层） -->
             <div class="o_product_image_preview-main position-absolute top-0 bottom-0 start-0 end-0 d-flex align-items-center justify-content-center overflow-hidden">
@@ -27,9 +16,9 @@
                      t-ref="zoomer">
                     <img t-ref="image"
                          class="o_product_image_preview-img mw-100 mh-100"
-                         t-att-src="props.url"
+                         t-att-src="currentUrl"
                          t-att-style="imageStyle"
-                         t-att-alt="props.name"
+                         t-att-alt="displayName"
                          draggable="false"
                          t-on-load="onImageLoaded"
                          t-on-click.stop=""
@@ -39,24 +28,57 @@
                 </div>
             </div>
 
-            <!-- 底部缩放工具条 -->
-            <div class="o_product_image_preview-toolbar position-absolute bottom-0 start-0 end-0 d-flex justify-content-center p-3">
+            <!-- 顶部条：标题 + 关闭（暗色半透明，悬浮才不透明） -->
+            <div class="o_product_image_preview-topbar position-absolute top-0 start-0 end-0 d-flex align-items-center px-3 py-2">
+                <span class="text-truncate me-3 small" t-out="displayName"/>
+                <div class="flex-grow-1"/>
+                <button type="button"
+                        class="o_preview_iconbtn"
+                        t-on-click.stop="close"
+                        title="关闭 (Esc)"
+                        aria-label="关闭">
+                    <i class="fa fa-times fa-lg"/>
+                </button>
+            </div>
+
+            <!-- 右侧缩略图列（始终在最上层，z-index 高于主图，避免被遮挡） -->
+            <div t-if="hasMultiple"
+                 class="o_product_image_preview-thumbs position-absolute end-0 top-0 bottom-0 d-flex flex-column align-items-center justify-content-center gap-2 py-3 px-2">
+                <t t-foreach="props.images" t-as="img" t-key="img_index">
+                    <img loading="lazy"
+                         t-att-src="img.url"
+                         t-att-class="'o_preview_thumb' + (img_index === state.index ? ' is-active' : '')"
+                         t-att-alt="img.name"
+                         t-on-click.stop="() => this.selectImage(img_index)"/>
+                </t>
+            </div>
+
+            <!-- 底部工具条（暗色半透明，悬浮才不透明） -->
+            <div class="o_product_image_preview-bottombar position-absolute bottom-0 start-0 end-0 d-flex justify-content-center align-items-center p-3">
                 <div class="btn-group">
-                    <button class="btn btn-light" t-on-click.stop="zoomIn" title="放大 (+)" aria-label="放大">
+                    <button t-if="hasMultiple" type="button" class="o_preview_iconbtn" t-on-click.stop="prev" title="上一张 (←)" aria-label="上一张">
+                        <i class="fa fa-chevron-left"/>
+                    </button>
+                    <button type="button" class="o_preview_iconbtn" t-on-click.stop="zoomIn" title="放大 (+)" aria-label="放大">
                         <i class="fa fa-plus"/>
                     </button>
-                    <button class="btn btn-light" t-on-click.stop="resetZoom"
+                    <button type="button" class="o_preview_iconbtn"
+                            t-on-click.stop="resetZoom"
                             t-att-class="{'disabled opacity-50': state.scale === 1}"
                             title="重置 (0)" aria-label="重置">
                         <i class="fa fa-search"/>
                     </button>
-                    <button class="btn btn-light" t-on-click.stop="zoomOut"
+                    <button type="button" class="o_preview_iconbtn"
+                            t-on-click.stop="zoomOut"
                             t-att-class="{'disabled opacity-50': state.scale === minScale}"
                             title="缩小 (-)" aria-label="缩小">
                         <i class="fa fa-minus"/>
                     </button>
-                    <button class="btn btn-light" t-on-click.stop="rotate" title="旋转 (r)" aria-label="旋转">
+                    <button type="button" class="o_preview_iconbtn" t-on-click.stop="rotate" title="旋转 (r)" aria-label="旋转">
                         <i class="fa fa-repeat"/>
+                    </button>
+                    <button t-if="hasMultiple" type="button" class="o_preview_iconbtn" t-on-click.stop="next" title="下一张 (→)" aria-label="下一张">
+                        <i class="fa fa-chevron-right"/>
                     </button>
                 </div>
             </div>
