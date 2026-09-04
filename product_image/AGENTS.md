@@ -103,7 +103,7 @@
 改 `static/src/js/product_image_gallery.js` 与 `static/src/xml/product_image_gallery.xml`：
 - 主图尺寸：模板内联 `style="width: 180px; height: 180px"`（同时改 SCSS 中主图背景棋盘格）
 - 缩略图尺寸：模板内联 `style="width: 56px; height: 56px"`
-- 悬浮放大尺寸：`onHoverEnter` 中 `panelW`/`panelH` 与 `hoverStyle` getter 的 `max-width/max-height`
+- 悬浮放大尺寸：`onHoverEnter` 中 `DESIRED`（窗口 540）与 `IMG`（图片 1080，固定）；实际窗口存 `state.hoverWin`（屏幕不足时按比例缩小，下限 160），`hoverStyle` / `zoomImgStyle` / `onHoverMove` 均读 `state.hoverWin` / `hoverImg`，蓝色选框边长 = 原图宽 × (win/img) 动态计算
 - 缩略图滚动步长：`onThumbScrollUp/Down` 的 `scrollBy` 比例
 
 ### 调整预览弹窗
@@ -140,7 +140,8 @@
 - 主图不在序列首位：主图有值时 widget `displayItems` 第一项即主图；若主图项缺失，检查 `hasMainImage`（`props.record.data[image_1920]`）是否有值
 - 主图替换/清空无效：检查主图项缩略图的 `onMainFileUploaded` / `onMainRemove` 是否写入 `this.props.name`（image_1920）字段
 - Ctrl+V 粘贴无反应：粘贴已移至上传弹窗——先点「新增图片」打开弹窗，弹窗获焦后再 Ctrl+V；头像区域不再直接响应粘贴
-- 选中缩略图无蓝框：检查 `.o_gallery_thumb_wrap.is-active .o_gallery_thumb` 的 `box-shadow: 0 0 0 2px #0d6efd` 是否加载（`-u` 升级后强刷）
+- 选中缩略图无蓝框：检查 `.o_gallery_thumb_wrap.is-active` 的 `border-color: #0d6efd` 是否加载（`-u` 升级后强刷）；预览内缩略图选中用 `.o_preview_thumb.is-active` 的 `outline-color`
+- 删除按钮被裁切：确认 `.o_gallery_thumb_scroll` 有 `padding: 6px 8px`、`.o_gallery_thumbs` / `.o_product_image_gallery` 为 `overflow: visible`，按钮位于 `.o_gallery_thumb_del` 的 `top:2px; right:2px`（内侧）
 - 看板无主图：产品主图 `image_1920` 为空时看板无图；主图独立，需直接上传/设置主图字段
 
 ---
@@ -157,3 +158,57 @@
 - 破坏性变更或架构调整：升第二位，如 `19.0.3.0.0`
 - 功能新增：升第三位，如 `19.0.2.1.0`
 - 修复或文档：升第四位，如 `19.0.2.0.1`
+
+---
+
+## 开发复盘与关键经验（T-004）
+
+> 2026-09-04 验证通过，落地 `19.0.2.2.7`。以下记录供后续类似前端交互模块复用。
+
+### 功能实现要点
+
+- **主图与图库解耦**：`product.image.gallery` 仅存补充图，后端不反向同步主图 `image_1920`；展示序列在 widget 端拼 `[原生主图] + [图库按 sequence]`，主图恒在首位（无角标）。删主图时由 widget 主动把图库首张数据移动到主图字段（提升，非复制）。
+- **继承 `image.mixin` 复用多尺寸**：图库记录写一次 base64，1920/1024/512/256/128 由 related 字段自动生成，无需自建缩放链路。
+- **悬浮放大镜**：固定 1080 图在 540 窗口内 `transform: translate` 平移，鼠标点居中；窗口/图比例驱动蓝色选框尺寸，保证选框与预览内容一一对应。位置级联：左 → 下 → 按比例缩小适配屏幕。
+- **全屏预览**：`translate3d` + `will-change:transform` 走 GPU 合成层、移除 transform 过渡实现 1:1 顺滑拖拽；每图独立状态缓存（scale/angle/translate/loaded），切换再切回不重置；body 滚动锁定消除页面滚动条。
+- **上传弹窗顶层 overlay**：走 `main_components` 注册表，与 gallery 渲染树解耦，避免 gallery 重渲染闪烁；Ctrl+V 粘贴后自动关闭。
+
+### 遇到的问题及解决方案
+
+1. **缩略图删除按钮被裁切（两轮修复）**
+   - 现象：右上角红色 × 显示不完整。
+   - 第一轮：以为是按钮浮在外侧（`top:-6px;right:-6px`）被裁，移入内侧 `top:2px;right:2px` —— 仍被裁。
+   - 根因：`.o_gallery_thumb_scroll` 的 `overflow-y:auto`，按 CSS 规范当一轴非 visible、另一轴为 visible 时，visible 那轴被计算为 `auto`，于是**水平方向也裁切**。
+   - 终解：`.o_gallery_thumbs` / 根容器显式 `overflow: visible`；滚动容器加 `padding: 6px 8px`，让缩略图远离水平裁切边。
+   - **经验**：`overflow-y:auto` 会隐式让 `overflow-x` 变 `auto`（非 visible），凡是「子元素负偏移伸出滚动容器」的角标/badge 都会被裁；要么移入内侧，要么给滚动容器加同向 padding 吸收溢出。
+2. **预览图片消失（放大/缩小/旋转后）**
+   - 根因：`t-att-style` 重渲染时把 `opacity` 重置回 0。
+   - 终解：把 `opacity` 并入 `imageStyle` getter 一起返回，避免被覆盖。
+3. **预览 Y 轴滚动条**
+   - 根因：自定义全屏 modal 未触发 Odoo 的 `modal-open`（body 未锁）。
+   - 终解：`onMounted` 锁 `document.body.style.overflow='hidden'`，`onWillUnmount` 恢复；根容器再 `overflow:hidden` 兜底。
+4. **拖拽不顺滑**
+   - 根因：zoomer 上 `transition: transform 0.05s` 让每次 mousemove 都被缓动滞后。
+   - 终解：移除该过渡 + `translate3d` + `will-change:transform` 走 GPU，1:1 跟手。
+5. **切换图片重置状态**
+   - 终解：`imageStates` 缓存每图 `{scale,angle,x,y,loaded}`，切换前存、切回时恢复，已加载标记避免闪屏。
+6. **QWeb 模板内 `_t()` 不生效**
+   - 终解：翻译由构建期从 XML 字面量（`title`/`aria-label`/文本）抽取，动态文案在 JS getter 返回 `_t(...)`。
+
+### 接口与字段变更
+
+- **新模型 `product.image.gallery`**：继承 `image.mixin`（`image_1920` + related 1024/512/256/128）；字段 `name`、`sequence`、`product_tmpl_id`（`ondelete='cascade'`）；`_order = 'sequence'`；`@api.constrains("name","product_tmpl_id")` 同产品名称去重。**无 `is_main`**（已移除）。
+- **扩展 `product.template`**：`One2many` → `product.image.gallery`、`image_gallery_count` 计数字段。主图 `image_1920` 由原生字段独立管理，无同步入口。
+- **widget**：`product_image_gallery`（registry `fields`，替换产品表单 `image_1920` 字段 widget，`fieldDependencies` 声明依赖）；`ProductImagePreviewDialog`（全屏预览）、`ProductImageUploadDialog` + `useProductImageUpload` hook（顶层 overlay）。
+- **视图**：产品表单头像字段 widget 改 `product_image_gallery`、列表增「图片数」列；图库独立列表/表单/搜索视图与动作。
+- **安全**：`security/ir.model.access.csv`，普通用户读写业务数据、销售经理可配置。
+- 仅支持全新安装（无迁移脚本）。
+
+### 可复用设计思路
+
+- **「主资源 + 补充资源」解耦模式**：核心字段（主图）由原生独立管理、对外展示用原生；补充资源走独立明细模型，展示序列在 widget 端拼接。删主资源时由前端主动提升补充资源首条（移动数据，非复制），避免后端双向同步的复杂度与覆盖风险。
+- **顶层 overlay 弹窗**：交互弹窗走 `main_components` 注册表（而非挂在字段组件树内），与宿主渲染树解耦，避免宿主重渲染导致的闪烁与状态丢失；hook 暴露 `open/close`。
+- **悬浮放大镜参数化**：窗口/图分离（图固定大、窗按屏幕缩），选框 = 原图 × (窗/图)，平移量夹在 `[-(图-窗),0]`；一套公式适配任意尺寸与缩小场景。
+- **预览弹窗性能套路**：`translate3d` + `will-change` 上 GPU、移除 transform 过渡求 1:1；每视图独立状态缓存避免重复操作丢失；挂 window 级 mousemove/mouseup 保证拖出区域仍能拖/能停。
+- **overflow 裁切规避**：角标/badge 类负偏移元素，要么移入容器内侧，要么给滚动容器加同向 padding 吸收溢出，并显式 `overflow:visible` 上层容器。
+- **Odoo 19 适配**：`name_get/name_search` 已废、`_sql_constraints` 已废（用 `models.Constraint`）、QWeb 内勿 `_t()`、自定义 widget 走 `registry.category("fields").add` + `fieldDependencies`。
