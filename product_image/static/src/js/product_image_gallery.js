@@ -72,9 +72,9 @@ export class ProductImageGallery extends Component {
             hoverSide: "left", // "left" | "below" | "right"
             hoverLeft: 0,
             hoverTop: 0,
-            // 局部放大：鼠标在主图内的位置百分比（0-100），用于 background-position
-            zoomPctX: 50,
-            zoomPctY: 50,
+            // 局部放大：720x720 图片在 180x180 窗口内的平移量（px），使鼠标点居中
+            zoomTx: 0,
+            zoomTy: 0,
             previewOpen: false,
             // 缩略图滚动状态
             thumbCanScrollUp: false,
@@ -281,8 +281,8 @@ export class ProductImageGallery extends Component {
             return;
         }
         const rect = el.getBoundingClientRect();
-        const panelW = 320;
-        const panelH = 320;
+        const panelW = 360;
+        const panelH = 360;
         const gap = 8;
         if (rect.left >= panelW + gap) {
             this.state.hoverSide = "left";
@@ -313,96 +313,58 @@ export class ProductImageGallery extends Component {
     }
 
     /**
-     * 鼠标在主图上移动：蓝色指示方块在【整个 180×180 容器】内跟随鼠标移动
-     *（不限于图片内容区），放大区域的 background-position 跟随【方块位置】
-     *（而非鼠标）——方块到容器边缘即显示图片对应边缘，无需鼠标移到图片边缘。
-     *
-     * 方块到边缘时显示边缘：方块被夹在容器边缘时，其映射到图片内容的位置也夹到
-     * 内容边缘，background-position 即显示图片边缘。
+     * 局部放大（放大镜）：
+     * - 原图展示区 180×180，放大图 1440×1440，放大窗口 360×360。
+     * - 窗口内含 1440×1440 的图片，鼠标在原图移动时同比例平移 1440 图片，
+     *   使鼠标点居中显示在 360 窗口（1440/360 = 4 倍局部放大）。
+     * - 平移量夹在 [-(1440-360), 0]，使 1440 图片始终填满 360 窗口（图片内容区之外为白色）。
+     * - 蓝色指示方块 = 原图上被放大的区域（180 × 360/1440 = 45×45），中心跟随鼠标，夹在 180 内。
      */
     onHoverMove(ev) {
         const box = this.mainRef.el;
-        const img = this.mainImgRef?.el;
         if (!box) {
             return;
         }
         const rect = box.getBoundingClientRect();
         const boxW = box.clientWidth || rect.width;
         const boxH = box.clientHeight || rect.height;
-        // 鼠标相对【容器】的位置（0..1）：方块可在整个容器内移动
-        let cxBox = boxW > 0 ? (ev.clientX - rect.left) / boxW : 0.5;
-        let cyBox = boxH > 0 ? (ev.clientY - rect.top) / boxH : 0.5;
-        cxBox = Math.max(0, Math.min(1, cxBox));
-        cyBox = Math.max(0, Math.min(1, cyBox));
-        // 图片内容在容器内的实际区域（object-fit: contain 的留白），用于映射放大区域
-        let contentW = boxW;
-        let contentH = boxH;
-        let contentLeft = 0;
-        let contentTop = 0;
-        if (img && img.naturalWidth && img.naturalHeight) {
-            const imgAspect = img.naturalWidth / img.naturalHeight;
-            const boxAspect = boxW / boxH;
-            if (imgAspect >= boxAspect) {
-                contentW = boxW;
-                contentH = boxW / imgAspect;
-                contentLeft = 0;
-                contentTop = (boxH - contentH) / 2;
-            } else {
-                contentH = boxH;
-                contentW = boxH * imgAspect;
-                contentLeft = (boxW - contentW) / 2;
-                contentTop = 0;
-            }
-        }
-        // 蓝色指示方块：边长 = min(contentW, contentH) / Z，在【整个容器】内移动并夹在容器内
-        const Z = 2.8;
-        const indSide = Math.min(contentW, contentH) / Z;
-        let indLeftBox = boxW > indSide ? cxBox * boxW - indSide / 2 : (boxW - indSide) / 2;
-        let indTopBox = boxH > indSide ? cyBox * boxH - indSide / 2 : (boxH - indSide) / 2;
-        indLeftBox = Math.max(0, Math.min(boxW - indSide, indLeftBox));
-        indTopBox = Math.max(0, Math.min(boxH - indSide, indTopBox));
-        this.state.indLeft = Math.round(indLeftBox);
-        this.state.indTop = Math.round(indTopBox);
+        // 鼠标相对原图展示区域的位置（0..1），同比例映射到 1440 图片
+        let fx = boxW > 0 ? (ev.clientX - rect.left) / boxW : 0.5;
+        let fy = boxH > 0 ? (ev.clientY - rect.top) / boxH : 0.5;
+        fx = Math.max(0, Math.min(1, fx));
+        fy = Math.max(0, Math.min(1, fy));
+        // 1440×1440 图片在 360×360 窗口内平移：使鼠标点 (fx*1440, fy*1440) 居中于窗口 (180, 180)
+        const IMG = 1440;
+        const WIN = 360;
+        const tx = Math.max(-(IMG - WIN), Math.min(0, WIN / 2 - fx * IMG));
+        const ty = Math.max(-(IMG - WIN), Math.min(0, WIN / 2 - fy * IMG));
+        this.state.zoomTx = Math.round(tx);
+        this.state.zoomTy = Math.round(ty);
+        // 蓝色指示方块（在原图上）：边长 = 原图宽 × (窗口/图片) = boxW × (360/1440) = boxW/4，
+        // 即放大窗口显示的区域占原图的比例（4 倍放大 → 1/4），中心跟随鼠标，夹在原图内
+        const indSide = (boxW * WIN) / IMG;
+        const indLeft = Math.max(0, Math.min(boxW - indSide, fx * boxW - indSide / 2));
+        const indTop = Math.max(0, Math.min(boxH - indSide, fy * boxH - indSide / 2));
+        this.state.indLeft = Math.round(indLeft);
+        this.state.indTop = Math.round(indTop);
         this.state.indW = Math.round(indSide);
         this.state.indH = Math.round(indSide);
-        // 放大区域跟随【方块】（而非鼠标）：把方块在图片内容上的位置映射为 background-position。
-        // 方块内容左侧 = 方块容器左侧 - 内容偏移，夹在内容区内 → 方块到边缘时显示图片边缘。
-        const indLeftC = contentW > indSide
-            ? Math.max(0, Math.min(contentW - indSide, indLeftBox - contentLeft))
-            : 0;
-        const indTopC = contentH > indSide
-            ? Math.max(0, Math.min(contentH - indSide, indTopBox - contentTop))
-            : 0;
-        // 方块内容中心比例 → background-position %；方块大于内容时居中显示整图
-        let zoomPctX = 50;
-        let zoomPctY = 50;
-        if (contentW > 0 && indSide < contentW) {
-            zoomPctX = ((indLeftC + indSide / 2) / contentW) * 100;
-        }
-        if (contentH > 0 && indSide < contentH) {
-            zoomPctY = ((indTopC + indSide / 2) / contentH) * 100;
-        }
-        this.state.zoomPctX = Math.max(0, Math.min(100, Math.round(zoomPctX)));
-        this.state.zoomPctY = Math.max(0, Math.min(100, Math.round(zoomPctY)));
     }
 
+    /** 放大窗口样式：360×360，固定定位，溢出隐藏（1440 图片超出部分裁切）。 */
     get hoverStyle() {
         return (
             `position: fixed; left: ${this.state.hoverLeft}px; top: ${this.state.hoverTop}px; ` +
-            `width: 320px; height: 320px; z-index: 1080; pointer-events: none; overflow: hidden;`
+            `width: 360px; height: 360px; z-index: 1080; pointer-events: none; ` +
+            `overflow: hidden; background: #fff;`
         );
     }
 
-    /**
-     * 局部放大内层样式：用 image_1920 做 background，background-size 放大（280% 宽），
-     * background-position 跟随鼠标百分比（相对图片内容），只显示鼠标所在区域的放大局部。
-     */
-    get zoomInnerStyle() {
+    /** 1440×1440 图片样式：绝对定位 + transform 平移，使鼠标点居中于 360 窗口。 */
+    get zoomImgStyle() {
         return (
-            `width: 320px; height: 320px; background-color: #fff; ` +
-            `background-image: url('${this.fullImageUrl}'); ` +
-            `background-size: 280% auto; background-repeat: no-repeat; ` +
-            `background-position: ${this.state.zoomPctX}% ${this.state.zoomPctY}%;`
+            `position: absolute; left: 0; top: 0; width: 1440px; height: 1440px; ` +
+            `object-fit: contain; transform: translate(${this.state.zoomTx}px, ${this.state.zoomTy}px);`
         );
     }
 
