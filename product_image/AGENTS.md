@@ -14,7 +14,7 @@
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义上传弹窗：`ProductImageUploadDialog`（点击/拖放/Ctrl+V 三种上传方式，走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `web_image_paste`）
-- 当前版本：`19.0.2.2.7`
+- 当前版本：`19.0.2.2.11`
 
 ---
 
@@ -141,7 +141,7 @@
 - 主图替换/清空无效：检查主图项缩略图的 `onMainFileUploaded` / `onMainRemove` 是否写入 `this.props.name`（image_1920）字段
 - Ctrl+V 粘贴无反应：粘贴已移至上传弹窗——先点「新增图片」打开弹窗，弹窗获焦后再 Ctrl+V；头像区域不再直接响应粘贴
 - 选中缩略图无蓝框：检查 `.o_gallery_thumb_wrap.is-active` 的 `border-color: #0d6efd` 是否加载（`-u` 升级后强刷）；预览内缩略图选中用 `.o_preview_thumb.is-active` 的 `outline-color`
-- 删除按钮被裁切：确认 `.o_gallery_thumb_scroll` 有 `padding: 6px 8px`、`.o_gallery_thumbs` / `.o_product_image_gallery` 为 `overflow: visible`，按钮位于 `.o_gallery_thumb_del` 的 `top:2px; right:2px`（内侧）
+- 删除按钮被裁切 / 滚动时缩略图突出 / 内容无法贴边对齐：确认 `.o_gallery_thumb_scroll` **无 padding 也无负 margin**（内容盒 = 列内布局占位，行可贴顶/贴底滚动；`margin:-6px` 曾使可视区越出盒体导致滚动越界突出，`padding:6px` 又使首/末行无法贴边）、`.o_gallery_thumbs` / `.o_product_image_gallery` 为 `overflow: visible`，删除按钮位于 `.o_gallery_thumb_del` 的 `top:2px; right:2px`（缩略图内侧角标，整行可见时必完整可见）
 - 看板无主图：产品主图 `image_1920` 为空时看板无图；主图独立，需直接上传/设置主图字段
 
 ---
@@ -175,12 +175,12 @@
 
 ### 遇到的问题及解决方案
 
-1. **缩略图删除按钮被裁切（两轮修复）**
-   - 现象：右上角红色 × 显示不完整。
-   - 第一轮：以为是按钮浮在外侧（`top:-6px;right:-6px`）被裁，移入内侧 `top:2px;right:2px` —— 仍被裁。
-   - 根因：`.o_gallery_thumb_scroll` 的 `overflow-y:auto`，按 CSS 规范当一轴非 visible、另一轴为 visible 时，visible 那轴被计算为 `auto`，于是**水平方向也裁切**。
-   - 终解：`.o_gallery_thumbs` / 根容器显式 `overflow: visible`；滚动容器加 `padding: 6px 8px`，让缩略图远离水平裁切边。
-   - **经验**：`overflow-y:auto` 会隐式让 `overflow-x` 变 `auto`（非 visible），凡是「子元素负偏移伸出滚动容器」的角标/badge 都会被裁；要么移入内侧，要么给滚动容器加同向 padding 吸收溢出。
+1. **缩略图删除按钮被裁切 / 缩略图滚动突出 / 内容无法贴边（最终方案：贴边滚动 + × 内侧角标）**
+   - 现象：右上角红色 × 显示不完整；滚动时缩略图“突出”到上下滚动按钮与列边界之外；移除负 margin 后内容又无法与 180px 区顶 / 底贴边对齐。
+   - 根因：`.o_gallery_thumb_scroll` 的 `overflow-y:auto` 使 `overflow-x` 计算为 `auto`（CSS 规范），水平方向会裁切；× 若悬挂在缩略图外侧（`top/right:-5px`），超出滚动可视区即被切掉。曾用 `margin:-6px` 抵消 `padding:6px` 让内容贴边，滚动可视区因此越出其在列内的布局占位，滚动时缩略图“突出”；只去掉 margin、保留 padding 则内容内缩，首 / 末行无法与 180px 区域顶 / 底对齐。
+   - 终解：`.o_gallery_thumbs` / 根容器显式 `overflow: visible`；滚动容器**不加 padding、不加 margin**（内容盒 = 布局占位，行可贴顶 / 贴底滚动，滚动只在自身可视区内裁切，不越界）；删除按钮放回缩略图**内侧角标** `top:2px; right:2px`（历史验证过的形态），整行可见时 × 必完整可见。
+   - **几何结论**：行要贴齐滚动区上缘，按钮就不能画在行上方——「× 悬挂缩略图外侧」与「贴边对齐」不可兼得，贴边场景只能把 × 放在缩略图内侧角标。
+   - **经验**：`overflow-y:auto` 会隐式让 `overflow-x` 变 `auto`（非 visible），凡是「子元素负偏移伸出滚动容器」的角标/badge 都会被裁；要么移入容器内侧，要么给滚动容器加同向 padding 吸收溢出并显式 `overflow:visible` 上层容器；**负 margin 让滚动可视区越出盒体会导致滚动越界“突出”，padding 又让内容无法贴边——若要贴边滚动，角标类元素只能放内侧**。
 2. **预览图片消失（放大/缩小/旋转后）**
    - 根因：`t-att-style` 重渲染时把 `opacity` 重置回 0。
    - 终解：把 `opacity` 并入 `imageStyle` getter 一起返回，避免被覆盖。
