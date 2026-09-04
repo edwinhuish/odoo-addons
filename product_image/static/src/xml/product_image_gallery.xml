@@ -68,25 +68,10 @@
                              t-att-class="item_index === state.currentIndex ? 'is-active' : ''">
                             <img loading="lazy"
                                  t-att-src="getThumbUrl(item)"
-                                 class="o_gallery_thumb img rounded border"
+                                 class="o_gallery_thumb img rounded"
                                  t-att-alt="item.name"
                                  t-on-click="() => this.onSelectItem(item_index)"
                                  style="width: 56px; height: 56px; object-fit: cover; cursor: pointer; display: block;"/>
-
-                            <!-- 主图项：替换按钮（编辑态，FileUploader 写主图字段） -->
-                            <FileUploader t-if="!props.readonly and item.type === 'main'"
-                                         acceptedFileExtensions="props.acceptedFileExtensions"
-                                         onUploaded.bind="onMainFileUploaded"
-                                         multiUpload="false">
-                                <t t-set-slot="toggler">
-                                    <span class="o_gallery_thumb_replace btn btn-light border-0 rounded-circle p-0"
-                                          style="position: absolute; top: -6px; left: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.6rem; cursor: pointer;"
-                                          title="替换主图"
-                                          aria-label="替换主图">
-                                        <i class="fa fa-pencil"/>
-                                    </span>
-                                </t>
-                            </FileUploader>
 
                             <!-- 主图项：删除按钮（删除主图；图库非空时自动提升首张图库图为主图） -->
                             <button t-if="!props.readonly and item.type === 'main'"

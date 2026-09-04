@@ -80,6 +80,8 @@ export class ProductImageUploadDialog extends Component {
         ev.preventDefault();
         ev.stopPropagation();
         await this.processFiles(files);
+        // 粘贴上传完成后关闭弹窗（需求：Ctrl+V 粘贴时上传的 modal 应关闭）
+        this.close();
     }
 
     // ------------------------------------------------------------------

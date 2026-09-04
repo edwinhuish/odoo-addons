@@ -39,25 +39,25 @@
             }
         }
 
-        // 缩略图容器：选中态高亮（一圈蓝色边框）
+        // 缩略图容器：选中态一圈蓝色边框
+        // 用 wrap 的真实 border（默认透明占位，选中变蓝），四周都显示，
+        // 不被滚动容器 overflow 裁切（box-shadow/outline 会被 overflow-y:auto 的水平裁切，只留上下）
         .o_gallery_thumb_wrap {
+            border: 2px solid transparent;
+            border-radius: 0.375rem;
+            // 默认透明 border 占位，避免选中时尺寸跳变
+            &.is-active {
+                border-color: #0d6efd;
+            }
             .o_gallery_thumb {
                 background: #fff;
-                border: 1px solid #dee2e6;
             }
-            // 选中：蓝色边框（box-shadow 画一圈，不影响布局，比 outline 更醒目可靠）
-            &.is-active .o_gallery_thumb {
-                border-color: #0d6efd;
-                box-shadow: 0 0 0 2px #0d6efd;
-            }
-            // 删除 / 替换按钮：默认隐藏，悬浮缩略图时显示
-            .o_gallery_thumb_del,
-            .o_gallery_thumb_replace {
+            // 删除按钮：默认隐藏，悬浮缩略图时显示
+            .o_gallery_thumb_del {
                 opacity: 0;
                 transition: opacity 0.1s ease;
             }
-            &:hover .o_gallery_thumb_del,
-            &:hover .o_gallery_thumb_replace {
+            &:hover .o_gallery_thumb_del {
                 opacity: 1;
             }
         }
@@ -132,9 +132,29 @@
     background: rgba(0, 0, 0, 0.5);
     z-index: 1080;
 
+    .modal-dialog {
+        max-width: 520px;
+        margin: 1.5rem auto;
+    }
+
     .modal-content {
-        max-width: 480px;
-        margin: 0 auto;
+        overflow: visible; // 确保关闭按钮 / 阴影不被裁切
+    }
+
+    .modal-header {
+        padding: 0.75rem 1rem;
+        .o_upload_close {
+            // 关闭按钮：明确尺寸，避免被裁切
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.375rem;
+            &:hover {
+                background: #e9ecef;
+            }
+        }
     }
 
     // 拖放区域

@@ -6,7 +6,6 @@ import { imageUrl } from "@web/core/utils/urls";
 import { isBinarySize } from "@web/core/utils/binary";
 import { x2ManyCommands } from "@web/core/orm_service";
 import { fileTypeMagicWordMap } from "@web/views/fields/image/image_field";
-import { FileUploader } from "@web/views/fields/file_handler";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { registry } from "@web/core/registry";
 
@@ -41,7 +40,7 @@ const placeholder = "/web/static/img/placeholder.png";
  */
 export class ProductImageGallery extends Component {
     static template = "product_image.ProductImageGallery";
-    static components = { FileUploader, ProductImagePreviewDialog, ProductImageUploadDialog };
+    static components = { ProductImagePreviewDialog, ProductImageUploadDialog };
     static props = {
         ...standardFieldProps,
         acceptedFileExtensions: { type: String, optional: true },
@@ -338,15 +337,9 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 主图项编辑：替换 / 删除（删除时自动提升图库首张为主图）
+    // 主图项编辑：删除（删除时自动提升图库首张为主图）
+    // 主图不再支持「替换」按钮——要换主图，先删除主图（下一个自动提升），再上传新主图
     // ------------------------------------------------------------------
-
-    async onMainFileUploaded(info) {
-        // 写入原生主图字段，不触碰图库
-        await this.props.record.update({ [this.props.name]: info.data });
-        // 主图项始终是 displayItems[0]（替换后仍在首位），保持选中
-        this.state.currentIndex = 0;
-    }
 
     /**
      * 删除主图：图库非空时自动提升首张图库图为主图。

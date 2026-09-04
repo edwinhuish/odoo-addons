@@ -14,7 +14,7 @@
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义上传弹窗：`ProductImageUploadDialog`（点击/拖放/Ctrl+V 三种上传方式）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `image_uploader`）
-- 当前版本：`19.0.2.0.5`
+- 当前版本：`19.0.2.0.6`
 
 ---
 
@@ -40,9 +40,11 @@
    - 图库 `product.image.gallery` 只存补充图，**后端不反向同步 / 不覆盖 / 不清空**产品主图
    - 已移除 `_sync_main_image_from_template`、`is_main`、`_get_main_image`、gallery 的 create/write/unlink override
    - 前端展示序列 = [原生主图（若有）] + [图库图片按 `sequence` 升序]，主图永远在第一位（无角标，靠首位隐含）
-   - 主图项缩略图：铅笔「替换主图」按钮（写 `image_1920` 字段）、×「删除主图」按钮
+   - 主图项缩略图仅带 ×「删除主图」按钮（**不再有替换主图按钮**：要换主图先删主图，下一个自动提升，再上传新主图）
    - **删除主图时**：图库非空 → 把图库首张（`sequence` 升序）图片数据移动到 `image_1920` 字段并删除该图库记录（提升，不复制不重复）；图库为空 → 清空 `image_1920`
+   - 选中缩略图用 wrap 的真实 border（默认透明占位，选中蓝色）一圈显示，避免被滚动容器 `overflow` 裁切左右
    - **上传时主图为空** → 上传图直接写 `image_1920`（成为首位主图）；主图已有值 → 追加为图库记录（不影响主图）
+   - 上传弹窗 Ctrl+V 粘贴上传完成后自动关闭（点击 / 拖放不自动关闭）
    - 已保存图库记录提升时 `image_1920` 若为 binary size（懒加载），通过 ORM `read` 取真实 base64 再写主图
 
 5. **`is_main` / 首图概念已移除**
@@ -83,7 +85,7 @@
 | `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口） |
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
-| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（主图替换·删除提升·图库删除·滚动·新增图片开弹窗）/ 上传弹窗挂载 |
+| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（删除提升·图库删除·滚动·新增图片开弹窗·选中蓝边框）/ 上传弹窗挂载 |
 | `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗 + 上传弹窗挂载 |
 | `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |
