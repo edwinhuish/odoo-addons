@@ -63,8 +63,8 @@
             // 避免被滚动容器 overflow 裁切（overflow-y:auto 会让 overflow-x 视为 auto）
             .o_gallery_thumb_del {
                 position: absolute;
-                top: 2px;
-                right: 2px;
+                top: -5px;
+                right: -5px;
                 width: 18px;
                 height: 18px;
                 min-width: 0;
