@@ -7,6 +7,8 @@
 // - 悬浮放大浮层用 position:fixed，避免被表单容器裁切
 
 .o_product_image_gallery {
+    // 根容器不裁切，避免缩略图列/删除按钮被框架（如 .oe_avatar）的 overflow 影响
+    overflow: visible;
     // 主图占位区背景（透明棋盘格，便于看清 PNG 透明边）
     .o_gallery_main {
         background: repeating-conic-gradient(#f0f0f0 0deg 90deg, #ffffff 90deg 180deg) 50% / 16px 16px;
@@ -21,6 +23,8 @@
 
     // 缩略图列：flex 列布局，滚动区填满剩余空间
     .o_gallery_thumbs {
+        // 显式不裁切：避免删除按钮（位于缩略图右上角）被列容器遮挡
+        overflow: visible;
         // 上下滚动按钮
         .o_gallery_thumb_nav {
             min-width: 56px;
@@ -28,10 +32,13 @@
         }
 
         // 缩略图滚动容器：填满列内剩余空间，超出滚动；隐藏滚动条保持简洁
+        // overflow-y:auto 会让 overflow-x 计算为 auto（CSS 规范），水平方向会裁切；
+        // 加水平内边距让缩略图远离裁切边，确保右上角删除按钮完整显示
         .o_gallery_thumb_scroll {
             flex: 1 1 auto;
             min-height: 0;
             overflow-y: auto;
+            padding: 6px 8px;
             scrollbar-width: none;
             -ms-overflow-style: none;
             &::-webkit-scrollbar {

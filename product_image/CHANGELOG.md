@@ -1,5 +1,20 @@
 # 变更日志
 
+## [19.0.2.2.7] - 2026-09-04（待验证）
+
+### 变更
+
+- **彻底修复缩略图删除按钮被裁切**：上一版把按钮移入缩略图内侧后仍被裁切，根因是滚动容器 `.o_gallery_thumb_scroll` 的 `overflow-y:auto` 按 CSS 规范使 `overflow-x` 计算为 `auto`、水平裁切缩略图右侧（按钮所在）。
+  - `.o_gallery_thumbs` 显式 `overflow: visible`；
+  - `.o_gallery_thumb_scroll` 加 `padding: 6px 8px`，让缩略图远离水平裁切边，确保右上角删除按钮完整显示；
+  - `.o_product_image_gallery` 根容器显式 `overflow: visible`，防止框架（如 `.oe_avatar`）的 overflow 影响。
+
+### 影响
+
+- 仅前端 SCSS 改动。模型 / 字段 / 视图 / 权限未变。
+
+---
+
 ## [19.0.2.2.6] - 2026-09-04（待验证）
 
 ### 变更
