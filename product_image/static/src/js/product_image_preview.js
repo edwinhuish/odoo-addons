@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useRef, useState } from "@odoo/owl";
+import { Component, useRef, useState, onMounted, onWillUnmount } from "@odoo/owl";
 import { useAutofocus } from "@web/core/utils/hooks";
 import { _t } from "@web/core/l10n/translation";
 
@@ -11,9 +11,9 @@ import { _t } from "@web/core/l10n/translation";
  * - 接收图片列表 images + 起始索引 startIndex，支持多图切换
  * - 右侧缩略图列（始终在最上层，z-index 高于主图），点击切换；键盘 ←/→ 切换
  * - 放大 / 缩小（按钮 + 鼠标滚轮）+ 重置 + 旋转
- * - 拖拽平移（放大后查看局部）
- * - 顶部关闭条 / 底部工具条：暗色半透明，鼠标悬浮时才不透明，避免遮挡图片
- * - Esc / 点击背景关闭
+ * - 拖拽平移：任意大小均可拖拽（grab / grabbing 光标），放大后可覆盖全屏
+ * - 关闭按钮（右上角，无背景栏，最顶层）/ 底部工具条：默认完全透明，鼠标移入才显示
+ * - Esc / 点击背景关闭；打开期间锁定 body 滚动，避免出现滚动条
  */
 export class ProductImagePreviewDialog extends Component {
     static template = "product_image.ProductImagePreviewDialog";
@@ -43,6 +43,16 @@ export class ProductImagePreviewDialog extends Component {
             scale: 1,
             angle: 0,
             imageLoaded: false,
+        });
+
+        // 打开预览期间锁定 body 滚动（避免出现 Y 轴滚动条），关闭时恢复
+        onMounted(() => {
+            this._prevBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = "hidden";
+        });
+        onWillUnmount(() => {
+            document.body.style.overflow = this._prevBodyOverflow || "";
+            this._cleanupDragListeners();
         });
     }
 
@@ -151,39 +161,33 @@ export class ProductImagePreviewDialog extends Component {
 
     _updateZoomerStyle() {
         const zoomer = this.zoomerRef.el;
-        const image = this.imageRef.el;
-        if (!zoomer || !image) {
+        if (!zoomer) {
             return;
         }
-        // 放大后图片超出容器时才允许横向 / 纵向位移，否则吸附居中
-        const tx =
-            image.offsetWidth * this.state.scale > zoomer.offsetWidth
-                ? this.translate.x + this.translate.dx
-                : 0;
-        const ty =
-            image.offsetHeight * this.state.scale > zoomer.offsetHeight
-                ? this.translate.y + this.translate.dy
-                : 0;
-        if (tx === 0) {
-            this.translate.x = 0;
-        }
-        if (ty === 0) {
-            this.translate.y = 0;
-        }
+        // 任意大小均可拖拽：始终应用位移（无“超出容器才允许”的门槛）
+        const tx = this.translate.x + this.translate.dx;
+        const ty = this.translate.y + this.translate.dy;
         zoomer.style.transform = `translate(${tx}px, ${ty}px)`;
     }
 
     // ------------------------------------------------------------------
-    // 拖拽平移
+    // 拖拽平移（任意大小均可，grab / grabbing 光标）
     // ------------------------------------------------------------------
 
-    onMousedownImage(ev) {
+    onMousedown(ev) {
         if (this.isDragging || ev.button !== 0) {
             return;
         }
         this.isDragging = true;
         this.dragStartX = ev.clientX;
         this.dragStartY = ev.clientY;
+        this.zoomerRef.el?.classList.add("is-dragging");
+        // 挂到 window 上：即便鼠标移出图片/预览区域也能继续拖动并正确结束
+        this._onWinMousemove = (e) => this.onMousemoveView(e);
+        this._onWinMouseup = () => this.onMouseup();
+        window.addEventListener("mousemove", this._onWinMousemove);
+        window.addEventListener("mouseup", this._onWinMouseup);
+        ev.preventDefault();
     }
 
     onMousemoveView(ev) {
@@ -195,7 +199,7 @@ export class ProductImagePreviewDialog extends Component {
         this._updateZoomerStyle();
     }
 
-    onMouseupImage() {
+    onMouseup() {
         if (!this.isDragging) {
             return;
         }
@@ -205,6 +209,19 @@ export class ProductImagePreviewDialog extends Component {
         this.translate.dx = 0;
         this.translate.dy = 0;
         this._updateZoomerStyle();
+        this.zoomerRef.el?.classList.remove("is-dragging");
+        this._cleanupDragListeners();
+    }
+
+    _cleanupDragListeners() {
+        if (this._onWinMousemove) {
+            window.removeEventListener("mousemove", this._onWinMousemove);
+            this._onWinMousemove = null;
+        }
+        if (this._onWinMouseup) {
+            window.removeEventListener("mouseup", this._onWinMouseup);
+            this._onWinMouseup = null;
+        }
     }
 
     onWheelImage(ev) {

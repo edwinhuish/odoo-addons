@@ -7,14 +7,15 @@
              tabindex="0"
              t-on-keydown.stop="(ev) => this.onKeydown(ev)"
              t-ref="autofocus"
-             t-on-click.self="close"
-             t-on-mousemove="onMousemoveView">
+             t-on-click.self="close">
 
-            <!-- 中央图片区：避开顶部关闭按钮与底部工具条区域，确保图片不被遮挡 -->
-            <div class="o_product_image_preview-main position-absolute start-0 end-0 d-flex align-items-center justify-content-center overflow-hidden"
-                 style="top: 56px; bottom: 80px;">
-                <div class="o_product_image_preview-zoomer position-absolute d-flex align-items-center justify-content-center w-100 h-100"
-                     t-ref="zoomer">
+            <!-- 中央图片区：全屏裁切（overflow hidden 防滚动条 + 限制放大溢出在屏幕内） -->
+            <div class="o_product_image_preview-main position-absolute top-0 bottom-0 start-0 end-0 overflow-hidden">
+                <!-- 缩放/拖拽层：上下内缩避开 topbar/bottombar（初始大小不遮挡），放大后可溢出覆盖全屏 -->
+                <div class="o_product_image_preview-zoomer position-absolute d-flex align-items-center justify-content-center"
+                     style="top: 56px; bottom: 80px; left: 0; right: 0;"
+                     t-ref="zoomer"
+                     t-on-mousedown.stop="onMousedown">
                     <img t-ref="image"
                          class="o_product_image_preview-img mw-100 mh-100"
                          t-att-src="currentUrl"
@@ -23,13 +24,11 @@
                          draggable="false"
                          t-on-load="onImageLoaded"
                          t-on-click.stop=""
-                         t-on-wheel.prevent="onWheelImage"
-                         t-on-mousedown.stop="onMousedownImage"
-                         t-on-mouseup.stop="onMouseupImage"/>
+                         t-on-wheel.prevent="onWheelImage"/>
                 </div>
             </div>
 
-            <!-- 关闭按钮（无背景栏，仅按钮；悬浮只高亮按钮自身） -->
+            <!-- 关闭按钮（无背景栏，仅按钮；悬浮只高亮按钮自身；始终最顶层） -->
             <button type="button"
                     class="o_product_image_preview-close o_preview_iconbtn"
                     t-on-click.stop="close"

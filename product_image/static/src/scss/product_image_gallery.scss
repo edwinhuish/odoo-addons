@@ -85,13 +85,20 @@
 // 全屏预览弹窗
 .o_product_image_preview {
     background: rgba(0, 0, 0, 0.92);
+    // 任何情况下都不应出现滚动条
+    overflow: hidden;
 
     .o_product_image_preview-main {
         z-index: 1;
     }
 
+    // 缩放/拖拽层：grab 光标（可拖拽），拖动中 grabbing
     .o_product_image_preview-zoomer {
+        cursor: grab;
         transition: transform 0.05s ease-out;
+        &.is-dragging {
+            cursor: grabbing;
+        }
     }
 
     .o_product_image_preview-img {

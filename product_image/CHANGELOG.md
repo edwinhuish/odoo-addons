@@ -1,5 +1,23 @@
 # 变更日志
 
+## [19.0.2.2.3] - 2026-09-04（待验证）
+
+### 变更
+
+- **修复预览 Y 轴滚动条**：根容器 `.o_product_image_preview` 显式 `overflow:hidden`；预览打开期间（`onMounted`）锁定 `document.body.style.overflow='hidden'`，关闭（`onWillUnmount`）恢复原值，任何情况下都不再出现页面滚动条。
+- **图片初始大小避开 topbar/bottombar，放大可覆盖全屏**：中央图片区改为全屏裁切（`main` 全屏 `overflow:hidden`）；缩放/拖拽层 `zoomer` 上下内缩（`top:56px; bottom:80px;`）作为安全区——初始（scale 1）图片在安全区内不被上下条遮挡，放大后图片溢出安全区、由全屏 `main` 裁切，可覆盖整个屏幕。
+- **任意大小可拖拽 + grab/grabbing 光标**：移除 `_updateZoomerStyle` 中“图片超出容器才允许位移”的门槛，改为始终应用位移（scale 1 也可拖动）；`zoomer` 默认 `cursor:grab`，拖动中加 `is-dragging` 类切换为 `grabbing`；拖拽事件改挂 `window`（`mousemove`/`mouseup`），即便鼠标移出图片或预览区域也能继续拖动并正确结束，并在卸载时清理监听。
+
+### 影响
+
+- 仅前端改动：`product_image_preview.xml`（main 全屏 + zoomer 内缩 + mousedown 移到 zoomer + 移除根 mousemove/图片 mouseup）、`product_image_preview.js`（body 锁定、拖拽重写、移除位移门槛）、SCSS（根 overflow hidden + zoomer grab/grabbing）。模型 / 字段 / 视图 / 权限未变。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本、`README.md`、`AGENTS.md`、根 `TODO.md` / `README.md` / `AGENTS.md`。
+
+---
+
 ## [19.0.2.2.2] - 2026-09-04（待验证）
 
 ### 变更
