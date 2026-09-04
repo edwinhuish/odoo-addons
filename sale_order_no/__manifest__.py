@@ -27,7 +27,7 @@
         - 客户门户预览页面的面包屑与 H2 标题也使用订单编号
     """,
     "category": "Sales",
-    "author": "SOHO外贸",
+    "author": "edwinhuish",
     "depends": ["sale", "sale_pdf_quote_builder"],
     "data": [
         "views/partner_views.xml",

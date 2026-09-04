@@ -1,6 +1,6 @@
 {
     "name": "图片粘贴上传",
-    "version": "19.0.1.0.0",
+    "version": "19.0.2.0.0",
     "summary": "后台图片字段支持剪贴板 Ctrl+V / Cmd+V 粘贴与拖拽上传，一次可粘贴多图，超大图明确报错",
     "description": """
         外贸 SOHO 场景下的图片录入增强模块。
@@ -16,14 +16,14 @@
           不改核心模板文件，只通过 @web/core/utils/patch 与 t-inherit 扩展
     """,
     "category": "Productivity/Images",
-    "author": "SOHO外贸",
+    "author": "edwinhuish",
     "depends": ["web"],
     "data": [],
     "assets": {
         "web.assets_backend": [
-            "image_uploader/static/src/js/image_field_paste.js",
-            "image_uploader/static/src/xml/image_field_paste.xml",
-            "image_uploader/static/src/scss/image_uploader.scss",
+            "web_image_paste/static/src/js/image_field_paste.js",
+            "web_image_paste/static/src/xml/image_field_paste.xml",
+            "web_image_paste/static/src/scss/web_image_paste.scss",
         ],
     },
     "installable": True,

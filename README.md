@@ -39,16 +39,18 @@ odoo-addons/           # 本目录即 addons_path
 
 ## 模块一览
 
+> 自研模块通过 `__manifest__.py` 的 `author: "edwinhuish"` 字段统一标识归属；命名遵循 `<业务域>_<功能点>`（见 [`DOCS_TEMPLATE.md`](DOCS_TEMPLATE.md)），不加项目前缀。
+
 | 模块 | 版本 | 作用 | 状态 |
 |------|------|------|------|
-| [`sale_order_no`](sale_order_no/README.md) | 19.0.1.3.0 | 销售订单 / 报价单自定义编号：客户编码 + 两位年份 + 年度流水（如 `DZ2602`）；含客户编码格式校验、报表替换、批量补号 | 已迁入，**待目标环境验证** |
-| [`image_uploader`](image_uploader/README.md) | 19.0.1.0.0 | 后台图片字段支持剪贴板 `Ctrl+V` / `Cmd+V` 粘贴与拖拽上传，即时预览 + 进度条，一次多图，超大图报错 | 已交付，目标环境已验证 |
-| `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | 未迁移，按需 |
+| [`sale_order_no`](sale_order_no/README.md) | 19.0.1.7.0 | 销售订单 / 报价单自定义编号：客户编码 + 两位年份 + 年度流水（如 `DZ2602`）；含客户编码格式校验、报表替换、PDF 文件名定制、门户预览定制、批量补号 | 已交付，目标环境已验证 |
+| [`web_image_paste`](web_image_paste/README.md) | 19.0.2.0.0 | 后台图片字段支持剪贴板 `Ctrl+V` / `Cmd+V` 粘贴与拖拽上传，即时预览 + 进度条，一次多图，超大图报错（原名 `image_uploader`） | 已交付，目标环境已验证 |
+| `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | **不迁移**（与进销存主流程无关，T-005 决策搁置） |
 | `product_model` | 19.0.1.0.0 | 产品多型号 + 可在列表 / 选产品时按型号搜索 | 已交付，目标环境已验证 |
-| `product_image` | 19.0.2.2.7 | 产品多图：原生主图独立 + 图库补充图 / 删除主图自动提升（无替换按钮）/ 首张上传即主图 / 主图 2 倍 / 悬浮局部放大（540窗口+1080图片平移·左侧不足转下方/缩小·选框按比例·留白区白色）/ 点击预览（多图切换+右侧缩略图·关闭按钮暗色半透明·底部条默认透明悬浮淡入·图片初始避开上下条放大可覆盖全屏·任意大小可拖拽grab/grabbing·GPU 1:1顺滑·切图保留状态·无滚动条·缩略图未选中无边框）/ 右侧竖排缩略图（蓝色选中outline·删除提升·图库删除·滚动·无tooltip）/ 新增图片弹窗（顶层overlay·点击·拖放·Ctrl+V 粘贴后关闭） | 已交付，**目标环境已验证**（原名 `product_multi_image`） |
+| `product_image` | 19.0.2.2.7 | 产品多图：原生主图独立 + 图库补充图 / 删除主图自动提升（无替换按钮）/ 首张上传即主图 / 主图 2 倍 / 悬浮局部放大（540窗口+1080图片平移·左侧不足转下方/缩小·选框按比例·留白区白色）/ 点击预览（多图切换+右侧缩略图·关闭按钮暗色半透明·底部条默认透明悬浮淡入·图片初始避开上下条放大可覆盖全屏·任意大小可拖拽grab/grabbing·GPU 1:1顺滑·切图保留状态·无滚动条·缩略图未选中无边框）/ 右侧竖排缩略图（蓝色选中outline·删除提升·图库删除·滚动·无tooltip）/ 新增图片弹窗（顶层overlay·点击·拖放·Ctrl+V 粘贴后关闭） | 已交付，目标环境已验证（原名 `product_multi_image`） |
 
-历史模块（`sale_order_no`、`image_uploader`、`web_multi_tabs`）来自仓库之外的本地备份目录，
-仅作为迁移参考，**不纳入本仓库、不在其中开发**。迁移时把对应模块目录整体复制到本仓库根目录即可。
+历史模块（`sale_order_no`、`web_image_paste`（原 `image_uploader`）、`web_multi_tabs`）来自仓库之外的本地备份目录，
+仅作为迁移参考。其中 `sale_order_no`、`web_image_paste` 已迁入本仓库；`web_multi_tabs` 经 T-005 评估**决定不迁移**（与进销存主流程无关）。
 
 ---
 
@@ -108,6 +110,7 @@ odoo -d <db> -u sale_order_no --stop-after-init     # 代码改动后升级
 | [`README.md`](README.md) |所有人 | 项目说明、目录结构、安装与使用、开发约定摘要 |
 | [`AGENTS.md`](AGENTS.md) | AI 助手 / 开发者 | 业务背景、模块与代码规范、Odoo 19 API 事实、验证流程 |
 | [`TODO.md`](TODO.md) | 需求管理 | 待办池 / 进行中 / 已完成 / 搁置，含验收标准与待验证清单 |
+| [`DOCS_TEMPLATE.md`](DOCS_TEMPLATE.md) | 维护者 | 模块 `README.md` / `CHANGELOG.md` / `AGENTS.md` 三类文档统一骨架与命名约定 |
 | `<module>/README.md` | 使用者 | 单个模块的功能、字段、安装与操作步骤 |
 | `<module>/AGENTS.md` | 维护者 | 该模块不可破坏的核心约束 |
 | `<module>/CHANGELOG.md` | 维护者 | 逐版本的变更 / 影响 / 文档同步记录 |
@@ -120,7 +123,7 @@ odoo -d <db> -u sale_order_no --stop-after-init     # 代码改动后升级
 
 1. **T-001 自定义销售订单号**（`sale_order_no`）— 代码已交付，待环境验证
 2. **T-002 产品多型号 + 可搜索**（`product_model`）
-3. **T-003 图片粘贴上传**（`image_uploader`）— 迁移并扩展到多图场景
+3. **T-003 图片粘贴上传**（`web_image_paste`，原 `image_uploader`）— 迁移并扩展到多图场景
 4. **T-004 产品多图图库**（`product_image`，原名 `product_multi_image`）— 已交付，目标环境已验证
 
 新增需求请追加到 `TODO.md` 的「待办池」末尾，不要在对话里另立清单。

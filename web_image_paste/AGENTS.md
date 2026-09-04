@@ -7,7 +7,7 @@
 ## 模块定位
 
 - 模块名：`图片粘贴上传`
-- 技术目录：`image_uploader`
+- 技术目录：`web_image_paste`
 - 类型：**纯前端模块**（无 Python 模型、无数据文件、无 `security/` 目录）
 - 主依赖：`web`（最小化，不依赖 `product` / `sale`）
 - 当前版本：`19.0.1.0.0`
@@ -52,7 +52,7 @@
 8. **粘贴 / 拖拽即时预览，不允许出现"无反应"空窗期**
    - 粘贴开始时先用 base64 写入 `props.record.update({ [name]: info.data })` 触发缩略图重渲染
    - `state.isUploading` 标记上传中，模板 `img` 在上传中优先用 `uploadingUrl`（本地 `data:` URL）
-   - 模板在上传中叠加进度条遮罩（`.o_image_uploader_progress`），`onFileUploaded` 完成后置回 `false`
+   - 模板在上传中叠加进度条遮罩（`.o_web_image_paste_progress`），`onFileUploaded` 完成后置回 `false`
    - 禁止先跑完 `onFileUploaded` 全部异步逻辑才更新字段
 
 ---
@@ -64,7 +64,7 @@
 | `__manifest__.py` | 模块元数据、依赖（`web`）、`assets` 资源声明 |
 | `static/src/js/image_field_paste.js` | patch `ImageField`（paste/drop + 即时预览 + 进度条状态）与 `FileUploader`（paste），含文件提取 / 大小检查 / MIME 校验工具函数 |
 | `static/src/xml/image_field_paste.xml` | 扩展 `web.ImageField`、`web.FileUploader` 模板，挂载事件、`tabindex`、`img` 上传中切换 `uploadingUrl`、追加进度条遮罩节点 |
-| `static/src/scss/image_uploader.scss` | 拖拽高亮样式 `o_image_uploader_drag_over` + 上传中进度条遮罩 `o_image_uploader_progress` + spinner 旋转动画 |
+| `static/src/scss/web_image_paste.scss` | 拖拽高亮样式 `o_web_image_paste_drag_over` + 上传中进度条遮罩 `o_web_image_paste_progress` + spinner 旋转动画 |
 
 ---
 
@@ -88,7 +88,7 @@
 ## 调试建议
 
 - 粘贴无反应：检查图片区域是否获得焦点（根 `div` 有 `tabindex="0"`），按 `Tab` 切到图片区域后再粘贴
-- 拖拽无高亮：检查 `o_image_uploader_drag_over` 样式是否加载（`-u image_uploader` 升级后强刷浏览器）
+- 拖拽无高亮：检查 `o_web_image_paste_drag_over` 样式是否加载（`-u web_image_paste` 升级后强刷浏览器）
 - 只读态仍触发上传：检查处理器入口是否判 `this.props.readonly`
 - 多图只保留最后一张：单图字段按原生行为覆盖当前值，属预期；多图场景由 T-004 处理
 

@@ -189,7 +189,7 @@ patch(ImageField.prototype, {
         if (ev.dataTransfer) {
             ev.dataTransfer.dropEffect = "copy";
         }
-        ev.currentTarget?.classList?.add("o_image_uploader_drag_over");
+        ev.currentTarget?.classList?.add("o_web_image_paste_drag_over");
     },
 
     /**
@@ -199,7 +199,7 @@ patch(ImageField.prototype, {
         if (this.props.readonly) {
             return;
         }
-        ev.currentTarget?.classList?.remove("o_image_uploader_drag_over");
+        ev.currentTarget?.classList?.remove("o_web_image_paste_drag_over");
     },
 
     /**
@@ -210,7 +210,7 @@ patch(ImageField.prototype, {
         if (this.props.readonly) {
             return;
         }
-        ev.currentTarget?.classList?.remove("o_image_uploader_drag_over");
+        ev.currentTarget?.classList?.remove("o_web_image_paste_drag_over");
         const files = extractImageFilesFromDrop(ev);
         if (!files.length) {
             return;

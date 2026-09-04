@@ -16,7 +16,7 @@
         - 删除产品时型号行级联清理，无孤儿数据
     """,
     "category": "Inventory/Product",
-    "author": "SOHO外贸",
+    "author": "edwinhuish",
     "depends": ["product"],
     "data": [
         "security/ir.model.access.csv",

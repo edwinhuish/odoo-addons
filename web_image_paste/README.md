@@ -36,7 +36,7 @@ Odoo 19 后台图片字段增强模块，让外贸 SOHO 录入产品图片时少
 |------|------|
 | `static/src/js/image_field_paste.js` | patch `ImageField`（paste/drop + 即时预览 + 进度条状态）与 `FileUploader`（paste），含文件提取、大小检查、MIME 校验工具函数 |
 | `static/src/xml/image_field_paste.xml` | 扩展 `web.ImageField`、`web.FileUploader` 模板，挂载事件、`tabindex`、`img` 上传中切换 `uploadingUrl`、追加进度条遮罩节点 |
-| `static/src/scss/image_uploader.scss` | 拖拽高亮样式 `o_image_uploader_drag_over` + 上传中进度条遮罩 `o_image_uploader_progress` + spinner 旋转动画 |
+| `static/src/scss/web_image_paste.scss` | 拖拽高亮样式 `o_web_image_paste_drag_over` + 上传中进度条遮罩 `o_web_image_paste_progress` + spinner 旋转动画 |
 
 > 本模块为**纯前端模块**，无 Python 模型、无数据文件、无 `security/` 目录。
 
@@ -44,7 +44,7 @@ Odoo 19 后台图片字段增强模块，让外贸 SOHO 录入产品图片时少
 
 ## 安装与使用
 
-1. 将 `image_uploader` 目录放入 Odoo 19 的 `addons_path`
+1. 将 `web_image_paste` 目录放入 Odoo 19 的 `addons_path`
 2. 更新应用列表后安装模块：`图片粘贴上传`
 3. 打开任意带图片字段的表单（如产品表单的 `image_1920`），点击图片区域使其获得焦点
 4. 按 `Ctrl+V`（macOS：`Cmd+V`）粘贴剪贴板图片，或把图片文件拖到图片区域
@@ -82,7 +82,7 @@ Odoo 19 后台图片字段增强模块，让外贸 SOHO 录入产品图片时少
 
 ### 执行流程
 
-1. 首次安装：`odoo -d <db> -i image_uploader --stop-after-init`
+1. 首次安装：`odoo -d <db> -i web_image_paste --stop-after-init`
    （纯前端模块，无数据库结构变更，无迁移脚本）
 2. 打开任意带图片字段的表单（如产品表单 `image_1920`、联系人表单头像），点击图片区域使其获得焦点
 3. 按 `Ctrl+V`（macOS：`Cmd+V`）粘贴剪贴板图片，验证缩略图立即显示 + 进度条遮罩
@@ -93,7 +93,7 @@ Odoo 19 后台图片字段增强模块，让外贸 SOHO 录入产品图片时少
 ### 异常情况与处理
 
 - 粘贴无反应：检查图片区域是否获得焦点（根 `div` 有 `tabindex="0"`），按 `Tab` 切到图片区域后再粘贴
-- 拖拽无高亮：前端资源缓存，`-u image_uploader` 升级后强刷浏览器
+- 拖拽无高亮：前端资源缓存，`-u web_image_paste` 升级后强刷浏览器
 - 多图只保留最后一张：单图字段按原生行为覆盖当前值，属预期；多图场景由 T-004 `product_image` 处理
 - 超大图报错：由原生 `checkFileSize` 触发，阈值取自 `session.max_file_upload_size`（默认 128 MB）
 

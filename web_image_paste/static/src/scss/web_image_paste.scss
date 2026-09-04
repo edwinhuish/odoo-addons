@@ -1,6 +1,6 @@
 /* 图片粘贴 / 拖拽上传的视觉提示 */
 
-.o_image_uploader_drag_over {
+.o_web_image_paste_drag_over {
     outline: 2px dashed #7c7bad;
     outline-offset: -2px;
     background-color: rgba(124, 123, 173, 0.08);
@@ -8,28 +8,28 @@
 }
 
 /* 上传中进度条遮罩：半透明黑底 + 居中 spinner + 文字 */
-.o_image_uploader_progress {
+.o_web_image_paste_progress {
     background-color: rgba(0, 0, 0, 0.45);
     z-index: 2;
     pointer-events: none;
     border-radius: inherit;
 }
 
-.o_image_uploader_progress_inner {
+.o_web_image_paste_progress_inner {
     padding: 0.5rem 0.75rem;
     border-radius: 0.25rem;
 }
 
-.o_image_uploader_spinner {
+.o_web_image_paste_spinner {
     width: 22px;
     height: 22px;
     border: 2px solid rgba(255, 255, 255, 0.35);
     border-top-color: #ffffff;
     border-radius: 50%;
-    animation: o_image_uploader_spin 0.8s linear infinite;
+    animation: o_web_image_paste_spin 0.8s linear infinite;
 }
 
-@keyframes o_image_uploader_spin {
+@keyframes o_web_image_paste_spin {
     to {
         transform: rotate(360deg);
     }

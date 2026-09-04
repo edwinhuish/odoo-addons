@@ -1,5 +1,30 @@
 # 变更日志
 
+## [19.0.2.0.0] - 2026-09-04（待验证）
+
+### 变更
+
+- **模块改名**：技术目录 / 模块技术名 `image_uploader` → `web_image_paste`（显示名「图片粘贴上传」保持不变）。
+  - 原名 `image_uploader` 不带业务域前缀，不符合 T-005 固化的 `<业务域>_<功能点>` 命名约定；改名后带 `web_` 技术层前缀，符合 Odoo 技术增强类模块惯例（如 `web_editor`、`web_tour`、`web_unsplash`）。
+  - `image_paste` 精确描述核心能力（图片粘贴上传），比泛泛的 `uploader` 更贴切——原生已有上传，本模块增强的是「粘贴 / 拖拽」便捷入口。
+- **资源路径与类名同步**：manifest 的 assets 路径前缀、QWeb 模板 t-name（`web_image_paste.ImageField` / `web_image_paste.FileUploader`）、SCSS 类名前缀（`o_web_image_paste_*`）、scss 文件名（`web_image_paste.scss`）全部随模块名同步。
+- **author 统一**：`__manifest__.py` 的 `author` 由 `SOHO外贸` 改为 `edwinhuish`（仓库所有模块统一）。
+
+### 影响
+
+- **破坏性变更**：Odoo 视模块技术名为唯一标识，`image_uploader` 与 `web_image_paste` 视为两个不同模块。
+  - 目标库需**先卸载** `image_uploader`（UI 卸载或命令行卸载），再**全新安装** `web_image_paste`：`odoo -d <db> -i web_image_paste --stop-after-init`。
+  - 纯前端模块无业务数据，卸载重装无数据损失，仅 `ir_module_module` / `ir_model_data` 记录级联清理。
+- author 字段变更需 `-u web_image_paste` 升级刷新 `ir_module_module` 表（非破坏性，与其他 3 个模块一起 `-u` 升级即可）。
+- 仓库内无其他模块依赖 `image_uploader`（`product_image` 明确「内建粘贴，无需该模块依赖」），改名不影响其他模块运行。
+
+### 文档
+
+- 同步更新 `__manifest__.py`（版本 / assets 路径 / author）、`README.md`、`AGENTS.md`、根 `TODO.md` / `README.md` / `AGENTS.md` / `DOCS_TEMPLATE.md`、`product_image` 的 README / AGENTS / manifest（「无需依赖」引用同步）。
+- 历史条目（`19.0.1.0.0`）保留 `image_uploader` 原文作为当时快照。
+
+---
+
 ## [19.0.1.0.0] - 2026-09-02（验收通过）
 
 ### 验收记录

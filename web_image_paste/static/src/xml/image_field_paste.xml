@@ -6,7 +6,7 @@
         不替换原模板，只通过 t-inherit extension 模式添加事件处理器
         + 上传中进度条遮罩
     -->
-    <t t-name="image_uploader.ImageField" t-inherit="web.ImageField" t-inherit-mode="extension">
+    <t t-name="web_image_paste.ImageField" t-inherit="web.ImageField" t-inherit-mode="extension">
         <xpath expr="//div[hasclass('opacity-trigger-hover')]" position="attributes">
             <attribute name="t-on-paste">onPaste</attribute>
             <attribute name="t-on-dragover.prevent">onDragOver</attribute>
@@ -22,9 +22,9 @@
 
         <!-- 上传中：在 img 之后追加进度条遮罩 -->
         <xpath expr="//img" position="after">
-            <div t-if="state.isUploading" class="o_image_uploader_progress position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center">
-                <div class="o_image_uploader_progress_inner text-center">
-                    <div class="o_image_uploader_spinner mx-auto mb-1"/>
+            <div t-if="state.isUploading" class="o_web_image_paste_progress position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center">
+                <div class="o_web_image_paste_progress_inner text-center">
+                    <div class="o_web_image_paste_spinner mx-auto mb-1"/>
                     <span class="small text-light">上传中…</span>
                 </div>
             </div>
@@ -35,7 +35,7 @@
         FileUploader 根 div 绑定 paste 事件，让所有使用 FileUploader 的场景
         （Many2many binary、附件上传等）都获得粘贴能力
     -->
-    <t t-name="image_uploader.FileUploader" t-inherit="web.FileUploader" t-inherit-mode="extension">
+    <t t-name="web_image_paste.FileUploader" t-inherit="web.FileUploader" t-inherit-mode="extension">
         <xpath expr="//div[hasclass('d-contents')]" position="attributes">
             <attribute name="t-on-paste">onPaste</attribute>
         </xpath>

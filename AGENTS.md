@@ -13,7 +13,7 @@
 
 - 仓库根目录（`<addons-path>`）**即 `addons_path`**：一个模块一个一级目录，根目录只放文档。
   文档中出现的 `<addons-path>`、`<db>`、`<module>`、`<version>` 均为占位符，按实际部署值替换，不要写死本机路径。
-- 历史模块（`sale_order_no`、`image_uploader`、`web_multi_tabs`）来自仓库之外的本地备份目录，
+- 历史模块（`sale_order_no`、`web_image_paste`（原 `image_uploader`）、`web_multi_tabs`）来自仓库之外的本地备份目录，
   仅作为迁移参考，**不纳入本仓库、不直接在该目录开发**。
 - **本仓库不含 Odoo 源码与数据库**，模块无法在仓库内独立运行；改动需挂到目标 Odoo 环境安装/升级后验证，
   交付时给出「待验证清单」。
@@ -41,6 +41,7 @@
 - `depends` 最小化：能用 `product` 就不要依赖 `sale`；不要为了方便依赖 `website`。
 - 新增模型必须配 `security/ir.model.access.csv`，权限最小化（普通用户可读写业务数据，管理员可配置）。
 - 数据文件（视图/报表/权限）必须登记进 `data`，顺序：security → views → reports → data。
+- 模块命名：`<业务域>_<功能点>`（如 `sale_order_no`、`product_model`）；纯前端通用增强用 `web_` 技术层前缀（如 `web_image_paste`，符合 Odoo `web_*` 惯例）；**禁止**用 Odoo 官方模块名。**不加项目统一前缀**（`soho_` 等）——会偏离 Odoo 生态惯例，且改名需卸载重装生产库；自研模块归属用 `author: "edwinhuish"` 字段标识。命名约定完整版见 `DOCS_TEMPLATE.md`。
 
 ## 4. Python 规范
 
@@ -67,7 +68,7 @@
 
 - JS 文件首行必须是 `/** @odoo-module **/`；用 `@web/core/utils/patch` 打补丁，不覆写整个组件。
 - QWeb 用 `t-inherit` + `t-inherit-mode="extension"` 扩展原模板，不复制核心模板全文。
-- 静态资源放 `static/src/{js,xml,scss}/`（历史 `image_uploader` 为此结构，迁移时保持一致）。
+- 静态资源放 `static/src/{js,xml,scss}/`（如 `web_image_paste` 为此结构，迁移时保持一致）。
 - 事件处理要判 `props.readonly`，只读态不得触发写操作。
 - 复用原生上传 / 校验链路（如 `onFileUploaded`、`checkFileSize`），不重复实现。
 
@@ -81,20 +82,24 @@
 4. 模块 `AGENTS.md`：**不可破坏的核心约束**清单（约束变化时更新）
 5. 根目录 `TODO.md`：任务状态流转（见第 7 节）
 
+> 三类模块文档（`README.md` / `CHANGELOG.md` / `AGENTS.md`）的统一骨架与约定见根目录 [`DOCS_TEMPLATE.md`](DOCS_TEMPLATE.md)，新模块按此创建，既有模块迭代时按此对齐。
+
 ## 7. TODO.md 使用规则
 
-- `TODO.md` 是需求唯一入口，所有任务都在里面流转，不要在对话里另立清单。
-- 新需求追加到「待办池」末尾并取下一个 ID；开工移入「进行中」并补齐验收标准；验收通过移入「已完成」并记录日期与版本号；不做则移入「搁置」并写原因。
+- `TODO.md` 是**待处理需求**的唯一入口，仅记录待办 / 进行中 / 搁置项，不要在对话里另立清单。
+- 新需求追加到「待办池」末尾并取下一个 ID；开工移入「进行中」并补齐验收标准；验收通过后整条移出本文件，完成信息（日期 / 落地版本 / 验收记录 / 异常与维护）沉淀到对应模块的 `CHANGELOG.md` 与 `README.md` / `AGENTS.md`，根 `README.md` 模块一览表更新状态；不做则移入「搁置」并写原因。
 - 动工前先读该条目的「设计约束」，有疑问在条目下以备注形式记录，不要自行放宽约束。
 
 ## 8. 已有模块速查
 
+> 自研模块通过 `__manifest__.py` 的 `author: "edwinhuish"` 字段统一标识归属，应用列表可按 author 筛选；模块命名遵循 `<业务域>_<功能点>` 约定（见 `DOCS_TEMPLATE.md`），不加项目前缀。
+
 | 模块 | 版本 | 作用 | 状态 |
 |------|------|------|------|
-| `sale_order_no` | 19.0.1.3.0 | 销售订单 / 报价单自定义编号（`order_no`，客户编码 + 两位年份 + 年度流水），含客户编码格式校验、报表替换、批量补号 | 已迁入，待环境验证（T-001） |
-| `image_uploader` | 19.0.1.0.0 | 后台图片字段粘贴 / 拖拽上传（patch `ImageField` + `FileUploader`，复用原生上传链路，即时预览 + 进度条） | 已交付，目标环境已验证（T-003） |
-| `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | 未迁移，按需（T-005） |
-| `product_model` | 19.0.1.0.0 | 产品多型号 + 可搜索（One2many 明细 / 冗余 trigram 索引 / 命中提示） | 目标环境已验证（T-002） |
+| `sale_order_no` | 19.0.1.7.0 | 销售订单 / 报价单自定义编号（`order_no`，客户编码 + 两位年份 + 年度流水），含客户编码格式校验、报表替换、PDF 文件名定制、门户预览定制、批量补号 | 已交付，目标环境已验证（T-001） |
+| `web_image_paste` | 19.0.2.0.0 | 后台图片字段粘贴 / 拖拽上传（patch `ImageField` + `FileUploader`，复用原生上传链路，即时预览 + 进度条；原名 `image_uploader`） | 已交付，目标环境已验证（T-003） |
+| `web_multi_tabs` | 19.0.1.0.0 | 后台内部多标签页，适配 PWA standalone | **不迁移**（T-005 决策：与进销存主流程无关，搁置） |
+| `product_model` | 19.0.1.0.0 | 产品多型号 + 可搜索（One2many 明细 / 冗余 trigram 索引 / 命中提示） | 已交付，目标环境已验证（T-002） |
 | `product_image` | 19.0.2.2.7 | 产品多图（原生主图独立 + 图库补充图 / 删除主图自动提升（无替换按钮）/ 首张上传即主图 / 主图 2 倍 / 悬浮局部放大（540窗口+1080图片平移·左侧不足转下方/缩小·选框按比例·留白区白色）/ 点击预览（多图切换+右侧缩略图·关闭按钮暗色半透明·底部条默认透明悬浮淡入·图片初始避开上下条放大可覆盖全屏·任意大小可拖拽grab/grabbing·GPU 1:1顺滑·切图保留状态·无滚动条·缩略图未选中无边框）/ 右侧竖排缩略图（蓝色选中outline·删除提升·图库删除·滚动·无tooltip）/ 新增图片弹窗（顶层overlay·点击·拖放·Ctrl+V 粘贴后关闭）/ 继承 image.mixin 复用多尺寸；原名 `product_multi_image`） | 已交付，目标环境已验证（T-004） |
 
 ## 9. 验证流程

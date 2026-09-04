@@ -14,13 +14,13 @@
         - 点击主图弹出全屏预览弹窗，支持放大、缩小、重置、旋转（按钮 + 滚轮 + 键盘）
         - 缩略图竖向排列于主图右侧：主图项带替换/清空按钮，图库项带删除按钮，末端有上传占位符
         - 缩略图高度超出主图时，顶部/底部出现上下滚动按钮移动缩略图
-        - 头像区域支持粘贴图片即新增一条图库记录（内建，无需 image_uploader 依赖）
+        - 头像区域支持粘贴图片即新增一条图库记录（内建，无需 web_image_paste 依赖）
         - 每张图片继承 image.mixin，自动生成多尺寸（1920/1024/512/256/128）
         - 删除产品时图片行级联清理，无孤儿数据
         - 仅依赖 product，不依赖 website_sale，避免与 eCommerce 冲突
     """,
     "category": "Inventory/Product",
-    "author": "SOHO外贸",
+    "author": "edwinhuish",
     "depends": ["product"],
     "data": [
         "security/ir.model.access.csv",
