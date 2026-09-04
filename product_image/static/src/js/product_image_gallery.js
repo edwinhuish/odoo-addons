@@ -271,7 +271,7 @@ export class ProductImageGallery extends Component {
     // 悬浮放大
     // ------------------------------------------------------------------
 
-    onHoverEnter() {
+    onHoverEnter(ev) {
         if (!this.hasItems) {
             return;
         }
@@ -302,6 +302,10 @@ export class ProductImageGallery extends Component {
             this.state.hoverTop = Math.round(rect.bottom + gap);
         }
         this.state.hoverZoom = true;
+        // 进入时立即按鼠标位置初始化指示方块与放大区域（避免首次移动前方块在 0,0）
+        if (ev) {
+            this.onHoverMove(ev);
+        }
     }
 
     onHoverLeave() {
@@ -309,11 +313,12 @@ export class ProductImageGallery extends Component {
     }
 
     /**
-     * 鼠标在主图上移动：记录相对【图片内容】的位置百分比，驱动局部放大的
-     * background-position，并计算蓝色指示方块（标示实际放大的区域）。
+     * 鼠标在主图上移动：蓝色指示方块在【整个 180×180 容器】内跟随鼠标移动
+     *（不限于图片内容区），放大区域的 background-position 跟随【方块位置】
+     *（而非鼠标）——方块到容器边缘即显示图片对应边缘，无需鼠标移到图片边缘。
      *
-     * 注意：主图 img 用 object-fit:contain，图片内容在 180×180 容器内可能留白，
-     * 鼠标百分比必须相对图片内容算（而非容器），否则与放大区域不对应。
+     * 方块到边缘时显示边缘：方块被夹在容器边缘时，其映射到图片内容的位置也夹到
+     * 内容边缘，background-position 即显示图片边缘。
      */
     onHoverMove(ev) {
         const box = this.mainRef.el;
@@ -324,7 +329,12 @@ export class ProductImageGallery extends Component {
         const rect = box.getBoundingClientRect();
         const boxW = box.clientWidth || rect.width;
         const boxH = box.clientHeight || rect.height;
-        // 计算图片内容在容器内的实际区域（object-fit: contain 的留白）
+        // 鼠标相对【容器】的位置（0..1）：方块可在整个容器内移动
+        let cxBox = boxW > 0 ? (ev.clientX - rect.left) / boxW : 0.5;
+        let cyBox = boxH > 0 ? (ev.clientY - rect.top) / boxH : 0.5;
+        cxBox = Math.max(0, Math.min(1, cxBox));
+        cyBox = Math.max(0, Math.min(1, cyBox));
+        // 图片内容在容器内的实际区域（object-fit: contain 的留白），用于映射放大区域
         let contentW = boxW;
         let contentH = boxH;
         let contentLeft = 0;
@@ -333,42 +343,47 @@ export class ProductImageGallery extends Component {
             const imgAspect = img.naturalWidth / img.naturalHeight;
             const boxAspect = boxW / boxH;
             if (imgAspect >= boxAspect) {
-                // 图片更宽：撑满宽度，上下留白
                 contentW = boxW;
                 contentH = boxW / imgAspect;
                 contentLeft = 0;
                 contentTop = (boxH - contentH) / 2;
             } else {
-                // 图片更高：撑满高度，左右留白
                 contentH = boxH;
                 contentW = boxH * imgAspect;
                 contentLeft = (boxW - contentW) / 2;
                 contentTop = 0;
             }
         }
-        // 鼠标相对图片内容的位置（0..1）
-        let fx = contentW > 0 ? (ev.clientX - rect.left - contentLeft) / contentW : 0.5;
-        let fy = contentH > 0 ? (ev.clientY - rect.top - contentTop) / contentH : 0.5;
-        fx = Math.max(0, Math.min(1, fx));
-        fy = Math.max(0, Math.min(1, fy));
-        this.state.zoomPctX = Math.round(fx * 100);
-        this.state.zoomPctY = Math.round(fy * 100);
-        // 蓝色指示方块：边长 = min(contentW, contentH) / Z（与放大面板可见区域对应），
-        // 中心跟随鼠标，并夹在图片内容区内
+        // 蓝色指示方块：边长 = min(contentW, contentH) / Z，在【整个容器】内移动并夹在容器内
         const Z = 2.8;
         const indSide = Math.min(contentW, contentH) / Z;
-        let indLeftC = contentW > indSide ? fx * contentW - indSide / 2 : (contentW - indSide) / 2;
-        let indTopC = contentH > indSide ? fy * contentH - indSide / 2 : (contentH - indSide) / 2;
-        if (contentW > indSide) {
-            indLeftC = Math.max(0, Math.min(contentW - indSide, indLeftC));
-        }
-        if (contentH > indSide) {
-            indTopC = Math.max(0, Math.min(contentH - indSide, indTopC));
-        }
-        this.state.indLeft = Math.round(contentLeft + indLeftC);
-        this.state.indTop = Math.round(contentTop + indTopC);
+        let indLeftBox = boxW > indSide ? cxBox * boxW - indSide / 2 : (boxW - indSide) / 2;
+        let indTopBox = boxH > indSide ? cyBox * boxH - indSide / 2 : (boxH - indSide) / 2;
+        indLeftBox = Math.max(0, Math.min(boxW - indSide, indLeftBox));
+        indTopBox = Math.max(0, Math.min(boxH - indSide, indTopBox));
+        this.state.indLeft = Math.round(indLeftBox);
+        this.state.indTop = Math.round(indTopBox);
         this.state.indW = Math.round(indSide);
         this.state.indH = Math.round(indSide);
+        // 放大区域跟随【方块】（而非鼠标）：把方块在图片内容上的位置映射为 background-position。
+        // 方块内容左侧 = 方块容器左侧 - 内容偏移，夹在内容区内 → 方块到边缘时显示图片边缘。
+        const indLeftC = contentW > indSide
+            ? Math.max(0, Math.min(contentW - indSide, indLeftBox - contentLeft))
+            : 0;
+        const indTopC = contentH > indSide
+            ? Math.max(0, Math.min(contentH - indSide, indTopBox - contentTop))
+            : 0;
+        // 方块内容中心比例 → background-position %；方块大于内容时居中显示整图
+        let zoomPctX = 50;
+        let zoomPctY = 50;
+        if (contentW > 0 && indSide < contentW) {
+            zoomPctX = ((indLeftC + indSide / 2) / contentW) * 100;
+        }
+        if (contentH > 0 && indSide < contentH) {
+            zoomPctY = ((indTopC + indSide / 2) / contentH) * 100;
+        }
+        this.state.zoomPctX = Math.max(0, Math.min(100, Math.round(zoomPctX)));
+        this.state.zoomPctY = Math.max(0, Math.min(100, Math.round(zoomPctY)));
     }
 
     get hoverStyle() {
