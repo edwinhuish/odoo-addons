@@ -72,6 +72,9 @@ export class ProductImageGallery extends Component {
             hoverSide: "left", // "left" | "below" | "right"
             hoverLeft: 0,
             hoverTop: 0,
+            // 局部放大：鼠标在主图内的位置百分比（0-100），用于 background-position
+            zoomPctX: 50,
+            zoomPctY: 50,
             previewOpen: false,
             // 缩略图滚动状态
             thumbCanScrollUp: false,
@@ -299,10 +302,40 @@ export class ProductImageGallery extends Component {
         this.state.hoverZoom = false;
     }
 
+    /**
+     * 鼠标在主图上移动：记录位置百分比，驱动局部放大的 background-position。
+     */
+    onHoverMove(ev) {
+        const el = this.mainRef.el;
+        if (!el) {
+            return;
+        }
+        const rect = el.getBoundingClientRect();
+        let px = (ev.clientX - rect.left) / rect.width;
+        let py = (ev.clientY - rect.top) / rect.height;
+        px = Math.max(0, Math.min(1, px));
+        py = Math.max(0, Math.min(1, py));
+        this.state.zoomPctX = Math.round(px * 100);
+        this.state.zoomPctY = Math.round(py * 100);
+    }
+
     get hoverStyle() {
         return (
             `position: fixed; left: ${this.state.hoverLeft}px; top: ${this.state.hoverTop}px; ` +
-            `max-width: 320px; max-height: 320px; z-index: 1080; pointer-events: none;`
+            `width: 320px; height: 320px; z-index: 1080; pointer-events: none; overflow: hidden;`
+        );
+    }
+
+    /**
+     * 局部放大内层样式：用 image_1920 做 background，background-size 放大（280% 宽），
+     * background-position 跟随鼠标百分比，只显示鼠标所在区域的放大局部（非整体放大）。
+     */
+    get zoomInnerStyle() {
+        return (
+            `width: 320px; height: 320px; background-color: #fff; ` +
+            `background-image: url('${this.fullImageUrl}'); ` +
+            `background-size: 280% auto; background-repeat: no-repeat; ` +
+            `background-position: ${this.state.zoomPctX}% ${this.state.zoomPctY}%;`
         );
     }
 

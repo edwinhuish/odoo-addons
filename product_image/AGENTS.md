@@ -14,7 +14,7 @@
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义上传弹窗：`ProductImageUploadDialog`（点击/拖放/Ctrl+V 三种上传方式，走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `image_uploader`）
-- 当前版本：`19.0.2.0.7`
+- 当前版本：`19.0.2.0.8`
 
 ---
 
@@ -85,7 +85,7 @@
 | `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口） |
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
-| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（删除提升·图库删除·滚动·新增图片开弹窗·选中蓝边框）/ 上传弹窗挂载 |
+| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮局部放大（放大镜跟随鼠标）/ 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（删除提升·图库删除·滚动·新增图片开弹窗·选中蓝边框）/ 上传弹窗挂载 |
 | `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗 + 上传弹窗挂载 |
 | `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |

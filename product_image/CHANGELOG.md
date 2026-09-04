@@ -1,5 +1,22 @@
 # 变更日志
 
+## [19.0.2.0.8] - 2026-09-04（待验证）
+
+### 变更
+
+- **悬浮放大改为局部放大**：原先悬浮主图弹出面板把整张图放大显示（整体放大）。改为**局部放大**（放大镜效果）：面板用 `image_1920` 做 `background`，`background-size: 280% auto` 放大，`background-position` 跟随鼠标在主图内的位置百分比移动，只显示鼠标所在区域的放大局部。鼠标在主图上移动时，面板内放大区域实时跟随。
+- 主图区新增 `t-on-mousemove="onHoverMove"`，记录鼠标位置百分比（`state.zoomPctX/Y`）；新增 `zoomInnerStyle` getter 生成局部放大内层样式；悬浮面板由 `<img>` 改为带背景的 `<div>`；面板尺寸固定 320×320（`overflow: hidden`）。
+
+### 影响
+
+- 仅前端 widget 改动，模型 / 字段 / 视图 / 权限未变。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本、`README.md`、`AGENTS.md`、根 `TODO.md` / `README.md` / `AGENTS.md`。
+
+---
+
 ## [19.0.2.0.7] - 2026-09-04（待验证）
 
 ### 变更

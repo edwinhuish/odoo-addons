@@ -18,6 +18,7 @@
             <div class="o_gallery_main position-relative"
                  t-ref="main"
                  t-on-mouseenter="onHoverEnter"
+                 t-on-mousemove="onHoverMove"
                  t-on-mouseleave="onHoverLeave"
                  t-on-click="onMainClick"
                  style="width: 180px; height: 180px; cursor: zoom-in;">
@@ -34,14 +35,11 @@
                 </div>
             </div>
 
-            <!-- ============ 悬浮放大预览（左侧 / 下侧 / 右侧） ============ -->
+            <!-- ============ 悬浮局部放大（左侧 / 下侧 / 右侧，跟随鼠标位置放大对应区域） ============ -->
             <div t-if="state.hoverZoom and hasItems"
                  class="o_gallery_hover_zoom bg-white border shadow"
                  t-att-style="hoverStyle">
-                <img loading="lazy"
-                     t-att-src="fullImageUrl"
-                     t-att-alt="currentName || props.alt"
-                     style="max-width: 320px; max-height: 320px; object-fit: contain; display: block;"/>
+                <div t-att-style="zoomInnerStyle"/>
             </div>
 
             <!-- ============ 右侧竖排缩略图列 ============ -->
