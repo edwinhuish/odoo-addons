@@ -24,9 +24,14 @@
                  style="width: 180px; height: 180px; cursor: zoom-in;">
                 <img loading="lazy"
                      class="img img-fluid o_gallery_main_img"
+                     t-ref="mainImg"
                      t-att-alt="props.alt"
                      t-att-src="mainImageUrl"
                      style="width: 180px; height: 180px; object-fit: contain;"/>
+                <!-- 悬浮局部放大指示方块：标示主图上实际被放大的区域 -->
+                <div t-if="state.hoverZoom and hasItems"
+                     class="o_gallery_zoom_indicator"
+                     t-att-style="indicatorStyle"/>
                 <!-- 无图占位提示（主图与图库均无值时） -->
                 <div t-if="!hasItems"
                      class="o_gallery_empty position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-muted small"

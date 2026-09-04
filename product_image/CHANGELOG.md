@@ -1,5 +1,23 @@
 # 变更日志
 
+## [19.0.2.0.9] - 2026-09-04（待验证）
+
+### 变更
+
+- **修复局部放大位置不对应**：`onHoverMove` 原先按 180×180 容器算鼠标百分比，但主图 `object-fit:contain` 有留白，导致百分比与图片内容错位、放大区域与鼠标不对应。改为按图片**实际内容区域**（用 `naturalWidth/Height` 算 `object-fit:contain` 的留白）计算鼠标百分比，`background-position` 精确对应鼠标所在位置。
+- **新增蓝色半透明指示方块**：悬浮放大时，主图上鼠标处显示蓝色半透明方块（`rgba(13,110,253,0.25)` 填充 + 蓝色边框），标示当前实际被放大的区域。方块边长 = `min(contentW, contentH) / 2.8`（与放大面板可见区域对应），中心跟随鼠标并夹在图片内容区内。
+- 主图 img 加 `t-ref="mainImg"` 供读取自然尺寸；`setup` 加 `mainImgRef` 与指示方块 state（`indLeft/Top/W/H`）；新增 `indicatorStyle` getter。
+
+### 影响
+
+- 仅前端 widget 改动，模型 / 字段 / 视图 / 权限未变。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本、`README.md`、`AGENTS.md`、根 `TODO.md` / `README.md` / `AGENTS.md`。
+
+---
+
 ## [19.0.2.0.8] - 2026-09-04（待验证）
 
 ### 变更

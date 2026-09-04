@@ -79,8 +79,14 @@ export class ProductImageGallery extends Component {
             // 缩略图滚动状态
             thumbCanScrollUp: false,
             thumbCanScrollDown: false,
+            // 局部放大指示方块（鼠标所在区域，蓝色半透明）
+            indLeft: 0,
+            indTop: 0,
+            indW: 0,
+            indH: 0,
         });
         this.mainRef = useRef("main");
+        this.mainImgRef = useRef("mainImg");
         this.thumbScrollRef = useRef("thumbScroll");
 
         // 展示序列变化或选中项变化后重算缩略图溢出与索引边界
@@ -303,20 +309,66 @@ export class ProductImageGallery extends Component {
     }
 
     /**
-     * 鼠标在主图上移动：记录位置百分比，驱动局部放大的 background-position。
+     * 鼠标在主图上移动：记录相对【图片内容】的位置百分比，驱动局部放大的
+     * background-position，并计算蓝色指示方块（标示实际放大的区域）。
+     *
+     * 注意：主图 img 用 object-fit:contain，图片内容在 180×180 容器内可能留白，
+     * 鼠标百分比必须相对图片内容算（而非容器），否则与放大区域不对应。
      */
     onHoverMove(ev) {
-        const el = this.mainRef.el;
-        if (!el) {
+        const box = this.mainRef.el;
+        const img = this.mainImgRef?.el;
+        if (!box) {
             return;
         }
-        const rect = el.getBoundingClientRect();
-        let px = (ev.clientX - rect.left) / rect.width;
-        let py = (ev.clientY - rect.top) / rect.height;
-        px = Math.max(0, Math.min(1, px));
-        py = Math.max(0, Math.min(1, py));
-        this.state.zoomPctX = Math.round(px * 100);
-        this.state.zoomPctY = Math.round(py * 100);
+        const rect = box.getBoundingClientRect();
+        const boxW = box.clientWidth || rect.width;
+        const boxH = box.clientHeight || rect.height;
+        // 计算图片内容在容器内的实际区域（object-fit: contain 的留白）
+        let contentW = boxW;
+        let contentH = boxH;
+        let contentLeft = 0;
+        let contentTop = 0;
+        if (img && img.naturalWidth && img.naturalHeight) {
+            const imgAspect = img.naturalWidth / img.naturalHeight;
+            const boxAspect = boxW / boxH;
+            if (imgAspect >= boxAspect) {
+                // 图片更宽：撑满宽度，上下留白
+                contentW = boxW;
+                contentH = boxW / imgAspect;
+                contentLeft = 0;
+                contentTop = (boxH - contentH) / 2;
+            } else {
+                // 图片更高：撑满高度，左右留白
+                contentH = boxH;
+                contentW = boxH * imgAspect;
+                contentLeft = (boxW - contentW) / 2;
+                contentTop = 0;
+            }
+        }
+        // 鼠标相对图片内容的位置（0..1）
+        let fx = contentW > 0 ? (ev.clientX - rect.left - contentLeft) / contentW : 0.5;
+        let fy = contentH > 0 ? (ev.clientY - rect.top - contentTop) / contentH : 0.5;
+        fx = Math.max(0, Math.min(1, fx));
+        fy = Math.max(0, Math.min(1, fy));
+        this.state.zoomPctX = Math.round(fx * 100);
+        this.state.zoomPctY = Math.round(fy * 100);
+        // 蓝色指示方块：边长 = min(contentW, contentH) / Z（与放大面板可见区域对应），
+        // 中心跟随鼠标，并夹在图片内容区内
+        const Z = 2.8;
+        const indSide = Math.min(contentW, contentH) / Z;
+        let indLeftC = contentW > indSide ? fx * contentW - indSide / 2 : (contentW - indSide) / 2;
+        let indTopC = contentH > indSide ? fy * contentH - indSide / 2 : (contentH - indSide) / 2;
+        if (contentW > indSide) {
+            indLeftC = Math.max(0, Math.min(contentW - indSide, indLeftC));
+        }
+        if (contentH > indSide) {
+            indTopC = Math.max(0, Math.min(contentH - indSide, indTopC));
+        }
+        this.state.indLeft = Math.round(contentLeft + indLeftC);
+        this.state.indTop = Math.round(contentTop + indTopC);
+        this.state.indW = Math.round(indSide);
+        this.state.indH = Math.round(indSide);
     }
 
     get hoverStyle() {
@@ -328,7 +380,7 @@ export class ProductImageGallery extends Component {
 
     /**
      * 局部放大内层样式：用 image_1920 做 background，background-size 放大（280% 宽），
-     * background-position 跟随鼠标百分比，只显示鼠标所在区域的放大局部（非整体放大）。
+     * background-position 跟随鼠标百分比（相对图片内容），只显示鼠标所在区域的放大局部。
      */
     get zoomInnerStyle() {
         return (
@@ -336,6 +388,16 @@ export class ProductImageGallery extends Component {
             `background-image: url('${this.fullImageUrl}'); ` +
             `background-size: 280% auto; background-repeat: no-repeat; ` +
             `background-position: ${this.state.zoomPctX}% ${this.state.zoomPctY}%;`
+        );
+    }
+
+    /** 蓝色半透明指示方块（标示主图上实际被放大的区域）。 */
+    get indicatorStyle() {
+        return (
+            `position: absolute; left: ${this.state.indLeft}px; top: ${this.state.indTop}px; ` +
+            `width: ${this.state.indW}px; height: ${this.state.indH}px; ` +
+            `background: rgba(13, 110, 253, 0.25); border: 1px solid rgba(13, 110, 253, 0.9); ` +
+            `pointer-events: none; z-index: 3;`
         );
     }
 
