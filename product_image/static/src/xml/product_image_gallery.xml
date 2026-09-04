@@ -78,7 +78,6 @@
                                     class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle p-0"
                                     type="button"
                                     t-on-click="(ev) => this.onMainRemove(ev)"
-                                    title="删除主图"
                                     aria-label="删除主图"
                                     style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.65rem;">
                                 <i class="fa fa-times"/>
@@ -89,7 +88,6 @@
                                     class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle p-0"
                                     type="button"
                                     t-on-click="(ev) => this.onGalleryRemove(item_index, ev)"
-                                    title="删除该图片"
                                     aria-label="删除该图片"
                                     style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.65rem;">
                                 <i class="fa fa-times"/>
@@ -102,7 +100,6 @@
                          class="o_gallery_thumb_upload d-flex flex-column align-items-center justify-content-center text-muted mb-1"
                          t-on-click="openUploadModal"
                          style="width: 56px; height: 56px; cursor: pointer; border: 1px dashed #adb5bd; border-radius: 0.25rem;"
-                         title="新增图片"
                          aria-label="新增图片">
                         <i class="fa fa-plus" style="font-size: 1rem;"/>
                     </div>
@@ -126,12 +123,7 @@
                                    url="fullImageUrl"
                                    name="currentName || props.alt"
                                    close.bind="closePreview"/>
-
-        <!-- ============ 新增图片上传弹窗（点击/拖放/Ctrl+V） ============ -->
-        <ProductImageUploadDialog t-if="state.uploadOpen"
-                                  acceptedFileExtensions="props.acceptedFileExtensions"
-                                  onUploaded.bind="onFileUploaded"
-                                  close.bind="closeUploadModal"/>
+        <!-- 上传弹窗走顶层 main_components 注册表（见 product_image_upload.js），不在此挂载 -->
     </t>
 
 </templates>

@@ -11,7 +11,7 @@ import { registry } from "@web/core/registry";
 
 import { Component, useState, useRef, useEffect } from "@odoo/owl";
 import { ProductImagePreviewDialog } from "./product_image_preview";
-import { ProductImageUploadDialog } from "./product_image_upload";
+import { useProductImageUpload } from "./product_image_upload";
 
 const placeholder = "/web/static/img/placeholder.png";
 
@@ -40,7 +40,7 @@ const placeholder = "/web/static/img/placeholder.png";
  */
 export class ProductImageGallery extends Component {
     static template = "product_image.ProductImageGallery";
-    static components = { ProductImagePreviewDialog, ProductImageUploadDialog };
+    static components = { ProductImagePreviewDialog };
     static props = {
         ...standardFieldProps,
         acceptedFileExtensions: { type: String, optional: true },
@@ -64,6 +64,8 @@ export class ProductImageGallery extends Component {
     setup() {
         this.notification = useService("notification");
         this.orm = useService("orm");
+        // 上传弹窗走顶层 main_components 注册表（与 gallery 渲染树解耦，避免重渲染闪烁）
+        this.upload = useProductImageUpload();
         this.state = useState({
             currentIndex: 0,
             hoverZoom: false,
@@ -71,7 +73,6 @@ export class ProductImageGallery extends Component {
             hoverLeft: 0,
             hoverTop: 0,
             previewOpen: false,
-            uploadOpen: false,
             // 缩略图滚动状态
             thumbCanScrollUp: false,
             thumbCanScrollDown: false,
@@ -322,18 +323,18 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 上传弹窗：点击「新增图片」按钮打开；弹窗内点击/拖放/Ctrl+V 上传
+    // 上传弹窗：点击「新增图片」按钮打开（顶层 overlay，与 gallery 渲染树解耦）
+    // 弹窗内点击/拖放/Ctrl+V 上传；Ctrl+V 粘贴上传后弹窗自动关闭
     // ------------------------------------------------------------------
 
     openUploadModal() {
         if (this.props.readonly) {
             return;
         }
-        this.state.uploadOpen = true;
-    }
-
-    closeUploadModal() {
-        this.state.uploadOpen = false;
+        this.upload.open({
+            acceptedFileExtensions: this.props.acceptedFileExtensions,
+            onUploaded: (info) => this.onFileUploaded(info),
+        });
     }
 
     // ------------------------------------------------------------------

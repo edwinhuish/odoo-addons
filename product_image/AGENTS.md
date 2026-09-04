@@ -12,9 +12,9 @@
 - 继承模型：`product.template`
 - 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单原生 `image_1920` 字段 widget）
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
-- 自定义上传弹窗：`ProductImageUploadDialog`（点击/拖放/Ctrl+V 三种上传方式）
+- 自定义上传弹窗：`ProductImageUploadDialog`（点击/拖放/Ctrl+V 三种上传方式，走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `image_uploader`）
-- 当前版本：`19.0.2.0.6`
+- 当前版本：`19.0.2.0.7`
 
 ---
 
@@ -44,7 +44,7 @@
    - **删除主图时**：图库非空 → 把图库首张（`sequence` 升序）图片数据移动到 `image_1920` 字段并删除该图库记录（提升，不复制不重复）；图库为空 → 清空 `image_1920`
    - 选中缩略图用 wrap 的真实 border（默认透明占位，选中蓝色）一圈显示，避免被滚动容器 `overflow` 裁切左右
    - **上传时主图为空** → 上传图直接写 `image_1920`（成为首位主图）；主图已有值 → 追加为图库记录（不影响主图）
-   - 上传弹窗 Ctrl+V 粘贴上传完成后自动关闭（点击 / 拖放不自动关闭）
+   - 上传弹窗走顶层 `main_components` overlay（`useProductImageUpload` hook，与 gallery 渲染树解耦），Ctrl+V 粘贴上传完成后 `close()` 从注册表移除弹窗（点击 / 拖放不自动关闭）；缩略图删除按钮与「新增图片」占位符无 `title`（无悬浮 tooltip）
    - 已保存图库记录提升时 `image_1920` 若为 binary size（懒加载），通过 ORM `read` 取真实 base64 再写主图
 
 5. **`is_main` / 首图概念已移除**
@@ -89,7 +89,7 @@
 | `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗 + 上传弹窗挂载 |
 | `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |
-| `static/src/js/product_image_upload.js` | `ProductImageUploadDialog`：上传弹窗，点击/拖放/Ctrl+V 三种上传方式，逐张调 onUploaded |
+| `static/src/js/product_image_upload.js` | `ProductImageUploadDialog` + `useProductImageUpload` hook：上传弹窗（顶层 overlay 走 main_components），点击/拖放/Ctrl+V 三种上传，粘贴后自动关闭 |
 | `static/src/xml/product_image_upload.xml` | 上传弹窗 QWeb 模板 |
 | `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条） |
 | `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |

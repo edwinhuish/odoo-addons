@@ -1,5 +1,23 @@
 # 变更日志
 
+## [19.0.2.0.7] - 2026-09-04（待验证）
+
+### 变更
+
+- **修复 Ctrl+V 粘贴后上传弹窗闪烁重新出现**：弹窗原为图库 widget 的子组件，粘贴处理时 `record.update` 触发 gallery 重渲染，弹窗跟着重渲染/重建导致闪烁与「重新出现」，且 `close()` 未能稳定关闭。改为**顶层 overlay**：新增 `useProductImageUpload` hook，把弹窗挂到 `main_components` 注册表（与原生 `FileViewer` 同模式），与 gallery 渲染树解耦——`record.update` 重渲染 gallery 时不再波及弹窗。粘贴上传完成后 `close()` 从注册表移除弹窗，稳定关闭。
+- **粘贴成功自动关闭弹窗**：`onPaste` 处理完文件后调 `this.close()`（移除 overlay），满足「粘贴成功时自动关闭」。
+- **移除缩略图悬浮 tooltip**：删除主图项 / 图库项缩略图删除按钮与「新增图片」占位符上的 `title` 属性（保留 `aria-label` 供无障碍），悬浮不再弹出浏览器原生 tooltip。
+
+### 影响
+
+- 仅前端改动：`product_image_upload.js` 新增 `useProductImageUpload` hook（注册表）；widget 移除 `uploadOpen` state / `closeUploadModal` / 子组件挂载，改用 hook 打开；模板移除弹窗挂载节点与缩略图 `title`。模型 / 字段 / 视图 / 权限未变。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本、`README.md`、`AGENTS.md`、根 `TODO.md` / `README.md` / `AGENTS.md`。
+
+---
+
 ## [19.0.2.0.6] - 2026-09-04（待验证）
 
 ### 变更

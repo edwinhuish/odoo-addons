@@ -1,10 +1,11 @@
 /** @odoo-module **/
 
-import { Component, useState } from "@odoo/owl";
+import { Component, onWillDestroy, useState } from "@odoo/owl";
 import { useAutofocus, useService } from "@web/core/utils/hooks";
 import { getDataURLFromFile } from "@web/core/utils/urls";
 import { checkFileSize } from "@web/core/utils/files";
 import { FileUploader } from "@web/views/fields/file_handler";
+import { registry } from "@web/core/registry";
 import { _t } from "@web/core/l10n/translation";
 
 /**
@@ -148,3 +149,33 @@ function extractImageFiles(ev) {
     }
     return files;
 }
+
+// ------------------------------------------------------------------
+// 顶层 overlay 注册：把上传弹窗挂到 main_components（与原生 FileViewer 同模式），
+// 与图库 widget 渲染树解耦——record.update 重渲染 gallery 时不再波及弹窗，
+// 避免粘贴处理过程中弹窗重渲染/重建导致的闪烁与“重新出现”。
+// ------------------------------------------------------------------
+
+let uploadSeq = 1;
+
+/**
+ * 在 main_components 注册一个上传弹窗实例，返回 open/close。
+ * open(props) 会先关闭已有实例再注册新的；close 从注册表移除。
+ * props 不含 close（由本函数注入，移除自身）。
+ */
+export function useProductImageUpload() {
+    const compId = `product_image.upload${uploadSeq++}`;
+    function close() {
+        registry.category("main_components").remove(compId);
+    }
+    function open(props) {
+        close();
+        registry.category("main_components").add(compId, {
+            Component: ProductImageUploadDialog,
+            props: { ...props, close },
+        });
+    }
+    onWillDestroy(close);
+    return { open, close };
+}
+
