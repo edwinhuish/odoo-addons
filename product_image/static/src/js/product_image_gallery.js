@@ -23,7 +23,7 @@ const placeholder = "/web/static/img/placeholder.png";
  *   图库 product.image.gallery 只存补充图，不反向同步 / 不覆盖 / 不清空主图
  * - 展示序列：[原生主图（若有）] + [图库图片按 sequence 升序]，主图永远是第一张
  * - 主图放大 2 倍显示（180x180），无上一张/下一张按钮、无序号
- * - 鼠标悬浮主图区在左侧（空间不足转下侧/右侧）显示放大图
+ * - 鼠标悬浮主图区：左侧优先（屏幕宽度不足转下方，下方仍不足按比例缩小）显示 540×540 放大窗（内含 1080×1080 图）
  * - 点击主图区弹出全屏预览弹窗（放大/缩小/旋转，见 product_image_preview.js）
  * - 缩略图竖向排列于主图右侧：
  *   · 主图项缩略图带「替换」「删除」按钮（编辑态），分别写 / 清空原生主图字段
@@ -69,10 +69,13 @@ export class ProductImageGallery extends Component {
         this.state = useState({
             currentIndex: 0,
             hoverZoom: false,
-            hoverSide: "left", // "left" | "below" | "right"
+            hoverSide: "left", // "left" | "below"
             hoverLeft: 0,
             hoverTop: 0,
-            // 局部放大：720x720 图片在 180x180 窗口内的平移量（px），使鼠标点居中
+            // 局部放大窗口实际尺寸（540 或按屏幕缩小后的值）与图片尺寸（1080 固定）
+            hoverWin: 540,
+            hoverImg: 1080,
+            // 1080 图片在窗口内的平移量（px），使鼠标点居中
             zoomTx: 0,
             zoomTy: 0,
             previewOpen: false,
@@ -281,26 +284,33 @@ export class ProductImageGallery extends Component {
             return;
         }
         const rect = el.getBoundingClientRect();
-        const panelW = 360;
-        const panelH = 360;
+        // 窗口 540（180 的 9 倍面积 / 3 倍边长）；图片 1080（180 的 36 倍面积 / 6 倍边长）
+        const DESIRED = 540;
+        const IMG = 1080;
         const gap = 8;
-        if (rect.left >= panelW + gap) {
-            this.state.hoverSide = "left";
-            this.state.hoverLeft = Math.round(rect.left - panelW - gap);
-            this.state.hoverTop = Math.round(rect.top);
-        } else if (rect.bottom + panelH + gap <= window.innerHeight) {
-            this.state.hoverSide = "below";
-            this.state.hoverLeft = Math.round(rect.left);
-            this.state.hoverTop = Math.round(rect.bottom + gap);
-        } else if (rect.right + panelW + gap <= window.innerWidth) {
-            this.state.hoverSide = "right";
-            this.state.hoverLeft = Math.round(rect.right + gap);
-            this.state.hoverTop = Math.round(rect.top);
+        const MIN = 160; // 缩小下限，避免过小失去预览意义
+        let side, left, top, win;
+        // 1. 左侧：主图左侧屏幕宽度足够 → 在左侧展示
+        if (rect.left >= DESIRED + gap) {
+            side = "left";
+            win = DESIRED;
+            left = rect.left - win - gap;
+            // 垂直贴齐主图顶，超出屏幕底部则上移夹在屏内
+            top = Math.max(0, Math.min(rect.top, window.innerHeight - win - gap));
         } else {
-            this.state.hoverSide = "below";
-            this.state.hoverLeft = Math.round(rect.left);
-            this.state.hoverTop = Math.round(rect.bottom + gap);
+            // 2. 左侧宽度不足 → 在下方展示；下方宽度/高度仍不足 → 按比例缩小悬浮窗以适配屏幕
+            side = "below";
+            const availW = window.innerWidth - rect.left - gap;
+            const availH = window.innerHeight - rect.bottom - gap;
+            win = Math.max(MIN, Math.min(DESIRED, availW, availH));
+            left = rect.left;
+            top = rect.bottom + gap;
         }
+        this.state.hoverSide = side;
+        this.state.hoverLeft = Math.round(left);
+        this.state.hoverTop = Math.round(top);
+        this.state.hoverWin = Math.round(win);
+        this.state.hoverImg = IMG;
         this.state.hoverZoom = true;
         // 进入时立即按鼠标位置初始化指示方块与放大区域（避免首次移动前方块在 0,0）
         if (ev) {
@@ -314,11 +324,12 @@ export class ProductImageGallery extends Component {
 
     /**
      * 局部放大（放大镜）：
-     * - 原图展示区 180×180，放大图 1440×1440，放大窗口 360×360。
-     * - 窗口内含 1440×1440 的图片，鼠标在原图移动时同比例平移 1440 图片，
-     *   使鼠标点居中显示在 360 窗口（1440/360 = 4 倍局部放大）。
-     * - 平移量夹在 [-(1440-360), 0]，使 1440 图片始终填满 360 窗口（图片内容区之外为白色）。
-     * - 蓝色指示方块 = 原图上被放大的区域（180 × 360/1440 = 45×45），中心跟随鼠标，夹在 180 内。
+     * - 原图展示区 180×180，放大图 1080×1080，放大窗口 540×540（屏幕不足时按比例缩小）。
+     * - 窗口内含 1080×1080 图片，鼠标在原图移动时同比例平移 1080 图片，
+     *   使鼠标点居中显示在窗口（1080/win 倍局部放大，win=540 → 2 倍）。
+     * - 平移量夹在 [-(1080-win), 0]，使 1080 图片始终填满窗口（图片内容区之外为白色）。
+     * - 蓝色指示方块 = 原图上被放大的区域，边长 = 原图宽 × (win/1080)，中心跟随鼠标，夹在原图内；
+     *   win 缩小时方块同比例缩小，保持选框与预览内容对应关系准确。
      */
     onHoverMove(ev) {
         const box = this.mainRef.el;
@@ -328,20 +339,20 @@ export class ProductImageGallery extends Component {
         const rect = box.getBoundingClientRect();
         const boxW = box.clientWidth || rect.width;
         const boxH = box.clientHeight || rect.height;
-        // 鼠标相对原图展示区域的位置（0..1），同比例映射到 1440 图片
+        // 鼠标相对原图展示区域的位置（0..1），同比例映射到 1080 图片
         let fx = boxW > 0 ? (ev.clientX - rect.left) / boxW : 0.5;
         let fy = boxH > 0 ? (ev.clientY - rect.top) / boxH : 0.5;
         fx = Math.max(0, Math.min(1, fx));
         fy = Math.max(0, Math.min(1, fy));
-        // 1440×1440 图片在 360×360 窗口内平移：使鼠标点 (fx*1440, fy*1440) 居中于窗口 (180, 180)
-        const IMG = 1440;
-        const WIN = 360;
+        const IMG = this.state.hoverImg || 1080;
+        const WIN = this.state.hoverWin || 540;
+        // 1080 图片在 win 窗口内平移：使鼠标点 (fx*IMG, fy*IMG) 居中于窗口 (WIN/2)
         const tx = Math.max(-(IMG - WIN), Math.min(0, WIN / 2 - fx * IMG));
         const ty = Math.max(-(IMG - WIN), Math.min(0, WIN / 2 - fy * IMG));
         this.state.zoomTx = Math.round(tx);
         this.state.zoomTy = Math.round(ty);
-        // 蓝色指示方块（在原图上）：边长 = 原图宽 × (窗口/图片) = boxW × (360/1440) = boxW/4，
-        // 即放大窗口显示的区域占原图的比例（4 倍放大 → 1/4），中心跟随鼠标，夹在原图内
+        // 蓝色指示方块（在原图上）：边长 = 原图宽 × (窗口/图片)，按窗口与图片实际比例动态调整，
+        // 中心跟随鼠标，夹在原图内
         const indSide = (boxW * WIN) / IMG;
         const indLeft = Math.max(0, Math.min(boxW - indSide, fx * boxW - indSide / 2));
         const indTop = Math.max(0, Math.min(boxH - indSide, fy * boxH - indSide / 2));
@@ -351,19 +362,21 @@ export class ProductImageGallery extends Component {
         this.state.indH = Math.round(indSide);
     }
 
-    /** 放大窗口样式：360×360，固定定位，溢出隐藏（1440 图片超出部分裁切）。 */
+    /** 放大窗口样式：win×win（540 或缩小后），固定定位，溢出隐藏（1080 图片超出部分裁切）。 */
     get hoverStyle() {
+        const win = this.state.hoverWin || 540;
         return (
             `position: fixed; left: ${this.state.hoverLeft}px; top: ${this.state.hoverTop}px; ` +
-            `width: 360px; height: 360px; z-index: 1080; pointer-events: none; ` +
+            `width: ${win}px; height: ${win}px; z-index: 1080; pointer-events: none; ` +
             `overflow: hidden; background: #fff;`
         );
     }
 
-    /** 1440×1440 图片样式：绝对定位 + transform 平移，使鼠标点居中于 360 窗口。 */
+    /** 1080×1080 图片样式：绝对定位 + transform 平移，使鼠标点居中于窗口。 */
     get zoomImgStyle() {
+        const img = this.state.hoverImg || 1080;
         return (
-            `position: absolute; left: 0; top: 0; width: 1440px; height: 1440px; ` +
+            `position: absolute; left: 0; top: 0; width: ${img}px; height: ${img}px; ` +
             `object-fit: contain; transform: translate(${this.state.zoomTx}px, ${this.state.zoomTy}px);`
         );
     }

@@ -40,7 +40,7 @@
                 </div>
             </div>
 
-            <!-- ============ 悬浮局部放大（180窗口 + 720图片平移，4倍局部放大） ============ -->
+            <!-- ============ 悬浮局部放大（540 窗口 + 1080 图片平移，左侧不足转下方/缩小） ============ -->
             <div t-if="state.hoverZoom and hasItems"
                  class="o_gallery_hover_zoom bg-white border shadow"
                  t-att-style="hoverStyle">
