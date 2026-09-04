@@ -81,21 +81,19 @@
 
                             <!-- 主图项：删除按钮（删除主图；图库非空时自动提升首张图库图为主图） -->
                             <button t-if="!props.readonly and item.type === 'main'"
-                                    class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle p-0"
+                                    class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle"
                                     type="button"
                                     t-on-click="(ev) => this.onMainRemove(ev)"
-                                    aria-label="删除主图"
-                                    style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.65rem;">
+                                    aria-label="删除主图">
                                 <i class="fa fa-times"/>
                             </button>
 
                             <!-- 图库项：删除按钮（删图库记录，编辑态） -->
                             <button t-if="!props.readonly and item.type === 'gallery'"
-                                    class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle p-0"
+                                    class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle"
                                     type="button"
                                     t-on-click="(ev) => this.onGalleryRemove(item_index, ev)"
-                                    aria-label="删除该图片"
-                                    style="position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; font-size: 0.65rem;">
+                                    aria-label="删除该图片">
                                 <i class="fa fa-times"/>
                             </button>
                         </div>

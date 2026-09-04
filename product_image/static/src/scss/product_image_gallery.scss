@@ -52,8 +52,21 @@
             .o_gallery_thumb {
                 background: #fff;
             }
-            // 删除按钮：默认隐藏，悬浮缩略图时显示
+            // 删除按钮：默认隐藏，悬浮缩略图时显示；位于缩略图右上角内侧，
+            // 避免被滚动容器 overflow 裁切（overflow-y:auto 会让 overflow-x 视为 auto）
             .o_gallery_thumb_del {
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                width: 18px;
+                height: 18px;
+                min-width: 0;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                line-height: 1;
+                font-size: 0.65rem;
                 opacity: 0;
                 transition: opacity 0.1s ease;
             }

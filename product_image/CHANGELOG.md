@@ -1,5 +1,18 @@
 # 变更日志
 
+## [19.0.2.2.6] - 2026-09-04（待验证）
+
+### 变更
+
+- **修复缩略图右上角删除按钮被裁切**：`.o_gallery_thumb_del` 由 `top:-6px; right:-6px`（悬浮在缩略图外侧）改为 `top:2px; right:2px`（位于缩略图右上角内侧）。根因：`.o_gallery_thumb_scroll` 的 `overflow-y:auto` 按 CSS 规范会使 `overflow-x` 计算为 `auto`，水平方向裁切导致外侧的删除按钮被切掉。
+- **删除按钮定位/尺寸移入 SCSS**：原来两个按钮各有一份相同的内联 `style`（position/top/right/width/height/line-height/font-size），统一收敛到 `.o_gallery_thumb_del` 选择器里，XML 更干净。
+
+### 影响
+
+- 仅前端改动：`product_image_gallery.scss`（按钮定位入内侧 + 集中样式）、`product_image_gallery.xml`（移除两处重复内联 style）。模型 / 字段 / 视图 / 权限未变。
+
+---
+
 ## [19.0.2.2.5] - 2026-09-04（待验证）
 
 ### 变更

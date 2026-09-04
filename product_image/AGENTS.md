@@ -14,7 +14,7 @@
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义上传弹窗：`ProductImageUploadDialog`（点击/拖放/Ctrl+V 三种上传方式，走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `image_uploader`）
-- 当前版本：`19.0.2.2.5`
+- 当前版本：`19.0.2.2.6`
 
 ---
 
