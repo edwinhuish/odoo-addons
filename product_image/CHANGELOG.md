@@ -1,5 +1,28 @@
 # 变更日志
 
+## [19.0.2.0.5] - 2026-09-04（待验证）
+
+### 变更
+
+- **新增图片改为弹窗上传**：点击缩略图末端的「新增图片」占位符不再直接唤起文件选择，而是弹出上传弹窗（`ProductImageUploadDialog`）。弹窗内提供三种上传方式：
+  - 点击拖放区域 → 唤起系统文件选择（复用原生 `FileUploader`）
+  - 拖放图片文件到区域 → 自动上传（`dragover`/`dragleave`/`drop` 事件，拖拽悬停高亮）
+  - 弹窗打开时按 `Ctrl+V` / `Cmd+V` → 粘贴剪贴板图片上传（弹窗 `useAutofocus` 获焦，`paste` 可靠触发）
+- **修复 Ctrl+V 无法上传**：原先粘贴挂在头像区域根 `div`（需先 `Tab` 获焦才触发，体验差且易失效）。现移除头像区域粘贴，统一由上传弹窗处理——弹窗打开即获焦，`Ctrl+V` 直接生效。
+- **选中缩略图蓝色边框**：选中态由 `outline` 改为 `border-color` + `box-shadow` 一圈 2px 蓝色边框，更醒目可靠。
+- 上传弹窗收集文件后逐张调用 `onFileUploaded`（智能上传：主图为空→写主图，主图已有值→追加图库），保持「列表第一位默认为主图」语义。弹窗保持打开，用户传完手动关闭（`Esc` / 点击背景 / 右上角 ×）。
+
+### 影响
+
+- 仅前端改动：新增 `static/src/js/product_image_upload.js` 与 `static/src/xml/product_image_upload.xml`；widget 移除 `onPaste`/`extractImageFiles` 与根 `div` 的 `tabindex`/`t-on-paste`；缩略图末端占位符由 `FileUploader` 改为点击开弹窗的普通 `div`。模型 / 字段 / 视图 / 权限未变。
+- 头像区域不再直接响应 `Ctrl+V`，需先点「新增图片」打开弹窗再粘贴。
+
+### 文档
+
+- 同步 `__manifest__.py`（版本 / 资源登记）、`README.md`、`AGENTS.md`、根 `TODO.md` / `README.md` / `AGENTS.md`。
+
+---
+
 ## [19.0.2.0.4] - 2026-09-03（待验证）
 
 ### 变更

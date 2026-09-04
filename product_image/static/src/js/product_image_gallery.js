@@ -2,8 +2,7 @@
 
 import { _t } from "@web/core/l10n/translation";
 import { useService } from "@web/core/utils/hooks";
-import { getDataURLFromFile, imageUrl } from "@web/core/utils/urls";
-import { checkFileSize } from "@web/core/utils/files";
+import { imageUrl } from "@web/core/utils/urls";
 import { isBinarySize } from "@web/core/utils/binary";
 import { x2ManyCommands } from "@web/core/orm_service";
 import { fileTypeMagicWordMap } from "@web/views/fields/image/image_field";
@@ -13,6 +12,7 @@ import { registry } from "@web/core/registry";
 
 import { Component, useState, useRef, useEffect } from "@odoo/owl";
 import { ProductImagePreviewDialog } from "./product_image_preview";
+import { ProductImageUploadDialog } from "./product_image_upload";
 
 const placeholder = "/web/static/img/placeholder.png";
 
@@ -29,9 +29,10 @@ const placeholder = "/web/static/img/placeholder.png";
  * - 缩略图竖向排列于主图右侧：
  *   · 主图项缩略图带「替换」「删除」按钮（编辑态），分别写 / 清空原生主图字段
  *   · 图库项缩略图带「删除」按钮（编辑态），删除对应图库记录
- *   · 末端有上传占位符（编辑态），点击新增图库记录
+ *   · 末端「新增图片」占位符（编辑态），点击弹出上传弹窗（见 product_image_upload.js）
  * - 缩略图总高超出主图高度时，顶部/底部出现上下滚动按钮
- * - 头像区域 Ctrl+V 粘贴剪贴板图片即新增图库记录
+ * - 选中缩略图带一圈蓝色边框（box-shadow）
+ * - 上传弹窗内支持：点击选文件 / 拖放 / Ctrl+V 粘贴（弹窗获焦后可靠触发）
  * - 浏览切换为纯前端状态，不写库；上传/删除才写库
  *
  * 数据来源：
@@ -40,7 +41,7 @@ const placeholder = "/web/static/img/placeholder.png";
  */
 export class ProductImageGallery extends Component {
     static template = "product_image.ProductImageGallery";
-    static components = { FileUploader, ProductImagePreviewDialog };
+    static components = { FileUploader, ProductImagePreviewDialog, ProductImageUploadDialog };
     static props = {
         ...standardFieldProps,
         acceptedFileExtensions: { type: String, optional: true },
@@ -71,6 +72,7 @@ export class ProductImageGallery extends Component {
             hoverLeft: 0,
             hoverTop: 0,
             previewOpen: false,
+            uploadOpen: false,
             // 缩略图滚动状态
             thumbCanScrollUp: false,
             thumbCanScrollDown: false,
@@ -321,6 +323,21 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
+    // 上传弹窗：点击「新增图片」按钮打开；弹窗内点击/拖放/Ctrl+V 上传
+    // ------------------------------------------------------------------
+
+    openUploadModal() {
+        if (this.props.readonly) {
+            return;
+        }
+        this.state.uploadOpen = true;
+    }
+
+    closeUploadModal() {
+        this.state.uploadOpen = false;
+    }
+
+    // ------------------------------------------------------------------
     // 主图项编辑：替换 / 删除（删除时自动提升图库首张为主图）
     // ------------------------------------------------------------------
 
@@ -485,58 +502,9 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 粘贴：剪贴板图片逐张新增图库记录
+    // 粘贴上传已移至「新增图片」弹窗（ProductImageUploadDialog）：
+    // 弹窗打开时焦点在弹窗上，Ctrl+V 可靠触发；头像区域不再直接粘贴
     // ------------------------------------------------------------------
-
-    async onPaste(ev) {
-        if (this.props.readonly) {
-            return;
-        }
-        const files = extractImageFiles(ev);
-        if (!files.length) {
-            return; // 非图片，放行
-        }
-        ev.preventDefault();
-        ev.stopPropagation();
-        for (const file of files) {
-            if (!file.type.startsWith("image/")) {
-                continue;
-            }
-            if (!checkFileSize(file.size, this.notification)) {
-                continue;
-            }
-            const data = await getDataURLFromFile(file);
-            const base64 = data.split(",")[1];
-            if (!base64) {
-                this.notification.add(
-                    _t("图片“%s”读取失败，已跳过。", file.name || _t("粘贴图片")),
-                    { type: "danger" }
-                );
-                continue;
-            }
-            await this.onFileUploaded({ data: base64, type: file.type, name: file.name });
-        }
-    }
-}
-
-/**
- * 从剪贴板事件提取图片文件列表。
- */
-function extractImageFiles(ev) {
-    const files = [];
-    const items = ev.clipboardData?.items;
-    if (!items) {
-        return files;
-    }
-    for (const item of items) {
-        if (item.kind === "file" && item.type.startsWith("image/")) {
-            const file = item.getAsFile();
-            if (file) {
-                files.push(file);
-            }
-        }
-    }
-    return files;
 }
 
 // ------------------------------------------------------------------

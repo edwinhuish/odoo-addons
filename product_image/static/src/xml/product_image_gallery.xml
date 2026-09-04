@@ -12,9 +12,7 @@
         - 缩略图溢出时上下显示滚动按钮
     -->
     <t t-name="product_image.ProductImageGallery">
-        <div class="o_product_image_gallery oe_avatar position-relative d-inline-flex align-items-start"
-             t-att-tabindex="props.readonly ? undefined : 0"
-             t-on-paste="onPaste">
+        <div class="o_product_image_gallery oe_avatar position-relative d-inline-flex align-items-start">
 
             <!-- ============ 主图区域 ============ -->
             <div class="o_gallery_main position-relative"
@@ -114,20 +112,15 @@
                         </div>
                     </t>
 
-                    <!-- 上传占位符（编辑态，末端，新增图库记录） -->
-                    <FileUploader t-if="!props.readonly"
-                                 acceptedFileExtensions="props.acceptedFileExtensions"
-                                 onUploaded.bind="onFileUploaded"
-                                 multiUpload="true">
-                        <t t-set-slot="toggler">
-                            <div class="o_gallery_thumb_upload d-flex flex-column align-items-center justify-content-center text-muted mb-1"
-                                 style="width: 56px; height: 56px; cursor: pointer; border: 1px dashed #adb5bd; border-radius: 0.25rem;"
-                                 title="新增图片"
-                                 aria-label="新增图片">
-                                <i class="fa fa-plus" style="font-size: 1rem;"/>
-                            </div>
-                        </t>
-                    </FileUploader>
+                    <!-- 新增图片占位符（编辑态，末端）：点击弹出上传弹窗 -->
+                    <div t-if="!props.readonly"
+                         class="o_gallery_thumb_upload d-flex flex-column align-items-center justify-content-center text-muted mb-1"
+                         t-on-click="openUploadModal"
+                         style="width: 56px; height: 56px; cursor: pointer; border: 1px dashed #adb5bd; border-radius: 0.25rem;"
+                         title="新增图片"
+                         aria-label="新增图片">
+                        <i class="fa fa-plus" style="font-size: 1rem;"/>
+                    </div>
                 </div>
 
                 <!-- 下滚按钮 -->
@@ -148,6 +141,12 @@
                                    url="fullImageUrl"
                                    name="currentName || props.alt"
                                    close.bind="closePreview"/>
+
+        <!-- ============ 新增图片上传弹窗（点击/拖放/Ctrl+V） ============ -->
+        <ProductImageUploadDialog t-if="state.uploadOpen"
+                                  acceptedFileExtensions="props.acceptedFileExtensions"
+                                  onUploaded.bind="onFileUploaded"
+                                  close.bind="closeUploadModal"/>
     </t>
 
 </templates>

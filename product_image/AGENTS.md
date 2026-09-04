@@ -12,8 +12,9 @@
 - 继承模型：`product.template`
 - 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单原生 `image_1920` 字段 widget）
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
+- 自定义上传弹窗：`ProductImageUploadDialog`（点击/拖放/Ctrl+V 三种上传方式）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `image_uploader`）
-- 当前版本：`19.0.2.0.4`
+- 当前版本：`19.0.2.0.5`
 
 ---
 
@@ -82,10 +83,12 @@
 | `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口） |
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
-| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（主图替换·删除提升·图库删除·滚动·上传占位首图即主图）/ 粘贴新增 |
-| `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗挂载 |
+| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮放大 / 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（主图替换·删除提升·图库删除·滚动·新增图片开弹窗）/ 上传弹窗挂载 |
+| `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗 + 上传弹窗挂载 |
 | `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |
+| `static/src/js/product_image_upload.js` | `ProductImageUploadDialog`：上传弹窗，点击/拖放/Ctrl+V 三种上传方式，逐张调 onUploaded |
+| `static/src/xml/product_image_upload.xml` | 上传弹窗 QWeb 模板 |
 | `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条） |
 | `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |
 
@@ -134,7 +137,8 @@
 - 上传后未新增：检查 `galleryList.addNewRecord` 是否成功，看控制台报错
 - 主图不在序列首位：主图有值时 widget `displayItems` 第一项即主图；若主图项缺失，检查 `hasMainImage`（`props.record.data[image_1920]`）是否有值
 - 主图替换/清空无效：检查主图项缩略图的 `onMainFileUploaded` / `onMainRemove` 是否写入 `this.props.name`（image_1920）字段
-- 粘贴无反应：确认头像区域获得焦点（根 div 有 `tabindex="0"`）
+- Ctrl+V 粘贴无反应：粘贴已移至上传弹窗——先点「新增图片」打开弹窗，弹窗获焦后再 Ctrl+V；头像区域不再直接响应粘贴
+- 选中缩略图无蓝框：检查 `.o_gallery_thumb_wrap.is-active .o_gallery_thumb` 的 `box-shadow: 0 0 0 2px #0d6efd` 是否加载（`-u` 升级后强刷）
 - 看板无主图：产品主图 `image_1920` 为空时看板无图；主图独立，需直接上传/设置主图字段
 
 ---
