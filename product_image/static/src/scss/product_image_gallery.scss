@@ -92,10 +92,10 @@
         z-index: 1;
     }
 
-    // 缩放/拖拽层：grab 光标（可拖拽），拖动中 grabbing
+    // 缩放/拖拽层：grab 光标（可拖拽），拖动中 grabbing；移除 transform 过渡以实现 1:1 顺滑拖拽
     .o_product_image_preview-zoomer {
         cursor: grab;
-        transition: transform 0.05s ease-out;
+        will-change: transform;
         &.is-dragging {
             cursor: grabbing;
         }
@@ -114,6 +114,12 @@
         z-index: 1000;
         // 透明底时仍保证可点击且不被缩略图列等覆盖
         pointer-events: auto;
+        // 暗色主题：未悬浮时半透明，悬浮才完全显示并高亮按钮自身
+        opacity: 0.5;
+        transition: opacity 0.15s ease, background 0.1s ease;
+        &:hover {
+            opacity: 1;
+        }
     }
 
     // 底部工具条：默认完全透明，鼠标移入其区域时显示（淡入 + 上滑动画，过渡自然）
@@ -169,17 +175,20 @@
             height: 64px;
             object-fit: cover;
             border-radius: 0.25rem;
-            border: 2px solid transparent;
-            background: #fff;
+            border: 0;
+            background: transparent;
             cursor: pointer;
             display: block;
             flex: 0 0 auto;
-            transition: border-color 0.1s ease, transform 0.1s ease;
+            // 用 outline 标识选中/悬浮：未选中时无任何边框，且不引起布局抖动
+            outline: 2px solid transparent;
+            outline-offset: 0;
+            transition: outline-color 0.1s ease;
             &:hover {
-                border-color: rgba(255, 255, 255, 0.7);
+                outline-color: rgba(255, 255, 255, 0.7);
             }
             &.is-active {
-                border-color: #0d6efd;
+                outline-color: #0d6efd;
             }
         }
     }

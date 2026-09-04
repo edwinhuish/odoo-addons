@@ -33,6 +33,8 @@ export class ProductImagePreviewDialog extends Component {
         this.dragStartY = 0;
         // 翻译位移：x/y 为提交后的基准，dx/dy 为拖动中的增量
         this.translate = { dx: 0, dy: 0, x: 0, y: 0 };
+        // 每张图片的独立状态缓存：切换再切回时保留缩放/旋转/位移/已加载
+        this.imageStates = {};
 
         this.zoomStep = 0.5;
         this.scrollZoomStep = 0.1;
@@ -76,20 +78,35 @@ export class ProductImagePreviewDialog extends Component {
         return this.currentImage?.name || _t("产品图片");
     }
 
-    /** 切换图片：重置缩放 / 旋转 / 位移 / 加载状态。 */
+    /** 切换图片：保存当前状态，恢复目标图片之前的状态（缩放/旋转/位移/已加载）。 */
     selectImage(i) {
         const total = this.props.images?.length || 0;
         if (i < 0 || i >= total || i === this.state.index) {
             return;
         }
+        // 保存当前图片状态，切回时恢复
+        this._saveImageState(this.state.index);
         this.state.index = i;
-        this.state.scale = 1;
-        this.state.angle = 0;
-        this.state.imageLoaded = false;
-        this.translate.x = 0;
-        this.translate.y = 0;
+        const s = this.imageStates[i] || { scale: 1, angle: 0, x: 0, y: 0, loaded: false };
+        this.state.scale = s.scale;
+        this.state.angle = s.angle;
+        this.state.imageLoaded = s.loaded;
+        this.translate.x = s.x;
+        this.translate.y = s.y;
         this.translate.dx = 0;
         this.translate.dy = 0;
+        this._updateZoomerStyle();
+    }
+
+    /** 保存指定图片的当前状态到缓存。 */
+    _saveImageState(i) {
+        this.imageStates[i] = {
+            scale: this.state.scale,
+            angle: this.state.angle,
+            x: this.translate.x,
+            y: this.translate.y,
+            loaded: this.state.imageLoaded,
+        };
     }
 
     next() {
@@ -112,6 +129,8 @@ export class ProductImagePreviewDialog extends Component {
 
     onImageLoaded() {
         this.state.imageLoaded = true;
+        // 标记当前图片已加载，切回时立即可见（无闪烁）
+        this._saveImageState(this.state.index);
     }
 
     get imageStyle() {
@@ -164,10 +183,10 @@ export class ProductImagePreviewDialog extends Component {
         if (!zoomer) {
             return;
         }
-        // 任意大小均可拖拽：始终应用位移（无“超出容器才允许”的门槛）
+        // 任意大小均可拖拽：始终应用位移（无“超出容器才允许”的门槛）；translate3d 走 GPU 合成层更顺滑
         const tx = this.translate.x + this.translate.dx;
         const ty = this.translate.y + this.translate.dy;
-        zoomer.style.transform = `translate(${tx}px, ${ty}px)`;
+        zoomer.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
     }
 
     // ------------------------------------------------------------------

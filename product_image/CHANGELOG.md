@@ -1,5 +1,24 @@
 # 变更日志
 
+## [19.0.2.2.4] - 2026-09-04（待验证）
+
+### 变更
+
+- **缩略图未选中无 border**：`.o_preview_thumb` 改为 `border:0; background:transparent`，用 `outline:2px solid transparent` 占位（未选中时完全无边框、无白底框），选中为蓝色 outline、悬浮为白色 outline，且不引起布局抖动。
+- **切换图片保留状态**：新增 `this.imageStates` 缓存，每张图片独立保存 `{scale, angle, x, y, loaded}`。`selectImage` 切换前保存当前、切换后恢复目标图片之前的状态（缩放/旋转/位移/已加载），切换再切回不再重置；`onImageLoaded` 也写入缓存，切回已加载图片立即可见无闪烁。
+- **拖拽更顺滑**：移除 `.o_product_image_preview-zoomer` 的 `transition:transform 0.05s`（此前每次 mousemove 都被缓动滞后，发涩），改为 `will-change:transform`；`_updateZoomerStyle` 改用 `translate3d(...,0)` 走 GPU 合成层，实现 1:1 跟手拖拽。
+- **关闭按钮暗色主题 + 半透明**：`.o_product_image_preview-close` 默认 `opacity:0.5`（未悬浮半透明），悬浮 `opacity:1` 并高亮按钮自身（继承 `.o_preview_iconbtn:hover` 的白色半透明背景），暗色主题一致。
+
+### 影响
+
+- 仅前端改动：`product_image_preview.js`（状态缓存 + translate3d）、SCSS（缩略图 outline、zoomer will-change、关闭按钮半透明）。模型 / 字段 / 视图 / 权限未变。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本、`README.md`、`AGENTS.md`、根 `TODO.md` / `README.md` / `AGENTS.md`。
+
+---
+
 ## [19.0.2.2.3] - 2026-09-04（待验证）
 
 ### 变更
