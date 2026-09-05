@@ -14,7 +14,7 @@
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义图片管理弹窗：`ProductImageManageDialog`（点击「+」打开：上半部分大图 + 平铺缩略图可删除，下半部分上传 dropzone，点击/拖放/Ctrl+V 三种上传；走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `web_image_paste`）
-- 当前版本：`19.0.2.2.12`
+- 当前版本：`19.0.2.2.13`
 
 ---
 

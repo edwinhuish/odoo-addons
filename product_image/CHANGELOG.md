@@ -1,5 +1,25 @@
 # 变更日志
 
+## [19.0.2.2.13] - 2026-09-05
+
+### 变更
+
+- **修复图片管理弹窗打开即报错**：`ProductImageManageDialog` 模板中使用 `items.length`，但组件实例上没有 `items` 属性（数据在 `this.state.items`）——Owl 渲染时模板中的裸标识符 `items` 被解析为组件属性，得 `undefined`，于是抛 `TypeError: Cannot read properties of undefined (reading 'length')`，弹窗无法渲染打开。为该组件补充 `get items()`，与 `currentItem` / `currentName` 写法一致。
+
+### 影响
+
+- 仅 `static/src/js/product_image_manage.js` 新增一个 getter；模型 / 字段 / 视图 / 界面行为均不变。19.0.2.2.12 环境升级本版后图片管理弹窗可用。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本（19.0.2.2.13）、`AGENTS.md`（当前版本）、`README.md`（验证说明）、根 `README.md` / `AGENTS.md` 模块一览表。
+
+### 待验证
+
+- 目标环境升级后验证：编辑态点「+」图片管理弹窗正常打开并渲染大图 / 平铺缩略图；切换、删除（主图自动提升 / 图库删除）、dropzone 上传、Ctrl+V 粘贴自动关闭均正常；此前 19.0.2.2.12 的其余验证项一并验收。
+
+---
+
 ## [19.0.2.2.12] - 2026-09-05（待验证）
 
 ### 变更

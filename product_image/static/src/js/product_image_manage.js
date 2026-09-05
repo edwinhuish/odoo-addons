@@ -55,6 +55,11 @@ export class ProductImageManageDialog extends Component {
     // 数据访问
     // ------------------------------------------------------------------
 
+    /** 展示列表（模板中 items 即指这里；必须提供 getter，否则模板 items.length 读到 undefined）。 */
+    get items() {
+        return this.state.items;
+    }
+
     get currentItem() {
         return this.state.items[this.state.selected] || null;
     }
