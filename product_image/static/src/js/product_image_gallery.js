@@ -430,11 +430,26 @@ export class ProductImageGallery extends Component {
     get manageItems() {
         return this.displayItems.map((item) => ({
             type: item.type,
-            key: item.type === "main" ? "main" : `g${item.record.resId || item.record.id}`,
+            key: this._itemKey(item),
             name: item.name,
             thumbUrl: this.getItemUrl(item, "image_128"),
             bigUrl: this.getItemUrl(item, "image_1024"),
         }));
+    }
+
+    /** 展示项稳定 key：主图固定 'main'，图库图为 g<记录 id>（与缩略图展示项一一对应）。 */
+    _itemKey(item) {
+        return item.type === "main" ? "main" : `g${item.record.resId || item.record.id}`;
+    }
+
+    /** 页面当前展示项的稳定 key：上传等写记录操作后按 key 重新锚定，保持页面大图不变。 */
+    get currentItemKey() {
+        const items = this.displayItems;
+        if (!items.length) {
+            return null;
+        }
+        const idx = Math.min(this.state.currentIndex, items.length - 1);
+        return this._itemKey(items[idx]);
     }
 
     openManageModal() {
@@ -541,28 +556,51 @@ export class ProductImageGallery extends Component {
      * 主图已有值时，追加为图库记录（不影响主图）。
      * 即「列表第一位的图片默认为主图」：首张上传的图即主图。
      *
+     * 上传只写记录、不切换页面展示（19.0.2.2.15 起，点击 / 拖放 / Ctrl+V 上传均不改变
+     * 页面上当前显示的大图）：完成后按上传前展示项的稳定 key 重新锚定当前展示项。
+     *
      * @returns {number|undefined} 新增项在展示序列中的索引（供管理弹窗高亮新图）。
      */
     async onFileUploaded(info) {
+        const anchor = this.currentItemKey;
+        let newIndex;
         if (!this.hasMainImage) {
-            // 主图为空：上传图直接作为主图
+            // 主图为空：上传图直接作为主图（写 image_1920 字段，位于序列首位）
             await this.props.record.update({ [this.props.name]: info.data });
-            this.state.currentIndex = 0;
-            this._clampIndex();
-            return 0;
+            newIndex = 0;
+        } else {
+            const galleryList = this.galleryList;
+            if (!galleryList) {
+                this.notification.add(_t("图库不可用，无法新增图片。"), { type: "danger" });
+                return;
+            }
+            const newRecord = await galleryList.addNewRecord(false);
+            await newRecord.update({ image_1920: info.data });
+            // 新增的图库项位于序列末尾
+            newIndex = this.displayItems.length - 1;
         }
-        const galleryList = this.galleryList;
-        if (!galleryList) {
-            this.notification.add(_t("图库不可用，无法新增图片。"), { type: "danger" });
-            return;
+        this._keepShowing(anchor, newIndex);
+        return newIndex;
+    }
+
+    /**
+     * 上传完成后把页面展示恢复到上传前的那张图：按稳定 key 在最新展示序列中定位
+     * （主图为空上传会把新主图前插到首位，原图库项索引后移，用 key 才能找到同一张图）；
+     * 锚不存在（如上传前页面无图）时回退为展示新增项。
+     */
+    _keepShowing(anchor, newIndex) {
+        if (anchor) {
+            const idx = this.displayItems.findIndex((it) => this._itemKey(it) === anchor);
+            if (idx >= 0) {
+                this.state.currentIndex = idx;
+                this._clampIndex();
+                requestAnimationFrame(() => this._updateThumbOverflow());
+                return;
+            }
         }
-        const newRecord = await galleryList.addNewRecord(false);
-        await newRecord.update({ image_1920: info.data });
-        // 选中新加的图库项（位于序列末尾）
-        const newIndex = this.displayItems.length - 1;
         this.state.currentIndex = newIndex;
         this._clampIndex();
-        return newIndex;
+        requestAnimationFrame(() => this._updateThumbOverflow());
     }
 
     async onGalleryRemove(index, ev) {

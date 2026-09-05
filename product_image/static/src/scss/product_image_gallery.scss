@@ -212,19 +212,33 @@
     }
 
     .modal-header {
-        padding: 0.75rem 1rem;
+        // header 上下无内边距，使关闭按钮自身高度即 header 高度（占满整个 header）
+        padding: 0;
+        align-items: center;
+        // 标题左缘留白
+        .modal-title {
+            padding-left: 1rem;
+        }
         .o_gallery_manage-close {
-            // 关闭按钮：右上角按钮形态（图标 + 文案），hover 高亮
+            // 关闭按钮：正方形（46×46）、无文字内容、顶/右贴齐、占满 header 高，
+            // hover / 键盘聚焦时背景变红
+            width: 46px;
+            height: 46px;
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
-            border-color: #ced4da;
+            justify-content: center;
+            font-size: 1.1rem;
+            line-height: 1;
             color: #495057;
-            white-space: nowrap;
-            &:hover {
-                background: #f8f9fa;
-                border-color: #adb5bd;
-                color: #212529;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            cursor: pointer;
+            transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+            &:hover,
+            &:focus-visible {
+                background: #dc3545; // hover 背景变红
+                color: #fff;
             }
         }
     }
@@ -235,7 +249,7 @@
 
     // ---- 上半部分 ----
 
-    // 删除按钮通用观感（大图预览右上角与网格缩略图共用；定位按容器分别覆盖）
+    // 删除按钮观感（仅缩略图网格中的非主图项使用：右上角角标）
     .o_gallery_manage-del {
         position: absolute;
         top: 4px;
