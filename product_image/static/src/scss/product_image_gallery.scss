@@ -279,6 +279,33 @@
         }
     }
 
+    // 大图预览列：宽度固定（flex 不参与分配，防长文本撑宽侵占缩略图区域）。
+    // 列的自然高度即上行总高基准，且内部恒定——大图盒 250×250、
+    // 名称单行截断（.o_gallery_manage-name）、提示固定行高（.o_gallery_manage-hint），
+    // 因此切换不同图片（含有无图片）时整个上半区尺寸不变。
+    .o_gallery_manage-preview {
+        width: 250px;
+        flex: 0 0 250px;
+        min-width: 0;
+
+        // 图片名称：单行截断，行高恒定
+        .o_gallery_manage-name {
+            max-width: 100%;
+            margin-bottom: 0;
+            line-height: 1.4;
+            white-space: nowrap;
+        }
+
+        // 说明文字：固定两行高度（文本内容恒定，不随图片切换变化）
+        .o_gallery_manage-hint {
+            font-size: 0.72rem;
+            line-height: 1.35;
+            height: 2.7em; // 恰容两行
+            margin-bottom: 0;
+            overflow: hidden;
+        }
+    }
+
     // 大图预览盒：固定 250x250 正方形
     .o_gallery_manage-previewbox {
         width: 250px;
@@ -295,21 +322,24 @@
         }
     }
 
-    // 平铺缩略图网格：内部 padding 为删除按钮凸出出血；超高时纵向滚动
+    // 平铺缩略图容器：占满预览列之外的剩余全部宽度与行高（行高由预览列自然高度
+    // 决定、始终与之等高，即 stretch 至上行高度）；自身不再有流内内容参与行高计算。
     .o_gallery_manage-thumbs {
+        position: relative;
         min-width: 0;
     }
 
+    // 网格绝对填满缩略图容器：超高时内部滚动；padding 供删除按钮凸出出血。
+    // 由于绝对定位脱离流内布局，网格内容多少都不会把弹窗撑高。
     .o_gallery_manage-grid {
-        flex: 1 1 auto;
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-wrap: wrap;
         align-content: flex-start;
         gap: 8px;
         padding: 10px;
         overflow-y: auto;
-        min-height: 200px;
-        max-height: 250px;
         border: 1px solid #e9ecef;
         border-radius: 0.375rem;
         background: #fafbfc;

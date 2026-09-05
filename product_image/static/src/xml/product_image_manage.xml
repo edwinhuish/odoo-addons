@@ -4,6 +4,9 @@
     <!--
         图片管理弹窗：编辑态点击「+」（缩略图列末尾占位符）后弹出。
         - 上半部分：左侧大图预览（跟随弹窗内选中项）+ 右侧平铺缩略图网格；
+          · 布局：大图列宽固定（大图盒 250×250），名称单行截断 + 提示固定行高 →
+            切换任意图片（含有无图片）时弹窗尺寸不变；右侧缩略图网格占满除大图列
+            与间距外的全部宽高（超高内部滚动，图片多少也不改变弹窗高度）
           · 大图仅用于预览（无删除按钮）；删除入口统一在缩略图网格——每张缩略图
             （含主图）右上角带 ×：图库图删除该记录，主图删除时图库首张自动提升为新主图
           · 点击缩略图只切换弹窗内大图预览，不影响页面上展示的主图（纯弹窗内状态）
@@ -40,7 +43,10 @@
                         <!-- ============ 上半部分：大图 + 平铺缩略图 ============ -->
                         <div class="o_gallery_manage-top d-flex gap-3 align-items-stretch">
 
-                            <!-- 大图预览（弹窗内选中项；仅作预览，不提供删除按钮） -->
+                            <!-- 大图预览（弹窗内选中项；仅作预览，不提供删除按钮）。
+                                 固定布局：列宽固定 250 + 大图盒 250×250 + 名称单行截断
+                                 + 提示固定行高 → 切换任意图片本列尺寸恒定，
+                                 弹窗上半区与缩略图区高度均不变化 -->
                             <div class="o_gallery_manage-preview d-flex flex-column">
                                 <div class="o_gallery_manage-previewbox position-relative d-flex align-items-center justify-content-center">
                                     <img t-if="currentItem"
@@ -54,17 +60,17 @@
                                         暂无图片
                                     </div>
                                 </div>
-                                <div class="text-muted small text-center mt-1 text-truncate"
-                                     style="max-width: 250px;">
+                                <div class="o_gallery_manage-name text-muted small text-center mt-1 text-truncate">
                                     <span t-if="currentItem" t-esc="currentName"/>
                                     <span t-if="!currentItem">—</span>
                                 </div>
-                                <div class="text-muted small text-center mt-1" style="font-size: .72rem;">
+                                <div class="o_gallery_manage-hint text-muted text-center mt-1">
                                     大图仅用于预览（无删除按钮）；删除请点缩略图右上角 ×（删主图自动提升图库首张）
                                 </div>
                             </div>
 
-                            <!-- 平铺缩略图网格：每张缩略图（含主图）右上角 × 删除 -->
+                            <!-- 平铺缩略图网格：占满预览列之外的剩余全部宽高；每张缩略图
+                                 （含主图）右上角 ×；超高内部滚动，不参与行高计算 -->
                             <div class="o_gallery_manage-thumbs flex-fill d-flex flex-column">
                                 <div class="o_gallery_manage-grid">
                                     <t t-if="items.length">
