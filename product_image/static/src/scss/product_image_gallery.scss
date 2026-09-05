@@ -288,12 +288,14 @@
         flex: 0 0 250px;
         min-width: 0;
 
-        // 图片名称：单行截断，行高恒定
+        // 图片名称：单行截断，固定行高（选中主图时留空也保持同一高度占位）
         .o_gallery_manage-name {
             max-width: 100%;
+            height: 1.4em;
             margin-bottom: 0;
             line-height: 1.4;
             white-space: nowrap;
+            overflow: hidden;
         }
 
         // 说明文字：固定两行高度（文本内容恒定，不随图片切换变化）
@@ -380,6 +382,106 @@
         }
     }
 
+    // ---- 缩略图拖动排序（网格切为绝对定位 + transform 布局） ----
+
+    // 拖动进行中：占满后的相对定位网格 + 绝对定位 tile（平滑避让动画）
+    .o_gallery_manage-grid.is-sorting {
+        user-select: none;
+        touch-action: none;
+        cursor: grabbing;
+
+        .o_gallery_manage-tile {
+            position: absolute;
+            left: 10px;
+            top: 10px;
+            margin: 0;
+            transition: transform 0.16s ease;
+            will-change: transform;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+
+            // 拖动中的主块：浮起跟随指针
+            &.o_gm-drag {
+                z-index: 30;
+                opacity: 0.95;
+                cursor: grabbing;
+                box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+                border-radius: 0.375rem;
+            }
+        }
+
+        // 排序过程隐藏 × 与勾选圈，避免误触
+        .o_gallery_manage-del,
+        .o_gallery_manage-check {
+            display: none;
+        }
+    }
+
+    // 排序占位撑高元素（absolute 布局下保证网格内容可滚动到底）
+    .o_gallery_manage-sort-spacer {
+        width: 100%;
+        height: 0;
+        flex: 0 0 auto;
+    }
+
+    // 缩略图可拖动提示（主图不参与，无此 class）
+    .o_gallery_manage-tile.o_gm-sortable {
+        cursor: grab;
+
+        img {
+            cursor: grab;
+        }
+    }
+
+    // 批量勾选：左上角勾选圈 + 勾选态
+    .o_gallery_manage-tile .o_gallery_manage-check {
+        position: absolute;
+        top: -6px;
+        left: -6px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #fff;
+        border: 1px solid #adb5bd;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.6rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+        cursor: pointer;
+    }
+
+    .o_gallery_manage-tile.is-checked {
+        border-color: #0d6efd;
+        background: #e9f2ff;
+
+        .o_gallery_manage-check {
+            background: #0d6efd;
+            border-color: #0d6efd;
+        }
+    }
+
+    // ---- header 批量操作 ----
+
+    .o_gm_headerbtn {
+        border: 0;
+        color: #495057;
+
+        &:hover {
+            color: #0d6efd;
+            background: #e9ecef;
+        }
+    }
+
+    .o_gm_selcount {
+        line-height: 1;
+
+        &.o_gm_selcount-on {
+            color: #0d6efd;
+            font-weight: 600;
+        }
+    }
+
     // ---- 分割线与下半部分（上传 dropzone） ----
 
     .o_gallery_manage-divider {
@@ -459,5 +561,118 @@
                 font-size: 1rem;
             }
         }
+    }
+
+    // ---- 删除确认框（覆盖在弹窗之上，含缩略图清单） ----
+
+    .o_gallery_manage-confirm-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1200;
+        background: rgba(0, 0, 0, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .o_gallery_manage-confirm {
+        width: 440px;
+        max-width: calc(100vw - 2rem);
+        background: #fff;
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+        overflow: hidden;
+    }
+
+    .o_gallery_manage-confirm-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.65rem 1rem 0.6rem;
+        border-bottom: 1px solid #f0f0f0;
+
+        .o_gallery_manage-confirm-title {
+            font-weight: 600;
+            color: #343a40;
+
+            i {
+                color: #dc3545;
+            }
+        }
+
+        .o_gallery_manage-confirm-x {
+            border: 0;
+            background: transparent;
+            color: #6c757d;
+            padding: 2px 6px;
+            border-radius: 4px;
+
+            &:hover {
+                color: #dc3545;
+                background: rgba(0, 0, 0, 0.05);
+            }
+        }
+    }
+
+    .o_gallery_manage-confirm-body {
+        padding: 0.8rem 1rem;
+
+        .o_gallery_manage-confirm-msg {
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: #495057;
+        }
+    }
+
+    // 确认框内缩略图清单：小图 + 主图标签
+    .o_gallery_manage-confirm-thumbs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 0.6rem;
+        max-height: 180px;
+        overflow-y: auto;
+        padding-right: 2px;
+        scrollbar-width: thin;
+    }
+
+    .o_gallery_manage-confirm-thumb {
+        position: relative;
+        width: 56px;
+        height: 56px;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        overflow: hidden;
+        background: #fff;
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .o_gallery_manage-confirm-tag {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            font-size: 0.55rem;
+            line-height: 1.2;
+            padding: 1px 0;
+            text-align: center;
+            background: rgba(13, 110, 253, 0.85);
+            color: #fff;
+        }
+    }
+
+    .o_gallery_manage-confirm-foot {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        padding: 0.6rem 1rem;
+        background: #f8f9fa;
+        border-top: 1px solid #f0f0f0;
     }
 }

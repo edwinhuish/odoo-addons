@@ -4,17 +4,19 @@
     <!--
         图片管理弹窗：编辑态点击「+」（缩略图列末尾占位符）后弹出。
         - 上半部分：左侧大图预览（跟随弹窗内选中项）+ 右侧平铺缩略图网格；
-          · 布局：大图列宽固定（大图盒 250×250），名称单行截断 + 提示固定行高 →
-            切换任意图片（含有无图片）时弹窗尺寸不变；右侧缩略图网格占满除大图列
-            与间距外的全部宽高（超高内部滚动，图片多少也不改变弹窗高度）
-          · 大图仅用于预览（无删除按钮）；删除入口统一在缩略图网格——每张缩略图
-            （含主图）右上角带 ×：图库图删除该记录，主图删除时图库首张自动提升为新主图
-          · 点击缩略图只切换弹窗内大图预览，不影响页面上展示的主图（纯弹窗内状态）
+          · 布局：大图列宽固定（大图盒 250×250），名称单行截断（固定行高）+
+            提示固定行高 → 切换任意图片（含有无图片）时弹窗尺寸不变；缩略图网格
+            占满除大图列与间距外的全部宽高（超高内部滚动，图片多少也不改变高度）
+          · 大图仅用于预览（无删除按钮）；大图名称行：选中主图时留空不显示“主图”
+          · 缩略图拖动排序：主图固定首位不参与，拖动时其余缩略图平滑避让，
+            松手落位后写回图库 sequence（保存产品时一并生效）
+          · 删除入口在缩略图网格（×）与 header「批量删除」；任何删除都有确认框
+            （带图片缩略图；主图删除提示图库首张自动提升）
         - 下半部分：图片 dropzone（点击选择 / 拖放 / Ctrl+V），自实现文件选择；
           每张上传中的图片立即显示本地缩略图 + 转圈动画，完成后自动移除并入网格；
           Ctrl+V 粘贴上传完成后不自动关闭弹窗
         - 关闭按钮：modal-header 最右侧正方形按钮（无文字、占满 header 高度，hover 变红）
-        - 列表 / 数据通过 props（getItems/onDelete/onUploaded 绑定到 gallery widget）
+        - 列表 / 数据通过 props（getItems/onDelete/onReorder/onUploaded 绑定到 gallery widget）
           与后台记录保持同步；本弹窗作为顶层 overlay，避免 record.update 重渲染
           gallery 时波及弹窗（粘贴上传闪烁）
     -->
@@ -29,14 +31,44 @@
                 <div class="modal-content">
                     <div class="modal-header align-items-center">
                         <h5 class="modal-title mb-0">图片管理</h5>
-                        <!-- 关闭按钮：右上角、正方形、无文字、占满 header 高，hover 变红 -->
-                        <button type="button"
-                                class="o_gallery_manage-close"
-                                t-on-click="close"
-                                aria-label="关闭"
-                                title="关闭 (Esc)">
-                            <i class="fa fa-times"/>
-                        </button>
+                        <!-- header 右侧操作区：批量删除 / 勾选态操作 + 关闭按钮 -->
+                        <div class="d-flex align-items-center gap-1 pe-1">
+                            <template t-if="state.selectMode">
+                                <span class="small text-muted o_gm_selcount"
+                                      t-att-class="checkedCount ? 'o_gm_selcount-on' : ''">
+                                    已选 <t t-esc="checkedCount"/> 张
+                                </span>
+                                <button type="button"
+                                        class="btn btn-sm btn-danger d-inline-flex align-items-center gap-1"
+                                        t-att-disabled="checkedCount == 0"
+                                        t-on-click="requestBatchDelete"
+                                        title="删除所选图片">
+                                    <i class="fa fa-trash"/>
+                                    删除
+                                </button>
+                                <button type="button"
+                                        class="btn btn-sm btn-link"
+                                        t-on-click="_exitSelectMode">
+                                    取消
+                                </button>
+                            </template>
+                            <button t-elif="items.length > 1"
+                                    type="button"
+                                    class="o_gm_headerbtn btn btn-sm btn-light d-inline-flex align-items-center gap-1"
+                                    t-on-click="enterSelectMode"
+                                    title="勾选多张图片后批量删除">
+                                <i class="fa fa-check-square-o"/>
+                                批量删除
+                            </button>
+                            <!-- 关闭按钮：右上角、正方形、无文字、占满 header 高，hover 变红 -->
+                            <button type="button"
+                                    class="o_gallery_manage-close"
+                                    t-on-click="close"
+                                    aria-label="关闭"
+                                    title="关闭 (Esc)">
+                                <i class="fa fa-times"/>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="modal-body">
@@ -45,8 +77,8 @@
 
                             <!-- 大图预览（弹窗内选中项；仅作预览，不提供删除按钮）。
                                  固定布局：列宽固定 250 + 大图盒 250×250 + 名称单行截断
-                                 + 提示固定行高 → 切换任意图片本列尺寸恒定，
-                                 弹窗上半区与缩略图区高度均不变化 -->
+                                 （固定行高）+ 提示固定行高 → 切换任意图片本列尺寸恒定。
+                                 选中主图时名称行留空（不显示“主图”），行高仍占位 -->
                             <div class="o_gallery_manage-preview d-flex flex-column">
                                 <div class="o_gallery_manage-previewbox position-relative d-flex align-items-center justify-content-center">
                                     <img t-if="currentItem"
@@ -61,39 +93,55 @@
                                     </div>
                                 </div>
                                 <div class="o_gallery_manage-name text-muted small text-center mt-1 text-truncate">
-                                    <span t-if="currentItem" t-esc="currentName"/>
-                                    <span t-if="!currentItem">—</span>
+                                    <span t-if="showName" t-esc="currentName"/>
+                                    <span t-if="!showName">&nbsp;</span>
                                 </div>
                                 <div class="o_gallery_manage-hint text-muted text-center mt-1">
-                                    大图仅用于预览（无删除按钮）；删除请点缩略图右上角 ×（删主图自动提升图库首张）
+                                    拖动缩略图可排序；删除均有确认（批量删除在右上角）
                                 </div>
                             </div>
 
                             <!-- 平铺缩略图网格：占满预览列之外的剩余全部宽高；每张缩略图
-                                 （含主图）右上角 ×；超高内部滚动，不参与行高计算 -->
+                                 （含主图）右上角 ×；超高内部滚动，不参与行高计算。
+                                 拖动排序 / 勾选模式下网格切为绝对定位 + transform 布局 -->
                             <div class="o_gallery_manage-thumbs flex-fill d-flex flex-column">
-                                <div class="o_gallery_manage-grid">
+                                <div class="o_gallery_manage-grid"
+                                     t-ref="grid"
+                                     t-att-class="state.drag ? ' is-sorting' : ''">
                                     <t t-if="items.length">
                                         <t t-foreach="items" t-as="it" t-key="it.key">
                                             <div class="o_gallery_manage-tile position-relative"
-                                                 t-att-class="it_index === state.selected ? 'is-selected' : ''">
+                                                 t-att-class="tileClasses(it_index)"
+                                                 t-att-style="tileStyle(it_index)"
+                                                 t-on-click="(ev) => this.onTileClick(it_index, ev)"
+                                                 t-on-pointerdown="(ev) => this.onSortPointerDown(it_index, ev)">
                                                 <img loading="lazy"
                                                      class="img"
                                                      t-att-src="it.thumbUrl"
                                                      t-att-alt="it.name"
                                                      t-att-title="it.name"
-                                                     t-on-click="() => this.selectItem(it_index)"
                                                      draggable="false"/>
-                                                <!-- 所有缩略图（含主图）均可删除；主图删除自动提升图库首张 -->
-                                                <button type="button"
+                                                <!-- 批量勾选态：左上角勾选圈（主图也可勾选删除） -->
+                                                <div t-if="state.selectMode"
+                                                     class="o_gallery_manage-check">
+                                                    <i t-if="state.checkedKeys.includes(it.key)"
+                                                       class="fa fa-check"/>
+                                                </div>
+                                                <!-- 正常态：右上角 × 删除（先确认） -->
+                                                <button t-if="!state.selectMode"
+                                                        type="button"
                                                         class="o_gallery_manage-del"
-                                                        t-on-click.stop="() => this.deleteItem(it_index)"
+                                                        t-on-click.stop="() => this.requestDelete(it_index)"
                                                         t-att-aria-label="'删除' + it.name"
                                                         title="删除该图片">
                                                     <i class="fa fa-times"/>
                                                 </button>
                                             </div>
                                         </t>
+                                        <!-- 拖动排序时撑高网格内容（absolute 布局下保底可滚动） -->
+                                        <div t-if="state.drag"
+                                             class="o_gallery_manage-sort-spacer"
+                                             t-att-style="'height:' + state.drag.spacerH + 'px'"/>
                                     </t>
                                     <div t-if="!items.length" class="text-muted small w-100">
                                         暂无图片，请在下方上传。
@@ -148,6 +196,56 @@
                                 </t>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============ 删除确认框（覆盖在弹窗之上；带图片缩略图清单） ============ -->
+            <div t-if="state.confirm"
+                 class="o_gallery_manage-confirm-overlay"
+                 t-on-click.self="cancelConfirm">
+                <div class="o_gallery_manage-confirm">
+                    <div class="o_gallery_manage-confirm-head">
+                        <span class="o_gallery_manage-confirm-title">
+                            <i class="fa fa-exclamation-triangle me-2"/>
+                            <t t-esc="state.confirm.title"/>
+                        </span>
+                        <button type="button"
+                                class="o_gallery_manage-confirm-x"
+                                t-on-click="cancelConfirm"
+                                aria-label="关闭">
+                            <i class="fa fa-times"/>
+                        </button>
+                    </div>
+                    <div class="o_gallery_manage-confirm-body">
+                        <p class="o_gallery_manage-confirm-msg mb-0">
+                            <t t-esc="state.confirm.message"/>
+                        </p>
+                        <div class="o_gallery_manage-confirm-thumbs">
+                            <t t-foreach="state.confirm.items" t-as="ci" t-key="ci.key">
+                                <div class="o_gallery_manage-confirm-thumb"
+                                     t-att-title="ci.name">
+                                    <img t-att-src="ci.thumbUrl"
+                                         t-att-alt="ci.name"
+                                         draggable="false"/>
+                                    <span t-if="ci.type === 'main'"
+                                          class="o_gallery_manage-confirm-tag">主图</span>
+                                </div>
+                            </t>
+                        </div>
+                    </div>
+                    <div class="o_gallery_manage-confirm-foot">
+                        <button type="button"
+                                class="btn btn-sm btn-secondary"
+                                t-on-click="cancelConfirm">
+                            取消
+                        </button>
+                        <button type="button"
+                                class="btn btn-sm btn-danger"
+                                t-on-click="confirmDelete">
+                            <i class="fa fa-trash me-1"/>
+                            <t t-esc="state.confirm.confirmLabel"/>
+                        </button>
                     </div>
                 </div>
             </div>

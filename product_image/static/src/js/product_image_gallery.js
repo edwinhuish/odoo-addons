@@ -462,8 +462,10 @@ export class ProductImageGallery extends Component {
             initialIndex: this.state.currentIndex,
             getItems: () => this.manageItems,
             // 弹窗内的缩略图切换只影响弹窗自身大图预览，不回传本 widget；
-            // 删除 / 上传为记录操作，走下方 onDelete / onUploaded
+            // 删除 / 上传为记录操作，走下方 onDelete / onUploaded；
+            // 拖动排序（写回图库 sequence）走 onReorder
             onDelete: (type, key) => this.onManageDelete(type, key),
+            onReorder: (keys) => this.onManageReorder(keys),
             onUploaded: (info) => this.onFileUploaded(info),
         });
     }
@@ -479,14 +481,69 @@ export class ProductImageGallery extends Component {
             await this.onMainRemove();
             return;
         }
+        // key 形如 'g<resId>'（见 _itemKey / manageItems），解析出记录 id 再定位，
+        // 避免删除列表后索引漂移（此前直接拿数字与 key 比较导致图库删除失效）
+        const gid = this._gidFromKey(key);
         const items = this.displayItems;
         const index = items.findIndex(
-            (it) => it.type === "gallery" && (it.record.resId || it.record.id) === key
+            (it) =>
+                it.type === "gallery" &&
+                (it.record.resId || it.record.id) === gid
         );
         if (index < 0) {
             return;
         }
         await this.onGalleryRemove(index);
+    }
+
+    /**
+     * 管理弹窗内拖动排序：把最终展示序列（keys，'main' 恒为第一项）写回图库 sequence。
+     * 图库项按 10 为步长重排（与后端默认 10、追加末尾时 +10 的策略一致，
+     * 避免 1..N 连续重排后新增图片的默认 10 插到中间）。
+     */
+    async onManageReorder(keys) {
+        const gallery = this.galleryRecords;
+        if (!gallery.length || !Array.isArray(keys)) {
+            return;
+        }
+        // 解析最终顺序：key → sequence（主图项不参与，始终占首位）
+        const target = new Map(); // resId → 目标 sequence
+        let seq = 0;
+        for (const key of keys) {
+            if (key === "main") {
+                continue;
+            }
+            const gid = this._gidFromKey(key);
+            if (gid === null) {
+                continue;
+            }
+            seq += 10;
+            target.set(gid, seq);
+        }
+        if (!target.size) {
+            return;
+        }
+        const updates = [];
+        for (const rec of gallery) {
+            const id = rec.resId || rec.id;
+            const next = target.get(id);
+            if (next !== undefined && (rec.data.sequence ?? 10) !== next) {
+                updates.push([rec, next]);
+            }
+        }
+        for (const [rec, next] of updates) {
+            await rec.update({ sequence: next });
+        }
+    }
+
+    /** 把弹窗 key（'g<resId>'）解析为图库记录 id；非法返回 null。 */
+    _gidFromKey(key) {
+        const s = String(key ?? "");
+        if (!s.startsWith("g")) {
+            return null;
+        }
+        const n = Number(s.slice(1));
+        return Number.isFinite(n) ? n : null;
     }
 
     // ------------------------------------------------------------------
@@ -574,8 +631,14 @@ export class ProductImageGallery extends Component {
                 this.notification.add(_t("图库不可用，无法新增图片。"), { type: "danger" });
                 return;
             }
+            // 追加到序列末尾：取当前最大 sequence（默认 10）+10 写入，
+            // 保证拖动重排（10/20/…）之后新上传仍排到末尾而非默认 10 插到中间
+            let maxSeq = 10;
+            for (const rec of this.galleryRecords) {
+                maxSeq = Math.max(maxSeq, rec.data.sequence ?? 10);
+            }
             const newRecord = await galleryList.addNewRecord(false);
-            await newRecord.update({ image_1920: info.data });
+            await newRecord.update({ image_1920: info.data, sequence: maxSeq + 10 });
             // 新增的图库项位于序列末尾
             newIndex = this.displayItems.length - 1;
         }
