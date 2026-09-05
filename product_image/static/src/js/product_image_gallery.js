@@ -29,8 +29,10 @@ const placeholder = "/web/static/img/placeholder.png";
  * - 缩略图总高超出主图高度时，顶部/底部出现上下滚动按钮
  * - 选中缩略图带一圈蓝色边框（border）
  * - 末端「新增图片」占位符（编辑态）：点击弹出「图片管理」弹窗
- *   （见 product_image_manage.js）——上半部分大图 + 平铺缩略图（右上角 × 删除，
- *   主图删除自动提升下一张为主图），下半部分上传 dropzone（点击/拖放/Ctrl+V）
+ *   （见 product_image_manage.js）——上半部分大图 + 平铺缩略图（仅图库图右上角 ×
+ *   可删除，主图不显示删除按钮；点击缩略图只切换弹窗内大图，不影响页面主图），
+ *   下半部分上传 dropzone（点击/拖放/Ctrl+V；上传中即时显示缩略图与动画，
+ *   粘贴后不自动关闭弹窗）
  * - 浏览切换为纯前端状态，不写库；管理弹窗内的删除/上传才写库
  *
  * 数据来源：
@@ -416,12 +418,14 @@ export class ProductImageGallery extends Component {
 
     // ------------------------------------------------------------------
     // 图片管理弹窗：点击「新增图片」按钮打开（顶层 overlay，与 gallery 渲染树解耦）
-    // 上半部分：大图 + 平铺缩略图（右上角 × 删除，主图删除自动提升）；下半部分：上传 dropzone
+    // 上半部分：大图 + 平铺缩略图（主图无删除按钮，仅图库图可删）；下半部分：上传 dropzone
     // ------------------------------------------------------------------
 
     /**
      * 管理弹窗用的展示列表快照：与 displayItems 顺序一致，供弹窗渲染。
      * key 用于弹窗内按项删除（防删除后索引漂移删错图）。
+     * 弹窗内的「选中切换」是弹窗自身的展示状态，不回传本 widget；
+     * 仅删除 / 上传（写记录）后经 getItems() 重新拉取快照同步。
      */
     get manageItems() {
         return this.displayItems.map((item) => ({
@@ -441,7 +445,8 @@ export class ProductImageGallery extends Component {
             acceptedFileExtensions: this.props.acceptedFileExtensions,
             initialIndex: this.state.currentIndex,
             getItems: () => this.manageItems,
-            onSelect: (index) => this.onSelectItem(index),
+            // 弹窗内的缩略图切换只影响弹窗自身大图预览，不回传本 widget；
+            // 删除 / 上传为记录操作，走下方 onDelete / onUploaded
             onDelete: (type, key) => this.onManageDelete(type, key),
             onUploaded: (info) => this.onFileUploaded(info),
         });
@@ -449,8 +454,9 @@ export class ProductImageGallery extends Component {
 
     /**
      * 管理弹窗内的删除：按 type/key 定位当前展示项。
-     * key 相比索引更稳（删除后列表收缩，索引会漂移）；
-     * main 仅存在一张，删除走 onMainRemove（图库非空自动提升首张为主图）。
+     * key 相比索引更稳（删除后列表收缩，索引会漂移）。
+     * 弹窗已不提供主图删除按钮，正常只会收到 gallery 项；main 分支保留防御性
+     * 处理（图库非空自动提升首张为主图），供潜在其它调用使用。
      */
     async onManageDelete(type, key) {
         if (type === "main") {
@@ -468,12 +474,13 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 主图项编辑：删除（删除时自动提升图库首张为主图）
-    // 主图不再支持「替换」按钮——要换主图，先删除主图（下一个自动提升），再上传新主图
+    // 主图项删除（防御性实现，当前 UI 无入口：19.0.2.2.14 起主图不显示删除按钮）
+    // 删除主图时自动提升图库首张为主图；不再支持「替换」按钮
     // ------------------------------------------------------------------
 
     /**
-     * 删除主图：图库非空时自动提升首张图库图为主图。
+     * 删除主图（防御性：UI 已无删除主图入口，仅 onManageDelete('main') 等潜在调用可达）：
+     * 图库非空时自动提升首张图库图为主图。
      *
      * 提升即「移动」：把图库首张图的图片数据写入主图字段（image_1920），
      * 并删除该图库记录——不复制、不重复展示。
