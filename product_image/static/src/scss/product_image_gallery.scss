@@ -212,7 +212,10 @@
     }
 
     .modal-header {
-        // header 上下无内边距，使关闭按钮自身高度即 header 高度（占满整个 header）
+        // header 上下无内边距，使关闭按钮自身高度即 header 高度（占满整个 header）；
+        // 两端对齐：标题靠左、关闭按钮贴最右侧
+        display: flex;
+        justify-content: space-between;
         padding: 0;
         align-items: center;
         // 标题左缘留白
@@ -249,7 +252,7 @@
 
     // ---- 上半部分 ----
 
-    // 删除按钮观感（仅缩略图网格中的非主图项使用：右上角角标）
+    // 删除按钮观感（缩略图网格中每张缩略图——含主图——使用：右上角角标）
     .o_gallery_manage-del {
         position: absolute;
         top: 4px;

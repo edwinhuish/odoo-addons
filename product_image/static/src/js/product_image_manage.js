@@ -11,7 +11,8 @@ import { _t } from "@web/core/l10n/translation";
  * 图片管理弹窗（编辑态点击「新增图片」后弹出）。
  *
  * - 上半部分：左侧大图预览（仅作预览，不提供删除按钮）+ 右侧平铺缩略图网格；
- *   删除入口只在缩略图网格——仅非主图（图库）项右上角 × 可删除，主图项无删除按钮；
+ *   删除入口只在缩略图网格——每张缩略图（含主图）右上角 × 可删除；
+ *   删除主图时图库首张自动提升为新主图（提升逻辑在 gallery widget）；
  *   点击缩略图只切换本弹窗大图预览，不影响页面上展示的主图（纯弹窗内状态）
  * - 下半部分：图片 dropzone（点击选择 / 拖放 / Ctrl+V），每张上传中的图片
  *   即时显示本地缩略图 + 转圈动画（上传队列），完成后自动移除并入上方网格；
@@ -20,7 +21,7 @@ import { _t } from "@web/core/l10n/translation";
  * 数据同步：
  * - 弹窗不直接持有记录，通过 props 回调与 gallery widget 交互：
  *   · getItems()：取最新展示列表快照（增删后重新拉取，避免快照过期）
- *   · onDelete(type, key)：删除图库图片（按 key 定位，防索引漂移；主图不可删）
+ *   · onDelete(type, key)：删除图库记录 / 主图（主图删除自动提升图库首张；按 key 定位防漂移）
  *   · onUploaded(info)：写入主图或追加图库，返回新增项索引
  * - 以顶层 main_components overlay 挂载（与 gallery 渲染树解耦），
  *   避免 record.update 重渲染 gallery 时弹窗被重建 / 闪烁。
@@ -37,7 +38,7 @@ export class ProductImageManageDialog extends Component {
         acceptedFileExtensions: { type: String, optional: true },
         initialIndex: { type: Number, optional: true },
         getItems: Function, // () => [{ type, key, name, thumbUrl, bigUrl }]
-        onDelete: Function, // async (type, key) => void 仅图库项
+        onDelete: Function, // async (type, key) => void 删除图库记录 / 主图（删主图自动提升）
         onUploaded: Function, // async (info) => number 返回新增项索引
         close: Function,
     };
@@ -109,12 +110,14 @@ export class ProductImageManageDialog extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 删除（仅图库项；主图项无删除入口）
+    // 删除：缩略图网格中每张图（含主图）右上角 ×。
+    // 主图删除由 gallery widget 处理（图库非空时首张自动提升为新主图），
+    // 弹窗只按 key 转发并重拉列表快照。
     // ------------------------------------------------------------------
 
     async deleteItem(i) {
         const item = this.state.items[i];
-        if (!item || item.type === "main" || this._busy) {
+        if (!item || this._busy) {
             return;
         }
         this._busy = true;

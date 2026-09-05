@@ -4,13 +4,13 @@
     <!--
         图片管理弹窗：编辑态点击「+」（缩略图列末尾占位符）后弹出。
         - 上半部分：左侧大图预览（跟随弹窗内选中项）+ 右侧平铺缩略图网格；
-          · 大图仅用于预览（无删除按钮）；删除统一在缩略图网格——仅非主图项右上角带 ×，
-            主图项无删除入口
+          · 大图仅用于预览（无删除按钮）；删除入口统一在缩略图网格——每张缩略图
+            （含主图）右上角带 ×：图库图删除该记录，主图删除时图库首张自动提升为新主图
           · 点击缩略图只切换弹窗内大图预览，不影响页面上展示的主图（纯弹窗内状态）
         - 下半部分：图片 dropzone（点击选择 / 拖放 / Ctrl+V），自实现文件选择；
           每张上传中的图片立即显示本地缩略图 + 转圈动画，完成后自动移除并入网格；
           Ctrl+V 粘贴上传完成后不自动关闭弹窗
-        - 关闭按钮：modal-header 右上角正方形按钮（无文字、占满 header 高度，hover 变红）
+        - 关闭按钮：modal-header 最右侧正方形按钮（无文字、占满 header 高度，hover 变红）
         - 列表 / 数据通过 props（getItems/onDelete/onUploaded 绑定到 gallery widget）
           与后台记录保持同步；本弹窗作为顶层 overlay，避免 record.update 重渲染
           gallery 时波及弹窗（粘贴上传闪烁）
@@ -60,11 +60,11 @@
                                     <span t-if="!currentItem">—</span>
                                 </div>
                                 <div class="text-muted small text-center mt-1" style="font-size: .72rem;">
-                                    大图仅用于预览（无删除按钮）；删除图库图请用缩略图右上角 ×
+                                    大图仅用于预览（无删除按钮）；删除请点缩略图右上角 ×（删主图自动提升图库首张）
                                 </div>
                             </div>
 
-                            <!-- 平铺缩略图网格：主图无删除按钮，图库图带 × 删除 -->
+                            <!-- 平铺缩略图网格：每张缩略图（含主图）右上角 × 删除 -->
                             <div class="o_gallery_manage-thumbs flex-fill d-flex flex-column">
                                 <div class="o_gallery_manage-grid">
                                     <t t-if="items.length">
@@ -78,9 +78,8 @@
                                                      t-att-title="it.name"
                                                      t-on-click="() => this.selectItem(it_index)"
                                                      draggable="false"/>
-                                                <!-- 仅图库项可删除；主图不显示删除按钮 -->
-                                                <button t-if="it.type !== 'main'"
-                                                        type="button"
+                                                <!-- 所有缩略图（含主图）均可删除；主图删除自动提升图库首张 -->
+                                                <button type="button"
                                                         class="o_gallery_manage-del"
                                                         t-on-click.stop="() => this.deleteItem(it_index)"
                                                         t-att-aria-label="'删除' + it.name"

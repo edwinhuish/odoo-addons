@@ -12,7 +12,7 @@
 - 继承模型：`product.template`
 - 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单原生 `image_1920` 字段 widget）
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
-- 自定义图片管理弹窗：`ProductImageManageDialog`（点击「+」打开：上半部分大图（仅预览、无删除按钮）+ 平铺缩略图（删除入口只在缩略图网格——仅图库图 ×，主图项无；点击缩略图只切弹窗大图），下半部分上传 dropzone（点击/拖放/Ctrl+V，上传中缩略图 + 动画，粘贴不自动关闭，上传不改变页面大图）；走 `main_components` 注册表顶层 overlay）
+- 自定义图片管理弹窗：`ProductImageManageDialog`（点击「+」打开：上半部分大图（仅预览、无删除按钮）+ 平铺缩略图（每张缩略图含主图右上角 ×——删图库图删记录，删主图自动提升图库首张；点击缩略图只切弹窗大图），下半部分上传 dropzone（点击/拖放/Ctrl+V，上传中缩略图 + 动画，粘贴不自动关闭，上传不改变页面大图）；走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `web_image_paste`）
 - 当前版本：`19.0.2.2.15`
 
@@ -35,12 +35,12 @@
    - 若日后与 `website_sale` 共存，两者模型互不干扰
    - **注意**：模块技术名虽为 `product_image`，但模型名是 `product.image.gallery`，二者不必一致
 
-4. **主图与图库解耦；主图无删除入口，删除按钮只在缩略图网格的图库项（19.0.2.2.14 取消「删除主图自动提升」；19.0.2.2.15 起大图区也不显示删除按钮）**
+4. **主图与图库解耦；大图预览区无删除按钮，删除入口只在缩略图网格（含主图项：删主图自动提升图库首张）**
    - 产品主图 `image_1920` 由原生字段独立管理，列表 / 看板 / 报价单展示它
    - 图库 `product.image.gallery` 只存补充图，**后端不反向同步 / 不覆盖 / 不清空**产品主图
    - 已移除 `_sync_main_image_from_template`、`is_main`、`_get_main_image`、gallery 的 create/write/unlink override
    - 前端展示序列 = [原生主图（若有）] + [图库图片按 `sequence` 升序]，主图永远在第一位（无角标，靠首位隐含）
-   - 头像区缩略图列**只用于选中/切换，不承载删除按钮**；「图片管理」弹窗（点击缩略图列末端「+」打开）中**大图预览区不提供删除按钮**（任何图片），删除入口只在**缩略图网格**——仅图库项右上角 × 可删除，主图项无 ×；要换主图只能等主图为空时重新上传（主图字段无清空 / 替换入口）
+   - 头像区缩略图列**只用于选中/切换，不承载删除按钮**；「图片管理」弹窗（点击缩略图列末端「+」打开）中**大图预览区不提供删除按钮**（任何图片），删除入口只在**缩略图网格**——每张缩略图（含主图）右上角 ×：图库图删除记录，主图删除自动提升图库首张（`onMainRemove`）
    - 选中缩略图用 wrap 的真实 border（默认透明占位，选中蓝色）一圈显示，避免被滚动容器 `overflow` 裁切左右
    - **上传时主图为空** → 上传图直接写 `image_1920`（成为首位主图）；主图已有值 → 追加为图库记录（不影响主图）
    - 「图片管理」弹窗走顶层 `main_components` overlay（`useProductImageManage` hook，与 gallery 渲染树解耦）：上半部分大图预览 + 平铺缩略图网格（仅图库项右上角 × 删除，按 type/key 分派），点击缩略图**只切换弹窗内大图预览、不回传 widget**（19.0.2.2.14 起不影响页面主图）；下半部分上传 dropzone（点击 / 拖放 / Ctrl+V）——**弃用 `web.FileUploader`**（仅有整体 `isUploading` 布尔态、上传时隐藏触发区，无法逐张反馈缩略图 + 动画），自实现文件选择与上传队列（每张图 `objectURL` 本地缩略图 + 转圈动画，读文件用原生 `getDataURLFromFile`、校验用原生 `checkFileSize`、写入走 `onFileUploaded`）；Ctrl+V 粘贴上传**不自动关闭**；关闭按钮为 header 右上角**正方形 × 按钮**（无文字、占满 header 高度、hover 背景变红 #dc3545，见 SCSS `.modal-header .o_gallery_manage-close`）；网格与「+」占位符无 `title` tooltip
@@ -89,7 +89,7 @@
 | `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列（无删除按钮）+ 预览弹窗 |
 | `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |
-| `static/src/js/product_image_manage.js` | `ProductImageManageDialog` + `useProductImageManage` hook：图片管理弹窗（顶层 overlay 走 main_components），上半大图（仅预览、无删除按钮）+ 平铺缩略图（删除入口只在网格：仅图库图 ×，主图项无；点击缩略图只切换弹窗内大图，不回传 widget）；下半 dropzone + 自实现上传队列（点击/拖放/Ctrl+V，缩略图 + 转圈动画，粘贴不自动关闭）；通过 getItems/onDelete/onUploaded 回调与 widget 同步 |
+| `static/src/js/product_image_manage.js` | `ProductImageManageDialog` + `useProductImageManage` hook：图片管理弹窗（顶层 overlay 走 main_components），上半大图（仅预览、无删除按钮）+ 平铺缩略图（删除入口只在网格：每张缩略图含主图 ×，删主图自动提升；点击缩略图只切换弹窗内大图，不回传 widget）；下半 dropzone + 自实现上传队列（点击/拖放/Ctrl+V，缩略图 + 转圈动画，粘贴不自动关闭）；通过 getItems/onDelete/onUploaded 回调与 widget 同步 |
 | `static/src/xml/product_image_manage.xml` | 图片管理弹窗 QWeb 模板 |
 | `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条 / 管理弹窗样式） |
 | `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |
@@ -138,7 +138,7 @@
 - 缩略图不滚动：检查 `.o_gallery_thumb_scroll` 的 `flex:1 1 auto; min-height:0; overflow-y:auto`
 - 上传后未新增：检查 `galleryList.addNewRecord` 是否成功，看控制台报错
 - 主图不在序列首位：主图有值时 widget `displayItems` 第一项即主图；若主图项缺失，检查 `hasMainImage`（`props.record.data[image_1920]`）是否有值
-- 删除按钮出现在主图 / 大图区：网格删除按钮条件为 `it.type !== 'main'`（仅图库项渲染 `.o_gallery_manage-del`）；大图预览区模板中已无删除按钮（19.0.2.2.15 起只作预览）
+- 删除按钮位置与条件：缩略图网格内**每张缩略图（含主图）**渲染 `.o_gallery_manage-del`（无 type 条件）；大图预览区模板无删除按钮（19.0.2.2.15 起只作预览）。删除主图应走 `onManageDelete('main')` → `onMainRemove`（图库首张自动提升 / 图库空则清空），不要直接清主图字段
 - Ctrl+V 粘贴无反应：粘贴在「图片管理」弹窗下半部 dropzone——先点「+」打开弹窗，弹窗获焦后再 Ctrl+V（上传后不自动关闭，可继续粘贴）；头像区域不再直接响应粘贴
 - 选中缩略图无蓝框：检查 `.o_gallery_thumb_wrap.is-active` 的 `border-color: #0d6efd` 是否加载（`-u` 升级后强刷）；预览内缩略图选中用 `.o_preview_thumb.is-active` 的 `outline-color`
 - 头像区缩略图列滚动突出 / 无法贴边：确认 `.o_gallery_thumb_scroll` **无 padding 也无负 margin**（内容盒 = 列内布局占位，行可贴顶/贴底滚动；`margin:-6px` 曾使可视区越出盒体导致滚动越界突出，`padding:6px` 又使首/末行无法贴边）、`.o_gallery_thumbs` / `.o_product_image_gallery` 为 `overflow: visible`；头像区缩略图列**已无删除按钮**（删除在管理弹窗网格内，`.o_gallery_manage-del` 凸出右上角，由 `.o_gallery_manage-grid` 的 padding 吸收，无负 margin）
@@ -171,7 +171,7 @@
 - **继承 `image.mixin` 复用多尺寸**：图库记录写一次 base64，1920/1024/512/256/128 由 related 字段自动生成，无需自建缩放链路。
 - **悬浮放大镜**：固定 1080 图在 540 窗口内 `transform: translate` 平移，鼠标点居中；窗口/图比例驱动蓝色选框尺寸，保证选框与预览内容一一对应。位置级联：左 → 下 → 按比例缩小适配屏幕。
 - **全屏预览**：`translate3d` + `will-change:transform` 走 GPU 合成层、移除 transform 过渡实现 1:1 顺滑拖拽；每图独立状态缓存（scale/angle/translate/loaded），切换再切回不重置；body 滚动锁定消除页面滚动条。
-- **图片管理弹窗顶层 overlay**：走 `main_components` 注册表，与 gallery 渲染树解耦，避免 gallery 重渲染闪烁；弹窗通过 `getItems` / `onDelete` / `onUploaded` 回调操作记录，删除 / 上传后由 widget 重新生成列表快照，弹窗不重建即同步；弹窗内「选中切换」是弹窗自身状态、不回传 widget（19.0.2.2.14 起点缩略图不影响页面主图）；上传自实现队列逐张显示本地缩略图 + 动画；Ctrl+V 粘贴上传后不自动关闭（19.0.2.2.12 起 widget 头像缩略图列不再放删除按钮，删除统一收进该弹窗；19.0.2.2.14 起主图项不再提供删除入口；19.0.2.2.15 起大图预览区亦无删除按钮、删除入口只在缩略图网格，上传不切换页面展示——widget 上传前记录当前展示项稳定 key，写记录后按 key 锚定回原图）。
+- **图片管理弹窗顶层 overlay**：走 `main_components` 注册表，与 gallery 渲染树解耦，避免 gallery 重渲染闪烁；弹窗通过 `getItems` / `onDelete` / `onUploaded` 回调操作记录，删除 / 上传后由 widget 重新生成列表快照，弹窗不重建即同步；弹窗内「选中切换」是弹窗自身状态、不回传 widget（19.0.2.2.14 起点缩略图不影响页面主图）；上传自实现队列逐张显示本地缩略图 + 动画；Ctrl+V 粘贴上传后不自动关闭（19.0.2.2.12 起 widget 头像缩略图列不再放删除按钮，删除统一收进该弹窗；19.0.2.2.15 起大图预览区不提供删除按钮，删除入口在缩略图网格——每张缩略图（含主图）右上角 ×，删除主图经 `onManageDelete('main')` 自动提升图库首张；上传不切换页面展示——widget 上传前记录当前展示项稳定 key，写记录后按 key 锚定回原图）。
 
 ### 遇到的问题及解决方案
 
