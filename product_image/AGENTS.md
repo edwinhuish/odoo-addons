@@ -12,9 +12,9 @@
 - 继承模型：`product.template`
 - 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单原生 `image_1920` 字段 widget）
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
-- 自定义上传弹窗：`ProductImageUploadDialog`（点击/拖放/Ctrl+V 三种上传方式，走 `main_components` 注册表顶层 overlay）
+- 自定义图片管理弹窗：`ProductImageManageDialog`（点击「+」打开：上半部分大图 + 平铺缩略图可删除，下半部分上传 dropzone，点击/拖放/Ctrl+V 三种上传；走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `web_image_paste`）
-- 当前版本：`19.0.2.2.11`
+- 当前版本：`19.0.2.2.12`
 
 ---
 
@@ -40,11 +40,11 @@
    - 图库 `product.image.gallery` 只存补充图，**后端不反向同步 / 不覆盖 / 不清空**产品主图
    - 已移除 `_sync_main_image_from_template`、`is_main`、`_get_main_image`、gallery 的 create/write/unlink override
    - 前端展示序列 = [原生主图（若有）] + [图库图片按 `sequence` 升序]，主图永远在第一位（无角标，靠首位隐含）
-   - 主图项缩略图仅带 ×「删除主图」按钮（**不再有替换主图按钮**：要换主图先删主图，下一个自动提升，再上传新主图）
+   - 头像区缩略图列**只用于选中/切换，不承载删除或替换按钮**（不再有 ×）：删除收进「图片管理」弹窗（点击缩略图列末端「+」打开）；要换主图先删主图，下一个自动提升，再上传新主图
    - **删除主图时**：图库非空 → 把图库首张（`sequence` 升序）图片数据移动到 `image_1920` 字段并删除该图库记录（提升，不复制不重复）；图库为空 → 清空 `image_1920`
    - 选中缩略图用 wrap 的真实 border（默认透明占位，选中蓝色）一圈显示，避免被滚动容器 `overflow` 裁切左右
    - **上传时主图为空** → 上传图直接写 `image_1920`（成为首位主图）；主图已有值 → 追加为图库记录（不影响主图）
-   - 上传弹窗走顶层 `main_components` overlay（`useProductImageUpload` hook，与 gallery 渲染树解耦），Ctrl+V 粘贴上传完成后 `close()` 从注册表移除弹窗（点击 / 拖放不自动关闭）；缩略图删除按钮与「新增图片」占位符无 `title`（无悬浮 tooltip）
+   - 「图片管理」弹窗走顶层 `main_components` overlay（`useProductImageManage` hook，与 gallery 渲染树解耦）：上半部分大图预览 + 平铺缩略图网格（每张右上角 × 删除，删除规则同上按 type/key 分派），下半部分上传 dropzone（点击 / 拖放 / Ctrl+V），粘贴上传完成后 `close()` 移除弹窗（点击 / 拖放不自动关闭）；缩略图网格与「+」占位符无 `title` tooltip
    - 已保存图库记录提升时 `image_1920` 若为 binary size（懒加载），通过 ORM `read` 取真实 base64 再写主图
 
 5. **`is_main` / 首图概念已移除**
@@ -53,7 +53,7 @@
 
 6. **浏览切换为纯前端状态，禁止切换即写库**
    - widget 用 `state.currentIndex` 维护当前选中图，切换不触发 `record.update`
-   - 只有上传 / 删除 / 设为主图 才走 One2many record 操作
+   - 只有上传 / 删除（写主图字段或删图库记录）才触发 `record.update` / One2many record 操作
    - 悬浮放大、点击预览、复制图片均为只读行为，不写库（只读态也允许）
 
 7. **预览弹窗不全局 patch `web.FileViewer`，禁止影响其他附件预览**
@@ -85,13 +85,13 @@
 | `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口） |
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
-| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮局部放大（放大镜跟随鼠标）/ 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（删除提升·图库删除·滚动·新增图片开弹窗·选中蓝边框）/ 上传弹窗挂载 |
-| `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列 + 预览弹窗 + 上传弹窗挂载 |
+| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮局部放大（放大镜跟随鼠标）/ 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（选中切换·滚动·「+」开管理弹窗·选中蓝边框）/ 管理弹窗回调（列表快照 getItems / 删除按 type+key 分派 / 上传写入主图或追加图库） |
+| `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列（无删除按钮）+ 预览弹窗 |
 | `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |
-| `static/src/js/product_image_upload.js` | `ProductImageUploadDialog` + `useProductImageUpload` hook：上传弹窗（顶层 overlay 走 main_components），点击/拖放/Ctrl+V 三种上传，粘贴后自动关闭 |
-| `static/src/xml/product_image_upload.xml` | 上传弹窗 QWeb 模板 |
-| `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条） |
+| `static/src/js/product_image_manage.js` | `ProductImageManageDialog` + `useProductImageManage` hook：图片管理弹窗（顶层 overlay 走 main_components），上半大图 + 平铺缩略图（右上角 × 删除），下半 dropzone（点击/拖放/Ctrl+V，粘贴后自动关闭）；通过 getItems/onSelect/onDelete/onUploaded 回调与 widget 同步 |
+| `static/src/xml/product_image_manage.xml` | 图片管理弹窗 QWeb 模板 |
+| `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条 / 管理弹窗样式） |
 | `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |
 
 ---
@@ -138,10 +138,10 @@
 - 缩略图不滚动：检查 `.o_gallery_thumb_scroll` 的 `flex:1 1 auto; min-height:0; overflow-y:auto`
 - 上传后未新增：检查 `galleryList.addNewRecord` 是否成功，看控制台报错
 - 主图不在序列首位：主图有值时 widget `displayItems` 第一项即主图；若主图项缺失，检查 `hasMainImage`（`props.record.data[image_1920]`）是否有值
-- 主图替换/清空无效：检查主图项缩略图的 `onMainFileUploaded` / `onMainRemove` 是否写入 `this.props.name`（image_1920）字段
-- Ctrl+V 粘贴无反应：粘贴已移至上传弹窗——先点「新增图片」打开弹窗，弹窗获焦后再 Ctrl+V；头像区域不再直接响应粘贴
+- 删除主图未提升：管理弹窗删除主图项走 `onManageDelete('main')` → `onMainRemove`，检查其是否写入 `this.props.name`（image_1920）字段并把图库首张数据搬过来
+- Ctrl+V 粘贴无反应：粘贴在「图片管理」弹窗下半部 dropzone——先点「+」打开弹窗，弹窗获焦后再 Ctrl+V；头像区域不再直接响应粘贴
 - 选中缩略图无蓝框：检查 `.o_gallery_thumb_wrap.is-active` 的 `border-color: #0d6efd` 是否加载（`-u` 升级后强刷）；预览内缩略图选中用 `.o_preview_thumb.is-active` 的 `outline-color`
-- 删除按钮被裁切 / 滚动时缩略图突出 / 内容无法贴边对齐：确认 `.o_gallery_thumb_scroll` **无 padding 也无负 margin**（内容盒 = 列内布局占位，行可贴顶/贴底滚动；`margin:-6px` 曾使可视区越出盒体导致滚动越界突出，`padding:6px` 又使首/末行无法贴边）、`.o_gallery_thumbs` / `.o_product_image_gallery` 为 `overflow: visible`，删除按钮位于 `.o_gallery_thumb_del` 的 `top:2px; right:2px`（缩略图内侧角标，整行可见时必完整可见）
+- 头像区缩略图列滚动突出 / 无法贴边：确认 `.o_gallery_thumb_scroll` **无 padding 也无负 margin**（内容盒 = 列内布局占位，行可贴顶/贴底滚动；`margin:-6px` 曾使可视区越出盒体导致滚动越界突出，`padding:6px` 又使首/末行无法贴边）、`.o_gallery_thumbs` / `.o_product_image_gallery` 为 `overflow: visible`；头像区缩略图列**已无删除按钮**（删除在管理弹窗网格内，`.o_gallery_manage-del` 凸出右上角，由 `.o_gallery_manage-grid` 的 padding 吸收，无负 margin）
 - 看板无主图：产品主图 `image_1920` 为空时看板无图；主图独立，需直接上传/设置主图字段
 
 ---
@@ -171,16 +171,17 @@
 - **继承 `image.mixin` 复用多尺寸**：图库记录写一次 base64，1920/1024/512/256/128 由 related 字段自动生成，无需自建缩放链路。
 - **悬浮放大镜**：固定 1080 图在 540 窗口内 `transform: translate` 平移，鼠标点居中；窗口/图比例驱动蓝色选框尺寸，保证选框与预览内容一一对应。位置级联：左 → 下 → 按比例缩小适配屏幕。
 - **全屏预览**：`translate3d` + `will-change:transform` 走 GPU 合成层、移除 transform 过渡实现 1:1 顺滑拖拽；每图独立状态缓存（scale/angle/translate/loaded），切换再切回不重置；body 滚动锁定消除页面滚动条。
-- **上传弹窗顶层 overlay**：走 `main_components` 注册表，与 gallery 渲染树解耦，避免 gallery 重渲染闪烁；Ctrl+V 粘贴后自动关闭。
+- **图片管理弹窗顶层 overlay**：走 `main_components` 注册表，与 gallery 渲染树解耦，避免 gallery 重渲染闪烁；弹窗通过 `getItems` / `onDelete` / `onUploaded` 回调操作记录，删除 / 上传后由 widget 重新生成列表快照，弹窗不重建即同步；Ctrl+V 粘贴后自动关闭（19.0.2.2.12 起 widget 头像缩略图列不再放删除按钮，删除统一收进该弹窗）。
 
 ### 遇到的问题及解决方案
 
-1. **缩略图删除按钮被裁切 / 缩略图滚动突出 / 内容无法贴边（最终方案：贴边滚动 + × 内侧角标）**
+1. **缩略图删除按钮被裁切 / 缩略图滚动突出 / 内容无法贴边（→ 19.0.2.2.12 头像列删除按钮收敛进管理弹窗）**
    - 现象：右上角红色 × 显示不完整；滚动时缩略图“突出”到上下滚动按钮与列边界之外；移除负 margin 后内容又无法与 180px 区顶 / 底贴边对齐。
    - 根因：`.o_gallery_thumb_scroll` 的 `overflow-y:auto` 使 `overflow-x` 计算为 `auto`（CSS 规范），水平方向会裁切；× 若悬挂在缩略图外侧（`top/right:-5px`），超出滚动可视区即被切掉。曾用 `margin:-6px` 抵消 `padding:6px` 让内容贴边，滚动可视区因此越出其在列内的布局占位，滚动时缩略图“突出”；只去掉 margin、保留 padding 则内容内缩，首 / 末行无法与 180px 区域顶 / 底对齐。
-   - 终解：`.o_gallery_thumbs` / 根容器显式 `overflow: visible`；滚动容器**不加 padding、不加 margin**（内容盒 = 布局占位，行可贴顶 / 贴底滚动，滚动只在自身可视区内裁切，不越界）；删除按钮放回缩略图**内侧角标** `top:2px; right:2px`（历史验证过的形态），整行可见时 × 必完整可见。
-   - **几何结论**：行要贴齐滚动区上缘，按钮就不能画在行上方——「× 悬挂缩略图外侧」与「贴边对齐」不可兼得，贴边场景只能把 × 放在缩略图内侧角标。
-   - **经验**：`overflow-y:auto` 会隐式让 `overflow-x` 变 `auto`（非 visible），凡是「子元素负偏移伸出滚动容器」的角标/badge 都会被裁；要么移入容器内侧，要么给滚动容器加同向 padding 吸收溢出并显式 `overflow:visible` 上层容器；**负 margin 让滚动可视区越出盒体会导致滚动越界“突出”，padding 又让内容无法贴边——若要贴边滚动，角标类元素只能放内侧**。
+   - 头像区终解（19.0.2.2.7~2.2.11）：`.o_gallery_thumbs` / 根容器显式 `overflow: visible`；滚动容器**不加 padding、不加 margin**（内容盒 = 布局占位，行可贴顶 / 贴底滚动，不越界）；× 放缩略图**内侧角标** 才完整可见。
+   - **19.0.2.2.12 迁移**：头像区缩略图列**整体移除删除按钮**（只用于选中切换），删除统一收进「图片管理」弹窗——弹窗下半 dropzone 之外，上半缩略图网格内的 `.o_gallery_manage-del` 凸出缩略图右上角，由 `.o_gallery_manage-grid` 自身 `padding` 吸收出血（仍无负 margin）；大图预览角标因预览盒 `overflow:hidden`，用内侧定位（根作用域默认 `top/right:4px`，网格内覆盖为 `-6px`）。
+   - **几何结论**：行要贴齐滚动区上缘，按钮就不能画在行上方——「× 悬挂行外侧」与「贴边」不可兼得；要么按钮放内侧，要么按钮所在容器自带 padding 吸收出血（该容器内容是否贴边另说）。
+   - **经验**：`overflow-y:auto` 会隐式让 `overflow-x` 变 `auto`（非 visible），凡是「子元素负偏移伸出滚动容器」的角标/badge 都会被裁；**负 margin 让滚动可视区越出盒体会导致滚动越界“突出”，padding 又让内容无法贴边**。若某容器既要贴边滚动又要放删除角标，角标只能放内侧，或（像管理弹窗网格一样）把删除按钮放到一个自带 padding 的容器里。
 2. **预览图片消失（放大/缩小/旋转后）**
    - 根因：`t-att-style` 重渲染时把 `opacity` 重置回 0。
    - 终解：把 `opacity` 并入 `imageStyle` getter 一起返回，避免被覆盖。
@@ -199,7 +200,7 @@
 
 - **新模型 `product.image.gallery`**：继承 `image.mixin`（`image_1920` + related 1024/512/256/128）；字段 `name`、`sequence`、`product_tmpl_id`（`ondelete='cascade'`）；`_order = 'sequence'`；`@api.constrains("name","product_tmpl_id")` 同产品名称去重。**无 `is_main`**（已移除）。
 - **扩展 `product.template`**：`One2many` → `product.image.gallery`、`image_gallery_count` 计数字段。主图 `image_1920` 由原生字段独立管理，无同步入口。
-- **widget**：`product_image_gallery`（registry `fields`，替换产品表单 `image_1920` 字段 widget，`fieldDependencies` 声明依赖）；`ProductImagePreviewDialog`（全屏预览）、`ProductImageUploadDialog` + `useProductImageUpload` hook（顶层 overlay）。
+- **widget**：`product_image_gallery`（registry `fields`，替换产品表单 `image_1920` 字段 widget，`fieldDependencies` 声明依赖）；`ProductImagePreviewDialog`（全屏预览）、`ProductImageManageDialog` + `useProductImageManage` hook（顶层 overlay，19.0.2.2.12 替代原 `ProductImageUploadDialog`）。
 - **视图**：产品表单头像字段 widget 改 `product_image_gallery`、列表增「图片数」列；图库独立列表/表单/搜索视图与动作。
 - **安全**：`security/ir.model.access.csv`，普通用户读写业务数据、销售经理可配置。
 - 仅支持全新安装（无迁移脚本）。

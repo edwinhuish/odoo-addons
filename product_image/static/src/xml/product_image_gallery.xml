@@ -8,7 +8,9 @@
         - 主图 180x180（2 倍于原生 90x90 头像），无上一张/下一张按钮、无序号
         - 悬浮主图在左侧（或下侧/右侧）显示放大图
         - 点击主图弹出全屏预览（放大/缩小/旋转）
-        - 右侧竖排缩略图：主图项带替换/删除，图库项带删除；末端有上传占位符（编辑态）
+        - 右侧竖排缩略图：仅用于选中切换（编辑态不显示删除按钮，删除收进
+          「图片管理」弹窗）；末端有「+」占位符（编辑态），点击打开图片管理弹窗
+          （上半：大图 + 平铺缩略图可删除；下半：上传 dropzone）
         - 缩略图溢出时上下显示滚动按钮
     -->
     <t t-name="product_image.ProductImageGallery">
@@ -78,31 +80,13 @@
                                  t-att-alt="item.name"
                                  t-on-click="() => this.onSelectItem(item_index)"
                                  style="width: 56px; height: 56px; object-fit: cover; cursor: pointer; display: block;"/>
-
-                            <!-- 主图项：删除按钮（删除主图；图库非空时自动提升首张图库图为主图） -->
-                            <button t-if="!props.readonly and item.type === 'main'"
-                                    class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle"
-                                    type="button"
-                                    t-on-click="(ev) => this.onMainRemove(ev)"
-                                    aria-label="删除主图">
-                                <i class="fa fa-times"/>
-                            </button>
-
-                            <!-- 图库项：删除按钮（删图库记录，编辑态） -->
-                            <button t-if="!props.readonly and item.type === 'gallery'"
-                                    class="o_gallery_thumb_del btn btn-danger btn-sm rounded-circle"
-                                    type="button"
-                                    t-on-click="(ev) => this.onGalleryRemove(item_index, ev)"
-                                    aria-label="删除该图片">
-                                <i class="fa fa-times"/>
-                            </button>
                         </div>
                     </t>
 
-                    <!-- 新增图片占位符（编辑态，末端）：点击弹出上传弹窗 -->
+                    <!-- 新增图片占位符（编辑态，末端）：点击打开图片管理弹窗 -->
                     <div t-if="!props.readonly"
                          class="o_gallery_thumb_upload d-flex flex-column align-items-center justify-content-center text-muted mb-1"
-                         t-on-click="openUploadModal"
+                         t-on-click="openManageModal"
                          style="width: 56px; height: 56px; cursor: pointer; border: 1px dashed #adb5bd; border-radius: 0.25rem;"
                          aria-label="新增图片">
                         <i class="fa fa-plus" style="font-size: 1rem;"/>
@@ -127,7 +111,7 @@
                                    images="previewImages"
                                    startIndex="state.currentIndex"
                                    close.bind="closePreview"/>
-        <!-- 上传弹窗走顶层 main_components 注册表（见 product_image_upload.js），不在此挂载 -->
+        <!-- 图片管理弹窗走顶层 main_components 注册表（见 product_image_manage.js），不在此挂载 -->
     </t>
 
 </templates>

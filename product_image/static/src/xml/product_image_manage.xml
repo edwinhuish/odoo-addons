@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+    <!--
+        图片管理弹窗：编辑态点击「+」（缩略图列末尾占位符）后弹出。
+        - 上半部分：左侧大图预览（跟随选中项）+ 右侧平铺缩略图网格；
+          每张缩略图右上角带 × 删除按钮（主图删除后自动提升下一张图为主图）
+        - 下半部分：图片 dropzone（点击 / 拖放 / Ctrl+V），继续沿用原上传交互；
+          Ctrl+V 粘贴上传完成后自动关闭
+        - 列表 / 选中态通过 props（getItems/onSelect/onDelete/onUploaded 绑定到
+          gallery widget）与后台记录保持同步；本弹窗作为顶层 overlay，避免
+          record.update 重渲染 gallery 时波及弹窗（粘贴上传闪烁）
+    -->
+    <t t-name="product_image.ProductImageManageDialog">
+        <div class="o_product_image_manage modal d-block show"
+             tabindex="0"
+             t-ref="autofocus"
+             t-on-keydown.stop="(ev) => this.onKeydown(ev)"
+             t-on-paste="onPaste"
+             t-on-click.self="close">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header align-items-center">
+                        <h5 class="modal-title mb-0">图片管理</h5>
+                        <button type="button"
+                                class="o_gallery_manage-close btn btn-light border-0"
+                                t-on-click="close"
+                                aria-label="关闭"
+                                title="关闭 (Esc)">
+                            <i class="fa fa-times fa-lg"/>
+                        </button>
+                    </div>
+
+                    <div class="modal-body">
+                        <!-- ============ 上半部分：大图 + 平铺缩略图（可删除） ============ -->
+                        <div class="o_gallery_manage-top d-flex gap-3 align-items-stretch">
+
+                            <!-- 大图预览（当前选中项；悬浮右上角 × 亦可删除选中图片） -->
+                            <div class="o_gallery_manage-preview d-flex flex-column">
+                                <div class="o_gallery_manage-previewbox position-relative d-flex align-items-center justify-content-center">
+                                    <img t-if="currentItem"
+                                         loading="lazy"
+                                         class="img img-fluid"
+                                         t-att-src="currentItem.bigUrl"
+                                         t-att-alt="currentName"
+                                         draggable="false"/>
+                                    <div t-if="!currentItem"
+                                         class="text-muted small text-center px-2">
+                                        暂无图片
+                                    </div>
+                                    <button t-if="currentItem"
+                                            type="button"
+                                            class="o_gallery_manage-del"
+                                            t-on-click.stop="deleteCurrent"
+                                            t-att-aria-label="'删除' + currentName"
+                                            title="删除当前图片">
+                                        <i class="fa fa-times"/>
+                                    </button>
+                                </div>
+                                <div class="text-muted small text-center mt-1 text-truncate"
+                                     style="max-width: 250px;">
+                                    <span t-if="currentItem" t-esc="currentName"/>
+                                    <span t-if="!currentItem">—</span>
+                                </div>
+                                <div class="text-muted small text-center mt-1" style="font-size: .72rem;">
+                                    点击缩略图切换大图
+                                </div>
+                            </div>
+
+                            <!-- 平铺缩略图网格：每张带删除按钮 -->
+                            <div class="o_gallery_manage-thumbs flex-fill d-flex flex-column">
+                                <div class="small text-muted mb-1 flex-shrink-0">
+                                    全部图片（悬浮右上角 × 删除）
+                                </div>
+                                <div class="o_gallery_manage-grid">
+                                    <t t-if="items.length">
+                                        <t t-foreach="items" t-as="it" t-key="it.key">
+                                            <div class="o_gallery_manage-tile position-relative"
+                                                 t-att-class="it_index === state.selected ? 'is-selected' : ''">
+                                                <img loading="lazy"
+                                                     class="img"
+                                                     t-att-src="it.thumbUrl"
+                                                     t-att-alt="it.name"
+                                                     t-att-title="it.name"
+                                                     t-on-click="() => this.selectItem(it_index)"
+                                                     draggable="false"/>
+                                                <button type="button"
+                                                        class="o_gallery_manage-del"
+                                                        t-on-click.stop="() => this.deleteItem(it_index)"
+                                                        t-att-aria-label="'删除' + it.name"
+                                                        title="删除该图片">
+                                                    <i class="fa fa-times"/>
+                                                </button>
+                                            </div>
+                                        </t>
+                                    </t>
+                                    <div t-if="!items.length" class="text-muted small w-100">
+                                        暂无图片，请在下方上传。
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 分割线：上半部（管理）与下半部（上传） -->
+                        <div class="o_gallery_manage-divider d-flex align-items-center gap-2 my-3">
+                            <hr class="flex-fill m-0"/>
+                            <span class="small text-muted text-nowrap">
+                                <i class="fa fa-cloud-upload me-1"/>
+                                新增图片
+                            </span>
+                            <hr class="flex-fill m-0"/>
+                        </div>
+
+                        <!-- ============ 下半部分：图片 dropzone ============ -->
+                        <div class="o_gallery_manage-bottom">
+                            <FileUploader acceptedFileExtensions="props.acceptedFileExtensions"
+                                          onUploaded.bind="onUploaderFileUploaded"
+                                          multiUpload="true">
+                                <t t-set-slot="toggler">
+                                    <div class="o_manage_dropzone d-flex flex-column align-items-center justify-content-center text-center"
+                                         t-att-class="state.dragging ? 'is-dragging' : ''"
+                                         t-on-dragover.prevent="onDragOver"
+                                         t-on-dragleave.prevent="onDragLeave"
+                                         t-on-drop.prevent="onDrop">
+                                        <i class="fa fa-cloud-upload fa-3x mb-2"/>
+                                        <p class="mb-1 fw-bold">点击选择文件，或将图片拖放到此处</p>
+                                        <p class="small text-muted mb-0">
+                                            或在弹窗打开时按 <kbd>Ctrl</kbd>+<kbd>V</kbd> 粘贴剪贴板图片
+                                        </p>
+                                    </div>
+                                </t>
+                            </FileUploader>
+                            <div t-if="state.processing" class="text-center mt-3 small text-muted">
+                                <i class="fa fa-spinner fa-spin"/> 处理中…
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </t>
+
+</templates>

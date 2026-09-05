@@ -11,7 +11,7 @@ import { registry } from "@web/core/registry";
 
 import { Component, useState, useRef, useEffect } from "@odoo/owl";
 import { ProductImagePreviewDialog } from "./product_image_preview";
-import { useProductImageUpload } from "./product_image_upload";
+import { useProductImageManage } from "./product_image_manage";
 
 const placeholder = "/web/static/img/placeholder.png";
 
@@ -25,14 +25,13 @@ const placeholder = "/web/static/img/placeholder.png";
  * - 主图放大 2 倍显示（180x180），无上一张/下一张按钮、无序号
  * - 鼠标悬浮主图区：左侧优先（屏幕宽度不足转下方，下方仍不足按比例缩小）显示 540×540 放大窗（内含 1080×1080 图）
  * - 点击主图区弹出全屏预览弹窗（放大/缩小/旋转，见 product_image_preview.js）
- * - 缩略图竖向排列于主图右侧：
- *   · 主图项缩略图带「替换」「删除」按钮（编辑态），分别写 / 清空原生主图字段
- *   · 图库项缩略图带「删除」按钮（编辑态），删除对应图库记录
- *   · 末端「新增图片」占位符（编辑态），点击弹出上传弹窗（见 product_image_upload.js）
+ * - 缩略图竖向排列于主图右侧，仅用于选中/切换（编辑态不再放删除按钮）
  * - 缩略图总高超出主图高度时，顶部/底部出现上下滚动按钮
- * - 选中缩略图带一圈蓝色边框（box-shadow）
- * - 上传弹窗内支持：点击选文件 / 拖放 / Ctrl+V 粘贴（弹窗获焦后可靠触发）
- * - 浏览切换为纯前端状态，不写库；上传/删除才写库
+ * - 选中缩略图带一圈蓝色边框（border）
+ * - 末端「新增图片」占位符（编辑态）：点击弹出「图片管理」弹窗
+ *   （见 product_image_manage.js）——上半部分大图 + 平铺缩略图（右上角 × 删除，
+ *   主图删除自动提升下一张为主图），下半部分上传 dropzone（点击/拖放/Ctrl+V）
+ * - 浏览切换为纯前端状态，不写库；管理弹窗内的删除/上传才写库
  *
  * 数据来源：
  * - 主图：props.record（product.template）的 image_1920 字段（this.props.name）
@@ -64,8 +63,8 @@ export class ProductImageGallery extends Component {
     setup() {
         this.notification = useService("notification");
         this.orm = useService("orm");
-        // 上传弹窗走顶层 main_components 注册表（与 gallery 渲染树解耦，避免重渲染闪烁）
-        this.upload = useProductImageUpload();
+        // 图片管理弹窗走顶层 main_components 注册表（与 gallery 渲染树解耦，避免重渲染闪烁）
+        this.manage = useProductImageManage();
         this.state = useState({
             currentIndex: 0,
             hoverZoom: false,
@@ -416,18 +415,56 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 上传弹窗：点击「新增图片」按钮打开（顶层 overlay，与 gallery 渲染树解耦）
-    // 弹窗内点击/拖放/Ctrl+V 上传；Ctrl+V 粘贴上传后弹窗自动关闭
+    // 图片管理弹窗：点击「新增图片」按钮打开（顶层 overlay，与 gallery 渲染树解耦）
+    // 上半部分：大图 + 平铺缩略图（右上角 × 删除，主图删除自动提升）；下半部分：上传 dropzone
     // ------------------------------------------------------------------
 
-    openUploadModal() {
+    /**
+     * 管理弹窗用的展示列表快照：与 displayItems 顺序一致，供弹窗渲染。
+     * key 用于弹窗内按项删除（防删除后索引漂移删错图）。
+     */
+    get manageItems() {
+        return this.displayItems.map((item) => ({
+            type: item.type,
+            key: item.type === "main" ? "main" : `g${item.record.resId || item.record.id}`,
+            name: item.name,
+            thumbUrl: this.getItemUrl(item, "image_128"),
+            bigUrl: this.getItemUrl(item, "image_1024"),
+        }));
+    }
+
+    openManageModal() {
         if (this.props.readonly) {
             return;
         }
-        this.upload.open({
+        this.manage.open({
             acceptedFileExtensions: this.props.acceptedFileExtensions,
+            initialIndex: this.state.currentIndex,
+            getItems: () => this.manageItems,
+            onSelect: (index) => this.onSelectItem(index),
+            onDelete: (type, key) => this.onManageDelete(type, key),
             onUploaded: (info) => this.onFileUploaded(info),
         });
+    }
+
+    /**
+     * 管理弹窗内的删除：按 type/key 定位当前展示项。
+     * key 相比索引更稳（删除后列表收缩，索引会漂移）；
+     * main 仅存在一张，删除走 onMainRemove（图库非空自动提升首张为主图）。
+     */
+    async onManageDelete(type, key) {
+        if (type === "main") {
+            await this.onMainRemove();
+            return;
+        }
+        const items = this.displayItems;
+        const index = items.findIndex(
+            (it) => it.type === "gallery" && (it.record.resId || it.record.id) === key
+        );
+        if (index < 0) {
+            return;
+        }
+        await this.onGalleryRemove(index);
     }
 
     // ------------------------------------------------------------------
@@ -496,6 +533,8 @@ export class ProductImageGallery extends Component {
      * 主图为空时，上传的图直接作为主图（写 image_1920 字段，位于序列首位）；
      * 主图已有值时，追加为图库记录（不影响主图）。
      * 即「列表第一位的图片默认为主图」：首张上传的图即主图。
+     *
+     * @returns {number|undefined} 新增项在展示序列中的索引（供管理弹窗高亮新图）。
      */
     async onFileUploaded(info) {
         if (!this.hasMainImage) {
@@ -503,7 +542,7 @@ export class ProductImageGallery extends Component {
             await this.props.record.update({ [this.props.name]: info.data });
             this.state.currentIndex = 0;
             this._clampIndex();
-            return;
+            return 0;
         }
         const galleryList = this.galleryList;
         if (!galleryList) {
@@ -513,8 +552,10 @@ export class ProductImageGallery extends Component {
         const newRecord = await galleryList.addNewRecord(false);
         await newRecord.update({ image_1920: info.data });
         // 选中新加的图库项（位于序列末尾）
-        this.state.currentIndex = this.displayItems.length - 1;
+        const newIndex = this.displayItems.length - 1;
+        this.state.currentIndex = newIndex;
         this._clampIndex();
+        return newIndex;
     }
 
     async onGalleryRemove(index, ev) {
@@ -589,7 +630,7 @@ export class ProductImageGallery extends Component {
     }
 
     // ------------------------------------------------------------------
-    // 粘贴上传已移至「新增图片」弹窗（ProductImageUploadDialog）：
+    // 粘贴上传在「图片管理」弹窗（ProductImageManageDialog）下半部 dropzone：
     // 弹窗打开时焦点在弹窗上，Ctrl+V 可靠触发；头像区域不再直接粘贴
     // ------------------------------------------------------------------
 }
