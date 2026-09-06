@@ -13,7 +13,7 @@
             <!-- 订单编号可编辑，留空则在保存时自动生成 -->
             <xpath expr="//div[hasclass('oe_title')]/h1/field[@name='name']" position="before">
                 <field name="order_no"
-                       placeholder="留空自动生成"
+                       placeholder="Leave empty to generate automatically"
                        class="text-break"
                        readonly="state == 'cancel'"/>
             </xpath>
@@ -37,7 +37,7 @@
 
             <!-- 订单编号列置顶显示；原生 name 列仅隐藏不删除，避免其他模块继承时找不到锚点 -->
             <xpath expr="//field[@name='name']" position="before">
-                <field name="order_no" string="订单编号" decoration-bf="1" readonly="1"/>
+                <field name="order_no" string="Order Number" decoration-bf="1" readonly="1"/>
             </xpath>
 
             <xpath expr="//field[@name='name']" position="attributes">
@@ -63,7 +63,7 @@
 
             <!-- 独立的“订单编号”搜索项，便于只看编号过滤 -->
             <xpath expr="//field[@name='name']" position="after">
-                <field name="order_no" string="订单编号"/>
+                <field name="order_no" string="Order Number"/>
             </xpath>
 
         </field>

@@ -30,7 +30,7 @@
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
                     <div class="modal-header align-items-center">
-                        <h5 class="modal-title mb-0">图片管理</h5>
+                        <h5 class="modal-title mb-0">Image Management</h5>
                         <!-- header 右侧操作区：批量删除 / 勾选态操作 + 关闭按钮。
                              不留右侧内边距（无 pe-1）：关闭按钮完整贴齐容器最右边缘 -->
                         <div class="d-flex align-items-center gap-1">
@@ -39,37 +39,36 @@
                                  勾选模式后只剩缩略图勾选圈，看不到「删除 / 取消」按钮） -->
                             <t t-if="state.selectMode">
                                 <span class="small text-muted o_gm_selcount"
-                                      t-att-class="checkedCount ? 'o_gm_selcount-on' : ''">
-                                    已选 <t t-esc="checkedCount"/> 张
-                                </span>
+                                      t-att-class="checkedCount ? 'o_gm_selcount-on' : ''"
+                                      t-esc="checkedCountLabel"/>
                                 <button type="button"
                                         class="btn btn-sm btn-danger d-inline-flex align-items-center gap-1"
                                         t-att-disabled="checkedCount == 0"
                                         t-on-click="requestBatchDelete"
-                                        title="删除所选图片">
+                                        title="Delete the selected images">
                                     <i class="fa fa-trash"/>
-                                    删除
+                                    Delete
                                 </button>
                                 <button type="button"
                                         class="btn btn-sm btn-link"
                                         t-on-click="_exitSelectMode">
-                                    取消
+                                    Cancel
                                 </button>
                             </t>
                             <button t-elif="items.length > 1"
                                     type="button"
                                     class="o_gm_headerbtn btn btn-sm btn-light d-inline-flex align-items-center gap-1"
                                     t-on-click="enterSelectMode"
-                                    title="勾选多张图片后批量删除">
+                                    title="Select several images to delete them in bulk">
                                 <i class="fa fa-check-square-o"/>
-                                批量删除
+                                Bulk delete
                             </button>
                             <!-- 关闭按钮：右上角、正方形、无文字、占满 header 高，hover 变红 -->
                             <button type="button"
                                     class="o_gallery_manage-close"
                                     t-on-click="close"
-                                    aria-label="关闭"
-                                    title="关闭 (Esc)">
+                                    aria-label="Close"
+                                    title="Close (Esc)">
                                 <i class="fa fa-times"/>
                             </button>
                         </div>
@@ -93,7 +92,7 @@
                                          draggable="false"/>
                                     <div t-if="!currentItem"
                                          class="text-muted small text-center px-2">
-                                        暂无图片
+                                        No image
                                     </div>
                                 </div>
                                 <div class="o_gallery_manage-name text-muted small text-center mt-1 text-truncate">
@@ -101,7 +100,7 @@
                                     <span t-if="!showName">&#160;</span>
                                 </div>
                                 <div class="o_gallery_manage-hint text-muted text-center mt-1">
-                                    拖动缩略图可排序；删除均有确认（批量删除在右上角）
+                                    Drag thumbnails to reorder; every deletion asks for a confirmation (bulk delete sits in the top right corner)
                                 </div>
                             </div>
 
@@ -142,8 +141,8 @@
                                                         type="button"
                                                         class="o_gallery_manage-del"
                                                         t-on-click.stop="() => this.requestDelete(it_index)"
-                                                        t-att-aria-label="'删除' + it.name"
-                                                        title="删除该图片">
+                                                        t-att-aria-label="deleteAriaLabel(it)"
+                                                        title="Delete this image">
                                                     <i class="fa fa-times"/>
                                                 </button>
                                             </div>
@@ -154,7 +153,7 @@
                                              t-att-style="'height:' + state.drag.spacerH + 'px'"/>
                                     </t>
                                     <div t-if="!items.length" class="text-muted small w-100">
-                                        暂无图片，请在下方上传。
+                                        No image yet, please upload one below.
                                     </div>
                                 </div>
                             </div>
@@ -165,7 +164,7 @@
                             <hr class="flex-fill m-0"/>
                             <span class="small text-muted text-nowrap">
                                 <i class="fa fa-cloud-upload me-1"/>
-                                新增图片
+                                Add images
                             </span>
                             <hr class="flex-fill m-0"/>
                         </div>
@@ -179,9 +178,11 @@
                                  t-on-dragleave.prevent="onDragLeave"
                                  t-on-drop.prevent="onDrop">
                                 <i class="fa fa-cloud-upload fa-3x mb-2"/>
-                                <p class="mb-1 fw-bold">点击选择文件，或将图片拖放到此处</p>
+                                <p class="mb-1 fw-bold">Click to select files, or drag and drop images here</p>
                                 <p class="small text-muted mb-0">
-                                    或按 <kbd>Ctrl</kbd>+<kbd>V</kbd> 粘贴剪贴板图片
+                                    <span t-esc="pasteHintPrefix"/>
+                                    <kbd>Ctrl</kbd>+<kbd>V</kbd>
+                                    <span t-esc="pasteHintSuffix"/>
                                 </p>
                             </div>
                             <input type="file"
@@ -200,7 +201,7 @@
                                              draggable="false"/>
                                         <div class="o_gallery_manage-uploading">
                                             <i class="fa fa-spinner fa-spin"/>
-                                            <span>上传中…</span>
+                                            <span>Uploading…</span>
                                         </div>
                                     </div>
                                 </t>
@@ -223,7 +224,7 @@
                         <button type="button"
                                 class="o_gallery_manage-confirm-x"
                                 t-on-click="cancelConfirm"
-                                aria-label="关闭">
+                                aria-label="Close">
                             <i class="fa fa-times"/>
                         </button>
                     </div>
@@ -239,7 +240,7 @@
                                          t-att-alt="ci.name"
                                          draggable="false"/>
                                     <span t-if="ci.type === 'main'"
-                                          class="o_gallery_manage-confirm-tag">主图</span>
+                                          class="o_gallery_manage-confirm-tag">Main</span>
                                 </div>
                             </t>
                         </div>
@@ -256,7 +257,7 @@
                         <button type="button"
                                 class="btn btn-sm btn-secondary"
                                 t-on-click="cancelConfirm">
-                            取消
+                            Cancel
                         </button>
                     </div>
                 </div>

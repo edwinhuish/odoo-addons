@@ -8,7 +8,7 @@
 4. ``web_search_read`` 在列表请求 name 时附加「命中型号」提示
 """
 
-from odoo import api, fields, models
+from odoo import _, api, fields, models
 from odoo.fields import Domain
 
 
@@ -20,25 +20,27 @@ class ProductTemplate(models.Model):
     # ------------------------------------------------------------------
 
     model_code_line_ids = fields.One2many(
-        string="型号明细",
+        string="Model Lines",
         comodel_name="product.model.code",
         inverse_name="product_tmpl_id",
         copy=False,
-        help="该产品的所有型号（客户型号 / 工厂型号 / 别名）。",
+        help="All models of this product (customer / factory / alias).",
     )
     model_code_count = fields.Integer(
-        string="型号数量",
+        string="Model Count",
         compute="_compute_model_code_count",
     )
     # 冗余可搜索字段：把该产品所有型号拼成一个文本块，配 trigram 索引，
     # 使列表搜索框 / 快速搜索 / Many2one 下拉都能按任一型号命中本产品。
     # 由 product.model.code 的 create/write/unlink 负责同步。
     model_code_index = fields.Text(
-        string="型号搜索索引",
+        string="Model Search Index",
         index="trigram",
         copy=False,
         store=True,
-        help="该产品所有型号拼接后的搜索索引，由型号行增删改时自动维护，请勿手工编辑。",
+        help="Search index built by concatenating all models of this product. It "
+             "is maintained automatically when model lines change; do not edit "
+             "it manually.",
     )
 
     @api.depends("model_code_line_ids")
@@ -115,7 +117,7 @@ class ProductTemplate(models.Model):
                 if rec.get("id") != tmpl.id:
                     continue
                 base = rec.get("name") or ""
-                hint = "（命中型号：%s）" % " / ".join(hits)
+                hint = _(" (Matching model: %(codes)s)", codes=" / ".join(hits))
                 if hint not in base:
                     rec["name"] = base + hint
         return result

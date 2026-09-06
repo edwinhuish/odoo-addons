@@ -22,7 +22,7 @@ class SaleOrder(models.Model):
     # 数据库层唯一约束，是 Python 校验之外的最后一道防线（并发创建、批量导入）
     _order_no_unique = models.Constraint(
         "UNIQUE(order_no)",
-        "订单编号必须全局唯一。",
+        "The order number must be unique across all records.",
     )
 
     # ------------------------------------------------------------------
@@ -30,25 +30,28 @@ class SaleOrder(models.Model):
     # ------------------------------------------------------------------
 
     buyer_ref = fields.Char(
-        string="客户编号(快照)",
+        string="Customer Code (Snapshot)",
         copy=False,
         readonly=True,
-        help="创建时从客户编号（联系人 ref）复制，后续修改客户资料不影响本单据。",
+        help="Copied from the customer code (partner ref) at creation time; later "
+             "changes on the customer do not affect this document.",
     )
 
     buyer_order_idx = fields.Integer(
-        string="客户年度流水号",
+        string="Customer Yearly Sequence",
         copy=False,
         readonly=True,
-        help="创建时一次性分配，作废或取消的单据依然占用流水号。",
+        help="Assigned once at creation time; cancelled or voided documents still "
+             "keep their sequence number.",
     )
 
     order_no = fields.Char(
-        string="订单编号",
+        string="Order Number",
         index="trigram",
         copy=False,
-        help="格式：客户编号 + 两位年份 + 客户本年度流水号，例如 DZ2602；"
-             "创建时自动生成，可手动修改，保存时校验全局唯一。",
+        help="Format: customer code + two digit year + customer sequence of the "
+             "year, e.g. DZ2602. Generated automatically at creation, it can be "
+             "edited manually and is checked for global uniqueness on save.",
     )
 
     # ------------------------------------------------------------------
@@ -132,8 +135,13 @@ class SaleOrder(models.Model):
             idx += 1
 
         raise ValidationError(_(
-            "客户“%s”在 %s 年度的流水号已连续占用 %s 个，无法自动分配订单编号，请手动指定。",
-        ) % (self.partner_id.display_name, year, MAX_INDEX_TRY))
+            "The sequence numbers of customer \"%(partner)s\" are already taken "
+            "for %(count)s consecutive values in %(year)s. No order number could "
+            "be assigned automatically, please enter one manually.",
+            partner=self.partner_id.display_name,
+            year=year,
+            count=MAX_INDEX_TRY,
+        ))
 
     def _year_index_domain(self, year):
         """该客户指定年度、已分配流水号的单据域。
@@ -172,11 +180,12 @@ class SaleOrder(models.Model):
             ], limit=1)
             if duplicate:
                 raise ValidationError(_(
-                    "订单编号“%s”已被单据 %s（客户：%s）占用，请使用其他编号。",
-                ) % (
-                    record.order_no,
-                    duplicate.name or "",
-                    duplicate.partner_id.display_name or "",
+                    "The order number \"%(number)s\" is already used by document "
+                    "%(document)s (customer: %(partner)s). Please use another "
+                    "number.",
+                    number=record.order_no,
+                    document=duplicate.name or "",
+                    partner=duplicate.partner_id.display_name or "",
                 ))
 
     # ------------------------------------------------------------------
@@ -271,9 +280,13 @@ class SaleOrder(models.Model):
             "type": "ir.actions.client",
             "tag": "display_notification",
             "params": {
-                "title": _("订单编号"),
-                "message": _("已为 %s 张单据生成订单编号，%s 张单据已有编号未改动。") % (
-                    len(todo), len(self - todo),
+                "title": _("Order Number"),
+                "message": _(
+                    "An order number was generated for %(generated)s document(s); "
+                    "%(skipped)s document(s) already had one and were left "
+                    "untouched.",
+                    generated=len(todo),
+                    skipped=len(self - todo),
                 ),
                 "type": "success" if todo else "warning",
                 "sticky": False,

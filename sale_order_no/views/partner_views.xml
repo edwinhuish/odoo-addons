@@ -13,8 +13,8 @@
         <field name="arch" type="xml">
 
             <xpath expr="//field[@name='ref']" position="attributes">
-                <attribute name="string">客户编号</attribute>
-                <attribute name="placeholder">大写英文字母，如 DZ、DAZG</attribute>
+                <attribute name="string">Customer Code</attribute>
+                <attribute name="placeholder">Uppercase letters, e.g. DZ, DAZG</attribute>
             </xpath>
 
         </field>

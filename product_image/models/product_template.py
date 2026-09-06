@@ -19,17 +19,18 @@ class ProductTemplate(models.Model):
     # ------------------------------------------------------------------
 
     image_gallery_ids = fields.One2many(
-        string="图片图库",
+        string="Image Gallery",
         comodel_name="product.image.gallery",
         inverse_name="product_tmpl_id",
         copy=True,
-        help="该产品的补充图片（不含主图）。主图 image_1920 独立管理，"
-        "前端展示时主图作为第一张，其余图库图片按排序跟在后面。",
+        help="Additional images of this product (excluding the main image). The main image "
+        "image_1920 is managed separately; in the UI the main image comes first and the "
+        "gallery images follow in sequence order.",
     )
     image_gallery_count = fields.Integer(
-        string="图片数量",
+        string="Image Count",
         compute="_compute_image_gallery_count",
-        help="图库中的补充图片数量（不含产品主图）。",
+        help="Number of additional images in the gallery (excluding the product main image).",
     )
 
     @api.depends("image_gallery_ids")

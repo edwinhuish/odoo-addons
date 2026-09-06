@@ -1,0 +1,498 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#	* product_image
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-06 00:00+0000\n"
+"PO-Revision-Date: 2026-09-06 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: product_image
+#: model_terms:ir.actions.act_window,help:product_image.action_product_image_gallery
+msgid ""
+"Product images are managed as a gallery of additional images. Several images "
+"can coexist and be reordered by dragging. The main image is managed "
+"separately and is not maintained here."
+msgstr ""
+"产品图片以图库形式管理补充图，支持多图并存、拖拽排序；主图独立，不在此维护。"
+
+#. module: product_image
+#: model:ir.actions.act_window,name:product_image.action_product_image_gallery
+#: model_terms:ir.ui.view,arch_db:product_image.product_image_gallery_list_view
+#: model_terms:ir.ui.view,arch_db:product_image.product_image_gallery_search_view
+msgid "Product Images"
+msgstr "产品图片"
+
+#. module: product_image
+#: model_terms:ir.actions.act_window,help:product_image.action_product_image_gallery
+msgid "Add a product image"
+msgstr "添加一张产品图片"
+
+#. module: product_image
+#: model_terms:ir.ui.view,arch_db:product_image.product_image_gallery_list_view
+msgid "Image"
+msgstr "图片"
+
+#. module: product_image
+#: model_terms:ir.ui.view,arch_db:product_image.product_image_gallery_form_view
+msgid "Optional, e.g. Front / Detail / Packaging"
+msgstr "可选，如 正面 / 细节 / 包装"
+
+#. module: product_image
+#: model_terms:ir.ui.view,arch_db:product_image.product_image_gallery_form_view
+msgid ""
+"Click to select an image file, or press Ctrl+V in the gallery area to paste "
+"a new one"
+msgstr "点击选择图片文件，或在图库区域 Ctrl+V 粘贴新增"
+
+#. module: product_image
+#: model_terms:ir.ui.view,arch_db:product_image.product_image_gallery_search_view
+#: model:ir.model.fields,field_description:product_image.field_product_image_gallery__active
+msgid "Active"
+msgstr "启用"
+
+#. module: product_image
+#: model_terms:ir.ui.view,arch_db:product_image.product_image_gallery_search_view
+msgid "Archived"
+msgstr "停用"
+
+#. module: product_image
+#: model_terms:ir.ui.view,arch_db:product_image.product_template_list_inherit
+msgid "Images"
+msgstr "图片数"
+
+#. module: product_image
+#: model:ir.model,name:product_image.model_product_image_gallery
+#: model_terms:ir.ui.view,arch_db:product_image.product_image_gallery_form_view
+#: code:addons/product_image/static/src/js/product_image_gallery.js:0
+#: code:addons/product_image/static/src/js/product_image_preview.js:0
+msgid "Product Image"
+msgstr "产品图片"
+
+#. module: product_image
+#: model:ir.model.fields,field_description:product_image.field_product_image_gallery__name
+msgid "Name"
+msgstr "名称"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_image_gallery__name
+msgid ""
+"Short description of the image (optional), used for internal identification, "
+"e.g. \"Front\", \"Detail\", \"Packaging\"."
+msgstr "图片的简短说明（可选），用于内部识别，如「正面」「细节」「包装」。"
+
+#. module: product_image
+#: model:ir.model.fields,field_description:product_image.field_product_image_gallery__sequence
+msgid "Sequence"
+msgstr "排序"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_image_gallery__sequence
+msgid ""
+"Lower values come first. Display order of the gallery images in the "
+"thumbnail list (the main image always stays first)."
+msgstr ""
+"数值小的排在前面；图库图片在缩略图列表中的展示顺序（主图始终在最前）。"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_image_gallery__active
+msgid ""
+"Uncheck to disable an image without deleting it, so historical material is "
+"kept."
+msgstr "取消勾选可停用某张图片而不删除，便于保留历史素材。"
+
+#. module: product_image
+#: model:ir.model.fields,field_description:product_image.field_product_image_gallery__note
+msgid "Note"
+msgstr "备注"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_image_gallery__note
+msgid "Additional information about this image."
+msgstr "对该图片的补充说明。"
+
+#. module: product_image
+#: model:ir.model.fields,field_description:product_image.field_product_image_gallery__product_tmpl_id
+msgid "Product"
+msgstr "产品"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_image_gallery__product_tmpl_id
+msgid ""
+"Product template this image belongs to; images are removed together with the "
+"product."
+msgstr "该图片所属的产品模板；删除产品时图片行随之级联清理。"
+
+#. module: product_image
+#: model:ir.model.fields,field_description:product_image.field_product_template__image_gallery_ids
+msgid "Image Gallery"
+msgstr "图片图库"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_template__image_gallery_ids
+msgid ""
+"Additional images of this product (excluding the main image). The main image "
+"image_1920 is managed separately; in the UI the main image comes first and "
+"the gallery images follow in sequence order."
+msgstr ""
+"该产品的补充图片（不含主图）。主图 image_1920 独立管理，"
+"前端展示时主图作为第一张，其余图库图片按排序跟在后面。"
+
+#. module: product_image
+#: model:ir.model.fields,field_description:product_image.field_product_template__image_gallery_count
+msgid "Image Count"
+msgstr "图片数量"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_template__image_gallery_count
+msgid ""
+"Number of additional images in the gallery (excluding the product main "
+"image)."
+msgstr "图库中的补充图片数量（不含产品主图）。"
+
+#. module: product_image
+#. odoo-python
+#: code:addons/product_image/models/product_image.py:0
+msgid ""
+"The image name \"%(name)s\" already exists for product \"%(product)s\". Image "
+"names must be unique within the same product."
+msgstr "图片名称“%(name)s”在产品“%(product)s”中已存在，同一产品内图片名称不可重复。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_gallery.js:0
+msgid "Main image"
+msgstr "主图"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_gallery.js:0
+msgid "The image data could not be read, the main image was not changed."
+msgstr "读取图片数据失败，未更换主图。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_gallery.js:0
+msgid ""
+"The previous main image could not be read and was not kept in the gallery."
+msgstr "读取原主图失败，原主图未保留在图库中。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_gallery.js:0
+msgid "The gallery is not available, no image can be added."
+msgstr "图库不可用，无法新增图片。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "%(count)s selected"
+msgstr "已选 %(count)s 张"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Delete %(name)s"
+msgstr "删除 %(name)s"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Or press"
+msgstr "或按"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "to paste an image from the clipboard"
+msgstr "粘贴剪贴板图片"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Delete"
+msgstr "删除"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Cancel"
+msgstr "取消"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Delete the %(count)s selected images? This cannot be undone."
+msgstr "确定删除选中的 %(count)s 张图片？操作不可撤销。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid ""
+"The main image is included: when the gallery is not empty its first image is "
+"promoted as the new main image, otherwise the main image is cleared."
+msgstr "包含主图：图库非空时图库首张将自动提升为新主图；图库为空则主图被清空。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Delete images in bulk"
+msgstr "批量删除图片"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Delete %(count)s"
+msgstr "删除 %(count)s 张"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Delete the main image"
+msgstr "删除主图"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid ""
+"The main image will be deleted. When the gallery is not empty its first "
+"image is promoted as the new main image, otherwise the main image is cleared."
+msgstr "将删除主图。图库非空时首张会自动提升为新主图；图库为空则主图被清空。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Delete image"
+msgstr "删除图片"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "The image will be removed from the product gallery. This cannot be undone."
+msgstr "删除后该图片将从产品图库中移除，操作不可撤销。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Deleting \"%(name)s\" failed, please try again."
+msgstr "删除“%(name)s”失败，请重试。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "Saving the new order failed, please try again."
+msgstr "保存排序失败，请重试。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "The image could not be read and was skipped."
+msgstr "图片读取失败，已跳过。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/js/product_image_manage.js:0
+msgid "The upload failed, please try again."
+msgstr "上传失败，请重试。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_gallery.xml:0
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "No image"
+msgstr "暂无图片"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_gallery.xml:0
+msgid "Scroll up"
+msgstr "上移"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_gallery.xml:0
+msgid "Scroll thumbnails up"
+msgstr "上移缩略图"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_gallery.xml:0
+msgid "Add image"
+msgstr "新增图片"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_gallery.xml:0
+msgid "Scroll down"
+msgstr "下移"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_gallery.xml:0
+msgid "Scroll thumbnails down"
+msgstr "下移缩略图"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Close"
+msgstr "关闭"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Close (Esc)"
+msgstr "关闭 (Esc)"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Previous (←)"
+msgstr "上一张 (←)"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Previous"
+msgstr "上一张"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Zoom in (+)"
+msgstr "放大 (+)"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Zoom in"
+msgstr "放大"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Reset (0)"
+msgstr "重置 (0)"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Reset"
+msgstr "重置"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Zoom out (-)"
+msgstr "缩小 (-)"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Zoom out"
+msgstr "缩小"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Rotate (r)"
+msgstr "旋转 (r)"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Rotate"
+msgstr "旋转"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Next (→)"
+msgstr "下一张 (→)"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_preview.xml:0
+msgid "Next"
+msgstr "下一张"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Image Management"
+msgstr "图片管理"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Delete the selected images"
+msgstr "删除所选图片"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Select several images to delete them in bulk"
+msgstr "勾选多张图片后批量删除"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Bulk delete"
+msgstr "批量删除"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid ""
+"Drag thumbnails to reorder; every deletion asks for a confirmation (bulk "
+"delete sits in the top right corner)"
+msgstr "拖动缩略图可排序；删除均有确认（批量删除在右上角）"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Delete this image"
+msgstr "删除该图片"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "No image yet, please upload one below."
+msgstr "暂无图片，请在下方上传。"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Add images"
+msgstr "新增图片"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Click to select files, or drag and drop images here"
+msgstr "点击选择文件，或将图片拖放到此处"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Uploading…"
+msgstr "上传中…"
+
+#. module: product_image
+#. odoo-javascript
+#: code:addons/product_image/static/src/xml/product_image_manage.xml:0
+msgid "Main"
+msgstr "主图"

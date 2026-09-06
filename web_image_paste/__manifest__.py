@@ -1,19 +1,29 @@
 {
-    "name": "图片粘贴上传",
-    "version": "19.0.2.0.0",
-    "summary": "后台图片字段支持剪贴板 Ctrl+V / Cmd+V 粘贴与拖拽上传，一次可粘贴多图，超大图明确报错",
+    "name": "Image Paste Upload",
+    "version": "19.0.2.1.0",
+    "summary": "Image fields in the backend accept Ctrl+V / Cmd+V paste and drag & drop: several images at once, with a clear error when a file is too large",
     "description": """
-        外贸 SOHO 场景下的图片录入增强模块。
+        Image capture enhancement module for foreign trade SOHO scenarios.
 
-        核心能力：
-        - 图片字段（ImageField）在编辑态获得焦点后，Ctrl+V / Cmd+V 可直接粘贴剪贴板图片上传
-        - 支持把图片文件拖拽到图片区域完成上传
-        - 一次粘贴 / 拖拽可上传多张图片（仅对支持多图上传的控件生效）
-        - 上传中显示进度提示，完成后自动刷新预览
-        - 超过服务器最大上传尺寸的图片给出明确的中文报错，带出具体大小
-        - 只读态不触发上传；剪贴板无图片时不拦截普通文本粘贴
-        - 完全复用 Odoo 原生上传链路（FileUploader.onFileChange → getDataURLFromFile → onUploaded），
-          不改核心模板文件，只通过 @web/core/utils/patch 与 t-inherit 扩展
+        Source language of this module is English (en_US); a Simplified Chinese
+        translation ships in i18n/zh_CN.po.
+
+        Key features:
+        - Once an image field (ImageField) has focus, Ctrl+V / Cmd+V pastes the
+          clipboard image and uploads it
+        - Image files can also be dragged onto the image area to upload them
+        - One paste / drop may upload several images (only for widgets that
+          support multiple uploads)
+        - A progress hint is displayed while uploading and the preview is
+          refreshed when it is done
+        - Images larger than the maximum server upload size raise a clear error
+          that includes the actual size
+        - Read-only mode never triggers an upload; a clipboard without images
+          does not block normal text pasting
+        - The native Odoo upload pipeline is fully reused
+          (FileUploader.onFileChange → getDataURLFromFile → onUploaded); no core
+          template is modified, everything is done with
+          @web/core/utils/patch and t-inherit
     """,
     "category": "Productivity/Images",
     "author": "edwinhuish",

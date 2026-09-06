@@ -23,7 +23,7 @@ class ProductModelCode(models.Model):
     """
 
     _name = "product.model.code"
-    _description = "产品型号"
+    _description = "Product Model"
     _order = "sequence, product_tmpl_id, id"
     _rec_name = "model_code"
 
@@ -32,46 +32,52 @@ class ProductModelCode(models.Model):
     # ------------------------------------------------------------------
 
     model_code = fields.Char(
-        string="型号",
+        string="Model",
         required=True,
         index=True,
-        help="产品型号，同一产品内不可重复；不同产品间可重复，"
-             "搜索时命中会显示「产品名（命中型号：xxx）」以区分。",
+        help="Model code of the product. It cannot be repeated inside the same "
+             "product, but the same code may be used by other products; when a "
+             "search hits a model, the result shows \"Product (Matching model: "
+             "xxx)\" to tell them apart.",
     )
     model_type = fields.Selection(
-        string="型号类型",
+        string="Model Type",
         selection=[
-            ("customer", "客户型号"),
-            ("factory", "工厂型号"),
-            ("alias", "别名"),
+            ("customer", "Customer Model"),
+            ("factory", "Factory Model"),
+            ("alias", "Alias"),
         ],
         default="customer",
         index=True,
-        help="区分该型号的用途：客户型号用于对外单据，工厂型号用于采购，"
-             "别名用于历史/俗称匹配。",
+        help="Purpose of this model: customer models are used on outgoing "
+             "documents, factory models for purchasing, aliases for historical "
+             "or colloquial names.",
     )
     sequence = fields.Integer(
-        string="排序",
+        string="Sequence",
         default=10,
-        help="数值小的排在前面，列表与 One2many 行均按此排序。",
+        help="Lower values come first; both the list and the One2many lines are "
+             "ordered by this value.",
     )
     active = fields.Boolean(
-        string="启用",
+        string="Active",
         default=True,
-        help="取消勾选可停用某条型号而不删除，便于保留历史。",
+        help="Uncheck to disable a model without deleting it, so history is kept.",
     )
     note = fields.Char(
-        string="备注",
-        help="对该型号的简短说明（如对应客户、版本、生效日期等）。",
+        string="Note",
+        help="Short description of this model (customer, version, effective "
+             "date, ...).",
     )
 
     product_tmpl_id = fields.Many2one(
-        string="产品",
+        string="Product",
         comodel_name="product.template",
         ondelete="cascade",
         required=True,
         index=True,
-        help="该型号所属的产品模板；删除产品时型号行随之级联清理。",
+        help="Product template this model belongs to; models are removed "
+             "together with the product.",
     )
 
     # ------------------------------------------------------------------
@@ -80,7 +86,7 @@ class ProductModelCode(models.Model):
 
     _model_code_unique_per_template = models.Constraint(
         "UNIQUE(product_tmpl_id, model_code)",
-        "同一产品内型号不可重复。",
+        "Model codes must be unique within the same product.",
     )
 
     @api.constrains("model_code", "product_tmpl_id")
@@ -100,10 +106,10 @@ class ProductModelCode(models.Model):
             ], limit=1)
             if duplicate:
                 raise ValidationError(_(
-                    "型号“%s”在产品“%s”中已存在，同一产品内型号不可重复。"
-                ) % (
-                    record.model_code,
-                    record.product_tmpl_id.display_name,
+                    'The model "%(code)s" already exists for product "%(product)s". '
+                    "Model codes must be unique within the same product.",
+                    code=record.model_code,
+                    product=record.product_tmpl_id.display_name,
                 ))
 
     # ------------------------------------------------------------------

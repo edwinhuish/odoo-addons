@@ -1,22 +1,54 @@
 {
-    "name": "产品图片",
-    "version": "19.0.2.4.3",
-    "summary": "产品多图：原生主图独立 + 图库补充图（主图作为浏览序列首张，图库按序其后），原位多图浏览 / 悬浮放大 / 点击预览（放大缩小旋转）/ 粘贴新增 / 管理弹窗拖动排序·删除确认·批量删除",
+    "name": "Product Images",
+    "version": "19.0.2.5.0",
+    "summary": "Multiple product images: the native main image stays independent and the gallery holds the extra images (the main image is the first one in the browsing sequence). In-place browsing / hover zoom / click to preview (zoom, rotate) / paste to add / management dialog with drag & drop reordering, delete confirmation and bulk delete",
     "description": """
-        外贸 SOHO 场景下的产品多图管理模块。
+        Product image management module for foreign trade SOHO scenarios.
 
-        核心能力：
-        - 在产品表单原有图片位置（头像区域）直接支持多图浏览，不新增页签，保持界面简洁
-        - 主图与图库解耦：产品主图 image_1920 由原生字段独立管理，列表 / 看板 / 报价单展示它，图库不覆盖 / 不清空
-        - 浏览序列：原生主图（若有）作为第一张，其余图库图片按 sequence 跟在后面
-        - 主图放大 2 倍显示，移除上一张/下一张按钮与序号指示
-        - 鼠标悬浮主图时在左侧（或下侧）显示放大的图片预览
-        - 点击主图弹出全屏预览弹窗，支持放大、缩小、重置、旋转（按钮 + 滚轮 + 键盘）
-        - 缩略图竖向排列于主图右侧用于切换（编辑态不放删除按钮）；缩略图高度超出主图时，顶部/底部出现上下滚动按钮
-        - 点击缩略图列末端的「+」打开图片管理弹窗：上半部分大图预览（仅作预览，不提供删除按钮；选中主图时名称行留空）+ 平铺缩略图网格（每张缩略图含主图右上角 ×：先确认后删除，删除图库图删记录，删除主图自动提升图库首张为主图；缩略图可拖动排序（含主图：拖到首位即把它设为主图，首位即主图）；点击缩略图只切换弹窗内大图、不影响页面主图；大图区固定尺寸不随切换变化，缩略图网格占满剩余宽高、超高内部滚动），下半部分上传 dropzone（点击 / 拖放 / Ctrl+V 粘贴，上传中即时显示缩略图与上传动画，粘贴后不自动关闭，上传不改变页面当前显示的大图；内建，无需 web_image_paste 依赖）；modal-header 右侧提供「批量删除」勾选模式，批量删除前弹确认框（含全部所选图片缩略图清单）；关闭按钮位于 header 最右侧、正方形无文字（hover 变红）
-        - 每张图片继承 image.mixin，自动生成多尺寸（1920/1024/512/256/128）
-        - 删除产品时图片行级联清理，无孤儿数据
-        - 仅依赖 product，不依赖 website_sale，避免与 eCommerce 冲突
+        Source language of this module is English (en_US); a Simplified Chinese
+        translation ships in i18n/zh_CN.po.
+
+        Key features:
+        - Multi-image browsing directly at the native image position (avatar area)
+          of the product form; no extra tab, the UI stays clean
+        - The main image and the gallery are decoupled: the product main image
+          image_1920 is managed by the native field and is the one shown in
+          lists / kanban / quotations; the gallery never overwrites nor clears it
+        - Browsing sequence: the native main image (if any) comes first, the other
+          gallery images follow, ordered by sequence
+        - The main image is displayed at twice its size; no previous/next buttons
+          and no position indicator
+        - Hovering the main image shows an enlarged preview on the left (or below)
+        - Clicking the main image opens a full screen preview with zoom in, zoom
+          out, reset and rotate (buttons + mouse wheel + keyboard)
+        - Thumbnails are stacked vertically on the right of the main image for
+          switching (no delete button in edit mode); when the thumbnails are
+          taller than the main image, scroll buttons appear at the top/bottom
+        - Clicking the "+" at the end of the thumbnail column opens the image
+          management dialog: top half is a large preview (preview only, no delete
+          button; the name row stays empty when the main image is selected) plus a
+          tiled thumbnail grid (every thumbnail, including the main image, has a
+          top-right × that asks for a confirmation: deleting a gallery image
+          deletes the record, deleting the main image promotes the first gallery
+          image; thumbnails can be dragged to reorder, including the main image:
+          dropping an image at the first position makes it the main image, the
+          first position is always the main image; clicking a thumbnail only
+          changes the large preview inside the dialog, not the page main image;
+          the large preview has a fixed size and the grid fills the remaining
+          space, scrolling internally when it overflows); bottom half is an
+          upload dropzone (click / drag & drop / Ctrl+V paste, in-progress
+          uploads show a local thumbnail and a spinner, the dialog does not close
+          after a paste, uploading does not change the large image currently
+          displayed on the page; built-in, no dependency on web_image_paste);
+          the top-right of the modal header offers a "bulk delete" check mode and
+          a confirmation dialog listing every selected image thumbnail is shown
+          before deleting; the close button is the rightmost square button of the
+          header and turns red on hover
+        - Every image inherits image.mixin, so all sizes (1920/1024/512/256/128)
+          are generated automatically
+        - Gallery lines are removed with the product, no orphan data
+        - Depends on product only, not on website_sale, to avoid conflicts with
+          eCommerce
     """,
     "category": "Inventory/Product",
     "author": "edwinhuish",

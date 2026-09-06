@@ -135,6 +135,27 @@ export class ProductImageManageDialog extends Component {
             .filter(Boolean);
     }
 
+    /**
+     * 已选数量文案：整句交给 _t 翻译，模板不再拼接「已选 / 张」两段无法独立翻译的文本节点。
+     */
+    get checkedCountLabel() {
+        return _t("%(count)s selected", { count: this.checkedCount });
+    }
+
+    /** 缩略图删除按钮的 aria-label：含图片名的动态文本，必须在 JS 侧用 _t 翻译。 */
+    deleteAriaLabel(item) {
+        return _t("Delete %(name)s", { name: item.name || "" });
+    }
+
+    /** 粘贴提示的两段文案：中间夹着 <kbd> 元素，无法作为一个文本节点整体翻译。 */
+    get pasteHintPrefix() {
+        return _t("Or press");
+    }
+
+    get pasteHintSuffix() {
+        return _t("to paste an image from the clipboard");
+    }
+
     _clamp(i, len) {
         if (!len) {
             return 0;
@@ -231,18 +252,21 @@ export class ProductImageManageDialog extends Component {
             return;
         }
         const hasMain = items.some((it) => it.type === "main");
-        let message = _t("确定删除选中的 %s 张图片？操作不可撤销。").replace(
-            "%s",
-            String(items.length)
-        );
+        let message = _t("Delete the %(count)s selected images? This cannot be undone.", {
+            count: items.length,
+        });
         if (hasMain) {
-            message += _t("包含主图：图库非空时图库首张将自动提升为新主图；图库为空则主图被清空。");
+            message +=
+                " " +
+                _t(
+                    "The main image is included: when the gallery is not empty its first image is promoted as the new main image, otherwise the main image is cleared."
+                );
         }
         this._openConfirm({
-            title: _t("批量删除图片"),
+            title: _t("Delete images in bulk"),
             message,
             items: [...items],
-            confirmLabel: _t("删除 %s 张").replace("%s", String(items.length)),
+            confirmLabel: _t("Delete %(count)s", { count: items.length }),
             action: () => this._deleteEntries([...items]),
         });
     }
@@ -259,20 +283,20 @@ export class ProductImageManageDialog extends Component {
         }
         if (item.type === "main") {
             this._openConfirm({
-                title: _t("删除主图"),
+                title: _t("Delete the main image"),
                 message: _t(
-                    "将删除主图。图库非空时首张会自动提升为新主图；图库为空则主图被清空。"
+                    "The main image will be deleted. When the gallery is not empty its first image is promoted as the new main image, otherwise the main image is cleared."
                 ),
                 items: [item],
-                confirmLabel: _t("删除主图"),
+                confirmLabel: _t("Delete the main image"),
                 action: () => this._deleteEntries([item]),
             });
         } else {
             this._openConfirm({
-                title: _t("删除图片"),
-                message: _t("删除后该图片将从产品图库中移除，操作不可撤销。"),
+                title: _t("Delete image"),
+                message: _t("The image will be removed from the product gallery. This cannot be undone."),
                 items: [item],
-                confirmLabel: _t("删除"),
+                confirmLabel: _t("Delete"),
                 action: () => this._deleteEntries([item]),
             });
         }
@@ -339,9 +363,12 @@ export class ProductImageManageDialog extends Component {
                 try {
                     await this.props.onDelete(it.type, it.key);
                 } catch (_e) {
-                    this.notification.add(_t("删除“%s”失败，请重试。").replace("%s", it.name), {
-                        type: "danger",
-                    });
+                    this.notification.add(
+                        _t('Deleting "%(name)s" failed, please try again.', {
+                            name: it.name || "",
+                        }),
+                        { type: "danger" }
+                    );
                 }
                 this._reload({ key: anchor });
             }
@@ -518,7 +545,9 @@ export class ProductImageManageDialog extends Component {
                 // 故按「被拖动图片的落位索引」重拉，而不是按旧 key 锚定
                 this._reload({ prefer: hole });
             } catch (_e) {
-                this.notification.add(_t("保存排序失败，请重试。"), { type: "danger" });
+                this.notification.add(_t("Saving the new order failed, please try again."), {
+                    type: "danger",
+                });
                 this._reload({ prefer: hole });
             }
         }
@@ -748,7 +777,9 @@ export class ProductImageManageDialog extends Component {
                 const data = await getDataURLFromFile(file);
                 const base64 = data.split(",")[1];
                 if (!base64) {
-                    this.notification.add(_t("图片读取失败，已跳过。"), { type: "danger" });
+                    this.notification.add(_t("The image could not be read and was skipped."), {
+                        type: "danger",
+                    });
                 } else {
                     idx = await this.props.onUploaded({
                         data: base64,
@@ -757,7 +788,9 @@ export class ProductImageManageDialog extends Component {
                     });
                 }
             } catch (_e) {
-                this.notification.add(_t("上传失败，请重试。"), { type: "danger" });
+                this.notification.add(_t("The upload failed, please try again."), {
+                    type: "danger",
+                });
             } finally {
                 this._dequeue(entry);
                 this._reload({ prefer: typeof idx === "number" ? idx : undefined });

@@ -25,7 +25,7 @@
             <div t-if="state.isUploading" class="o_web_image_paste_progress position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center">
                 <div class="o_web_image_paste_progress_inner text-center">
                     <div class="o_web_image_paste_spinner mx-auto mb-1"/>
-                    <span class="small text-light">上传中…</span>
+                    <span class="small text-light">Uploading…</span>
                 </div>
             </div>
         </xpath>

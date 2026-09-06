@@ -38,7 +38,7 @@
                 <div t-if="!hasItems"
                      class="o_gallery_empty position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center text-muted small"
                      style="pointer-events: none;">
-                    <span>暂无图片</span>
+                    <span>No image</span>
                 </div>
             </div>
 
@@ -61,8 +61,8 @@
                         class="o_gallery_thumb_nav o_gallery_thumb_up btn btn-light border py-0 px-1 mb-1"
                         type="button"
                         t-on-click="onThumbScrollUp"
-                        title="上移"
-                        aria-label="上移缩略图"
+                        title="Scroll up"
+                        aria-label="Scroll thumbnails up"
                         style="line-height: 1; font-size: 0.75rem;">
                     <i class="fa fa-chevron-up"/>
                 </button>
@@ -88,7 +88,7 @@
                          class="o_gallery_thumb_upload d-flex flex-column align-items-center justify-content-center text-muted mb-1"
                          t-on-click="openManageModal"
                          style="width: 56px; height: 56px; cursor: pointer; border: 1px dashed #adb5bd; border-radius: 0.25rem;"
-                         aria-label="新增图片">
+                         aria-label="Add image">
                         <i class="fa fa-plus" style="font-size: 1rem;"/>
                     </div>
                 </div>
@@ -98,8 +98,8 @@
                         class="o_gallery_thumb_nav o_gallery_thumb_down btn btn-light border py-0 px-1 mt-1"
                         type="button"
                         t-on-click="onThumbScrollDown"
-                        title="下移"
-                        aria-label="下移缩略图"
+                        title="Scroll down"
+                        aria-label="Scroll thumbnails down"
                         style="line-height: 1; font-size: 0.75rem;">
                     <i class="fa fa-chevron-down"/>
                 </button>

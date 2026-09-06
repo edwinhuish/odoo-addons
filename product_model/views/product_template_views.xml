@@ -13,22 +13,19 @@
         <field name="arch" type="xml">
 
             <xpath expr="//page[@name='general_information']" position="after">
-                <page string="型号" name="model_codes">
+                <page string="Models" name="model_codes">
                     <field name="model_code_line_ids" widget="one2many">
-                        <list string="型号明细" editable="bottom">
+                        <list string="Model Lines" editable="bottom">
                             <field name="sequence" widget="handle"/>
                             <field name="model_code"
-                                   placeholder="如 MODEL-A、SKU-1234"
+                                   placeholder="e.g. MODEL-A, SKU-1234"
                                    required="1"/>
                             <field name="model_type"/>
                             <field name="active" widget="boolean_toggle"/>
-                            <field name="note" placeholder="可选，如对应客户 / 版本 / 生效日期"/>
+                            <field name="note" placeholder="Optional, e.g. customer / version / effective date"/>
                         </list>
                     </field>
-                    <p class="text-muted small oe_edit_only">
-                        提示：同一产品内型号不可重复；不同产品间可重复。
-                        搜索产品时按任一型号均可命中本产品。
-                    </p>
+                    <p class="text-muted small oe_edit_only">Hint: models cannot be repeated inside the same product, but the same model may be used by other products. Searching a product by any of its models finds this product.</p>
                 </page>
             </xpath>
 
@@ -45,7 +42,7 @@
         <field name="arch" type="xml">
 
             <xpath expr="//field[@name='default_code']" position="after">
-                <field name="model_code_index" string="型号"
+                <field name="model_code_index" string="Model"
                        optional="show"
                        widget="text"
                        readonly="1"/>
@@ -77,7 +74,7 @@
 
             <!-- 独立的「型号」搜索项，便于精确过滤 -->
             <xpath expr="//field[@name='name']" position="after">
-                <field name="model_code_index" string="型号"
+                <field name="model_code_index" string="Model"
                        filter_domain="[('model_code_index', 'ilike', self)]"/>
             </xpath>
 

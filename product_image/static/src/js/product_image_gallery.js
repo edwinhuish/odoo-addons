@@ -59,7 +59,7 @@ export class ProductImageGallery extends Component {
     };
     static defaultProps = {
         acceptedFileExtensions: "image/*",
-        alt: _t("产品图片"),
+        alt: _t("Product Image"),
         imgClass: "",
         reload: true,
     };
@@ -155,7 +155,7 @@ export class ProductImageGallery extends Component {
             items.push({
                 type: "main",
                 record: this.props.record,
-                name: _t("主图"),
+                name: _t("Main image"),
             });
         }
         for (const rec of this.galleryRecords) {
@@ -562,15 +562,19 @@ export class ProductImageGallery extends Component {
         }
         const newMainData = await this._readGalleryImageBase64(newMainRec);
         if (!newMainData) {
-            this.notification.add(_t("读取图片数据失败，未更换主图。"), { type: "danger" });
+            this.notification.add(
+                _t("The image data could not be read, the main image was not changed."),
+                { type: "danger" }
+            );
             return;
         }
         // 原主图数据必须在覆盖主图字段之前读取
         const oldMainData = await this._readMainImageBase64();
         if (!oldMainData) {
-            this.notification.add(_t("读取原主图失败，原主图未保留在图库中。"), {
-                type: "warning",
-            });
+            this.notification.add(
+                _t("The previous main image could not be read and was not kept in the gallery."),
+                { type: "warning" }
+            );
         }
         // 原主图落位为图库记录（先占位，稍后与其余图库项一起按新顺序写 sequence）
         const galleryList = this.galleryList;
@@ -774,7 +778,10 @@ export class ProductImageGallery extends Component {
         } else {
             const galleryList = this.galleryList;
             if (!galleryList) {
-                this.notification.add(_t("图库不可用，无法新增图片。"), { type: "danger" });
+                this.notification.add(
+                _t("The gallery is not available, no image can be added."),
+                { type: "danger" }
+            );
                 return;
             }
             // 追加到序列末尾：取当前最大 sequence（默认 10）+10 写入，
@@ -895,7 +902,7 @@ export class ProductImageGallery extends Component {
 
 export const productImageGalleryField = {
     component: ProductImageGallery,
-    displayName: _t("产品多图"),
+    displayName: _t("Product Images"),
     supportedAttributes: [
         { label: _t("Alternative text"), name: "alt", type: "string" },
     ],

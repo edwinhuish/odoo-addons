@@ -1,30 +1,46 @@
 {
-    "name": "订单编号",
-    "version": "19.0.1.7.0",
-    "summary": "按客户编码+年份生成订单编号，支持手动编辑、批量补号、全局唯一校验、PDF文件名与门户预览定制",
+    "name": "Order Number",
+    "version": "19.0.1.8.0",
+    "summary": "Order numbers built from the customer code plus the year, with manual editing, bulk numbering, a global uniqueness check and custom PDF file names and portal titles",
     "description": """
-        外贸SOHO场景下的销售订单/报价单编号定制模块。
+        Sales order / quotation numbering module for foreign trade SOHO
+        scenarios.
 
-        编号规则：客户编码 + 两位年份 + 客户本年度流水号
-        - 报价单和销售订单统一编号：DZ2602
+        Source language of this module is English (en_US); a Simplified Chinese
+        translation ships in i18n/zh_CN.po.
 
-        核心特性：
-        - 不修改系统原生 reference，保留 SOxxxx 作为内部主键
-        - 新增 order_no 存储字段用于对外展示、打印和详情页标题
-        - order_no 创建时自动生成，同时支持手动编辑
-        - 保存时校验全局唯一性，数据库层另有 UNIQUE 约束兜底
-        - 自动避让已被占用的编号（历史导入、手动改号、复制单据）
-        - display_name 优先显示 order_no，Many2one/下拉/搜索建议/页面标题一致
-        - Many2one 下拉与快速搜索可按订单编号命中
-        - 列表 API (web_search_read) 返回的 name 字段统一替换为 order_no
-        - 流水号创建时一次性分配，后续不会因其他单据变动而重算
-        - 客户编码在创建时快照，修改客户信息不影响历史单据
-        - 年份直接从 date_order 读取，不再单独快照
-        - 客户编码格式校验（仅允许大写英文字母），保存时自动转大写
-        - 列表视图提供"生成订单编号"批量补号动作
-        - 打印预览与PDF正文优先显示订单编号，未分配时回退到系统编号
-        - PDF文件名覆盖三个报表动作（sale.action_report_saleorder / sale.action_report_pro_forma_invoice / sale_pdf_quote_builder.action_report_saleorder_raw），中英文界面下均使用订单编号
-        - 客户门户预览页面的面包屑与 H2 标题也使用订单编号
+        Numbering rule: customer code + two digit year + customer sequence of the
+        year
+        - Quotations and sales orders share the same numbering: DZ2602
+
+        Key features:
+        - The native reference is never modified: SOxxxx stays the internal key
+        - The stored field order_no is used for customer facing documents,
+          printouts and the form title
+        - order_no is generated at creation and can still be edited manually
+        - Uniqueness is checked on save, with a database UNIQUE constraint as a
+          safety net
+        - Numbers that are already taken (imported history, manual changes,
+          duplicated documents) are skipped automatically
+        - display_name shows order_no first, so Many2one fields, dropdowns,
+          search suggestions and page titles stay consistent
+        - Many2one dropdowns and the quick search find an order by its number
+        - The list API (web_search_read) returns order_no as the name field
+        - Sequence numbers are assigned once at creation and are never
+          recomputed when other documents change
+        - The customer code is snapshotted at creation, so editing the customer
+          does not affect historical documents
+        - The year is read straight from date_order, no extra snapshot
+        - The customer code format is validated (uppercase letters only) and is
+          uppercased on save
+        - The list view offers a "Generate Order Number" bulk action
+        - Print preview and the PDF body show the order number, falling back to
+          the system reference when none is assigned
+        - The PDF file name is overridden on three report actions
+          (sale.action_report_saleorder / sale.action_report_pro_forma_invoice /
+          sale_pdf_quote_builder.action_report_saleorder_raw); the order number is
+          used in every language
+        - The customer portal breadcrumb and H2 title also use the order number
     """,
     "category": "Sales",
     "author": "edwinhuish",

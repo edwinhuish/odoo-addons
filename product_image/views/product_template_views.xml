@@ -45,7 +45,7 @@
         <field name="arch" type="xml">
 
             <xpath expr="//field[@name='default_code']" position="after">
-                <field name="image_gallery_count" string="图片数"
+                <field name="image_gallery_count" string="Images"
                        optional="hide"
                        readonly="1"/>
             </xpath>

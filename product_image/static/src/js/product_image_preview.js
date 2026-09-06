@@ -75,7 +75,7 @@ export class ProductImagePreviewDialog extends Component {
     }
 
     get displayName() {
-        return this.currentImage?.name || _t("产品图片");
+        return this.currentImage?.name || _t("Product Image");
     }
 
     /** 切换图片：保存当前状态，恢复目标图片之前的状态（缩放/旋转/位移/已加载）。 */

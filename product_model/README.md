@@ -61,6 +61,18 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 ---
 
+## 国际化（i18n）
+
+- **源语言：英文（`en_US`）**。Python / XML 中所有用户可见文本一律写英文，中文由译文文件提供。
+- **中文译文：`i18n/zh_CN.po`**（简体中文 `zh_CN`）；模块默认展示英文，安装中文语言后界面切为中文。
+- 覆盖范围：模型与字段名称 / `help`、型号类型 selection 标签、唯一约束与 `ValidationError` 报错、视图标题 / 列标题 / 占位提示 / 页面提示 / 空视图帮助。
+- 列表命中型号的后缀提示由 `product_template.py` 的 `_(" (Matching model: %(codes)s)")` 生成，中文译文为「（命中型号：xxx）」。
+- 占位符统一用命名形式 `%(name)s`，禁止按位置 `%s` 拼接。
+- 改动流程：改英文源文本 → 在 `i18n/zh_CN.po` 补 `msgid` / `msgstr` → `odoo -d <db> -u product_model --stop-after-init` 升级 → 刷新页面。
+- 启用中文：设置 → 语言 → 安装「简体中文 (zh_CN)」。
+
+---
+
 ## 依赖
 
 - `product`（产品模块，最小化依赖，不依赖 `sale`）

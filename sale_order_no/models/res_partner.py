@@ -23,8 +23,10 @@ class ResPartner(models.Model):
             ref = (record.ref or "").strip()
             if ref and not re.match(REF_PATTERN, ref):
                 raise ValidationError(_(
-                    "客户编号必须为大写英文字母，例如：DZ、DAZG。\n当前值：%s",
-                ) % record.ref)
+                    "The customer code must only contain uppercase letters, for "
+                    "example: DZ, DAZG.\nCurrent value: %(value)s",
+                    value=record.ref,
+                ))
 
     @api.model_create_multi
     def create(self, vals_list):

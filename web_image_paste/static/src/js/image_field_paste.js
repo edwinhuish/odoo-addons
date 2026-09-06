@@ -162,7 +162,9 @@ patch(ImageField.prototype, {
         const accepted = files.filter((file) => isAcceptedImageType(file, allowed));
         if (!accepted.length) {
             this.notification.add(
-                _t("粘贴的图片格式不被接受（仅允许：%(ext)s）。", { ext: allowed }),
+                _t("The pasted image format is not accepted (allowed: %(ext)s).", {
+                    ext: allowed,
+                }),
                 { type: "danger" }
             );
             return;
@@ -220,7 +222,9 @@ patch(ImageField.prototype, {
         const accepted = files.filter((file) => isAcceptedImageType(file, allowed));
         if (!accepted.length) {
             this.notification.add(
-                _t("拖入的图片格式不被接受（仅允许：%(ext)s）。", { ext: allowed }),
+                _t("The dropped image format is not accepted (allowed: %(ext)s).", {
+                    ext: allowed,
+                }),
                 { type: "danger" }
             );
             return;

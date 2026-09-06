@@ -25,36 +25,38 @@ class ProductImageGallery(models.Model):
     """
 
     _name = "product.image.gallery"
-    _description = "产品图片"
+    _description = "Product Image"
     _inherit = ["image.mixin"]
     _order = "sequence, id"
 
     name = fields.Char(
-        string="名称",
-        help="图片的简短说明（可选），用于内部识别，如「正面」「细节」「包装」。",
+        string="Name",
+        help="Short description of the image (optional), used for internal identification, "
+             "e.g. \"Front\", \"Detail\", \"Packaging\".",
     )
     sequence = fields.Integer(
-        string="排序",
+        string="Sequence",
         default=10,
-        help="数值小的排在前面；图库图片在缩略图列表中的展示顺序（主图始终在最前）。",
+        help="Lower values come first. Display order of the gallery images in the "
+             "thumbnail list (the main image always stays first).",
     )
     active = fields.Boolean(
-        string="启用",
+        string="Active",
         default=True,
-        help="取消勾选可停用某张图片而不删除，便于保留历史素材。",
+        help="Uncheck to disable an image without deleting it, so historical material is kept.",
     )
     note = fields.Char(
-        string="备注",
-        help="对该图片的补充说明。",
+        string="Note",
+        help="Additional information about this image.",
     )
 
     product_tmpl_id = fields.Many2one(
-        string="产品",
+        string="Product",
         comodel_name="product.template",
         ondelete="cascade",
         required=True,
         index=True,
-        help="该图片所属的产品模板；删除产品时图片行随之级联清理。",
+        help="Product template this image belongs to; images are removed together with the product.",
     )
 
     # ------------------------------------------------------------------
@@ -63,9 +65,10 @@ class ProductImageGallery(models.Model):
 
     @api.constrains("name", "product_tmpl_id")
     def _check_name_unique_per_template(self):
-        """同一产品内图片名称重复时给出可读中文提示。
+        """Raise a readable error when the image name is duplicated within a product.
 
-        名称非必填，但若填了则在同一产品内不可重复，便于在图库中识别。
+        The name is optional, but once filled it must be unique inside the same
+        product so images stay identifiable in the gallery.
         """
         for record in self:
             if not record.name or not record.product_tmpl_id:
@@ -77,8 +80,8 @@ class ProductImageGallery(models.Model):
             ], limit=1)
             if duplicate:
                 raise ValidationError(_(
-                    "图片名称“%s”在产品“%s”中已存在，同一产品内图片名称不可重复。"
-                ) % (
-                    record.name,
-                    record.product_tmpl_id.display_name,
+                    'The image name "%(name)s" already exists for product "%(product)s". '
+                    "Image names must be unique within the same product.",
+                    name=record.name,
+                    product=record.product_tmpl_id.display_name,
                 ))

@@ -1,0 +1,48 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#	* web_image_paste
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-06 00:00+0000\n"
+"PO-Revision-Date: 2026-09-06 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: web_image_paste
+#. odoo-javascript
+#: code:addons/web_image_paste/static/src/js/image_field_paste.js:0
+msgid "There was a problem while uploading your file."
+msgstr "上传文件时出现问题。"
+
+#. module: web_image_paste
+#. odoo-javascript
+#: code:addons/web_image_paste/static/src/js/image_field_paste.js:0
+msgid "The pasted image format is not accepted (allowed: %(ext)s)."
+msgstr "粘贴的图片格式不被接受（仅允许：%(ext)s）。"
+
+#. module: web_image_paste
+#. odoo-javascript
+#: code:addons/web_image_paste/static/src/js/image_field_paste.js:0
+msgid "The dropped image format is not accepted (allowed: %(ext)s)."
+msgstr "拖入的图片格式不被接受（仅允许：%(ext)s）。"
+
+#. module: web_image_paste
+#. odoo-javascript
+#: code:addons/web_image_paste/static/src/js/image_field_paste.js:0
+msgid ""
+"Oops! '%(fileName)s' didn't upload since its format isn't allowed."
+msgstr "抱歉，文件“%(fileName)s”的格式不被允许，未上传。"
+
+#. module: web_image_paste
+#. odoo-javascript
+#: code:addons/web_image_paste/static/src/xml/image_field_paste.xml:0
+msgid "Uploading…"
+msgstr "上传中…"

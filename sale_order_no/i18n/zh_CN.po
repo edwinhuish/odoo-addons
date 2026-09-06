@@ -1,0 +1,120 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#	* sale_order_no
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-06 00:00+0000\n"
+"PO-Revision-Date: 2026-09-06 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: sale_order_no
+#: model_terms:ir.ui.view,arch_db:sale_order_no.view_order_form_inherit
+msgid "Leave empty to generate automatically"
+msgstr "留空自动生成"
+
+#. module: sale_order_no
+#: code:addons/sale_order_no/models/sale_order.py:0
+#: model_terms:ir.ui.view,arch_db:sale_order_no.sale_order_tree_inherit
+#: model_terms:ir.ui.view,arch_db:sale_order_no.view_sales_order_filter_inherit
+#: model:ir.model.fields,field_description:sale_order_no.field_sale_order__order_no
+msgid "Order Number"
+msgstr "订单编号"
+
+#. module: sale_order_no
+#: model_terms:ir.ui.view,arch_db:sale_order_no.view_partner_form_inherit
+msgid "Customer Code"
+msgstr "客户编号"
+
+#. module: sale_order_no
+#: model_terms:ir.ui.view,arch_db:sale_order_no.view_partner_form_inherit
+msgid "Uppercase letters, e.g. DZ, DAZG"
+msgstr "大写英文字母，如 DZ、DAZG"
+
+#. module: sale_order_no
+#: model:ir.actions.server,name:sale_order_no.action_generate_order_no
+msgid "Generate Order Number"
+msgstr "生成订单编号"
+
+#. module: sale_order_no
+#: model:ir.model.fields,field_description:sale_order_no.field_sale_order__buyer_ref
+msgid "Customer Code (Snapshot)"
+msgstr "客户编号(快照)"
+
+#. module: sale_order_no
+#: model:ir.model.fields,help:sale_order_no.field_sale_order__buyer_ref
+msgid ""
+"Copied from the customer code (partner ref) at creation time; later changes "
+"on the customer do not affect this document."
+msgstr "创建时从客户编号（联系人 ref）复制，后续修改客户资料不影响本单据。"
+
+#. module: sale_order_no
+#: model:ir.model.fields,field_description:sale_order_no.field_sale_order__buyer_order_idx
+msgid "Customer Yearly Sequence"
+msgstr "客户年度流水号"
+
+#. module: sale_order_no
+#: model:ir.model.fields,help:sale_order_no.field_sale_order__buyer_order_idx
+msgid ""
+"Assigned once at creation time; cancelled or voided documents still keep their "
+"sequence number."
+msgstr "创建时一次性分配，作废或取消的单据依然占用流水号。"
+
+#. module: sale_order_no
+#: model:ir.model.fields,help:sale_order_no.field_sale_order__order_no
+msgid ""
+"Format: customer code + two digit year + customer sequence of the year, e.g. "
+"DZ2602. Generated automatically at creation, it can be edited manually and is "
+"checked for global uniqueness on save."
+msgstr ""
+"格式：客户编号 + 两位年份 + 客户本年度流水号，例如 DZ2602；"
+"创建时自动生成，可手动修改，保存时校验全局唯一。"
+
+#. module: sale_order_no
+#: model:ir.model.constraint,message:sale_order_no.constraint_order_no_unique
+msgid "The order number must be unique across all records."
+msgstr "订单编号必须全局唯一。"
+
+#. module: sale_order_no
+#. odoo-python
+#: code:addons/sale_order_no/models/sale_order.py:0
+msgid ""
+"The sequence numbers of customer \"%(partner)s\" are already taken for "
+"%(count)s consecutive values in %(year)s. No order number could be assigned "
+"automatically, please enter one manually."
+msgstr ""
+"客户“%(partner)s”在 %(year)s 年度的流水号已连续占用 %(count)s 个，"
+"无法自动分配订单编号，请手动指定。"
+
+#. module: sale_order_no
+#. odoo-python
+#: code:addons/sale_order_no/models/sale_order.py:0
+msgid ""
+"The order number \"%(number)s\" is already used by document %(document)s "
+"(customer: %(partner)s). Please use another number."
+msgstr "订单编号“%(number)s”已被单据 %(document)s（客户：%(partner)s）占用，请使用其他编号。"
+
+#. module: sale_order_no
+#. odoo-python
+#: code:addons/sale_order_no/models/sale_order.py:0
+msgid ""
+"An order number was generated for %(generated)s document(s); %(skipped)s "
+"document(s) already had one and were left untouched."
+msgstr "已为 %(generated)s 张单据生成订单编号，%(skipped)s 张单据已有编号未改动。"
+
+#. module: sale_order_no
+#. odoo-python
+#: code:addons/sale_order_no/models/res_partner.py:0
+msgid ""
+"The customer code must only contain uppercase letters, for example: DZ, "
+"DAZG.\n"
+"Current value: %(value)s"
+msgstr "客户编号必须为大写英文字母，例如：DZ、DAZG。\n当前值：%(value)s"

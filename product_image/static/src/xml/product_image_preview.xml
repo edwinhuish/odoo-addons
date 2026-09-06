@@ -32,8 +32,8 @@
             <button type="button"
                     class="o_product_image_preview-close o_preview_iconbtn"
                     t-on-click.stop="close"
-                    title="关闭 (Esc)"
-                    aria-label="关闭">
+                    title="Close (Esc)"
+                    aria-label="Close">
                 <i class="fa fa-times fa-lg"/>
             </button>
 
@@ -53,28 +53,28 @@
             <!-- 底部工具条（默认完全透明，鼠标移入区域时显示，淡入+上滑动画） -->
             <div class="o_product_image_preview-bottombar position-absolute start-0 end-0 bottom-0 d-flex justify-content-center align-items-center p-3">
                 <div class="btn-group">
-                    <button t-if="hasMultiple" type="button" class="o_preview_iconbtn" t-on-click.stop="prev" title="上一张 (←)" aria-label="上一张">
+                    <button t-if="hasMultiple" type="button" class="o_preview_iconbtn" t-on-click.stop="prev" title="Previous (←)" aria-label="Previous">
                         <i class="fa fa-chevron-left"/>
                     </button>
-                    <button type="button" class="o_preview_iconbtn" t-on-click.stop="zoomIn" title="放大 (+)" aria-label="放大">
+                    <button type="button" class="o_preview_iconbtn" t-on-click.stop="zoomIn" title="Zoom in (+)" aria-label="Zoom in">
                         <i class="fa fa-plus"/>
                     </button>
                     <button type="button" class="o_preview_iconbtn"
                             t-on-click.stop="resetZoom"
                             t-att-class="{'disabled opacity-50': state.scale === 1}"
-                            title="重置 (0)" aria-label="重置">
+                            title="Reset (0)" aria-label="Reset">
                         <i class="fa fa-search"/>
                     </button>
                     <button type="button" class="o_preview_iconbtn"
                             t-on-click.stop="zoomOut"
                             t-att-class="{'disabled opacity-50': state.scale === minScale}"
-                            title="缩小 (-)" aria-label="缩小">
+                            title="Zoom out (-)" aria-label="Zoom out">
                         <i class="fa fa-minus"/>
                     </button>
-                    <button type="button" class="o_preview_iconbtn" t-on-click.stop="rotate" title="旋转 (r)" aria-label="旋转">
+                    <button type="button" class="o_preview_iconbtn" t-on-click.stop="rotate" title="Rotate (r)" aria-label="Rotate">
                         <i class="fa fa-repeat"/>
                     </button>
-                    <button t-if="hasMultiple" type="button" class="o_preview_iconbtn" t-on-click.stop="next" title="下一张 (→)" aria-label="下一张">
+                    <button t-if="hasMultiple" type="button" class="o_preview_iconbtn" t-on-click.stop="next" title="Next (→)" aria-label="Next">
                         <i class="fa fa-chevron-right"/>
                     </button>
                 </div>
