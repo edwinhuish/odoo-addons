@@ -31,8 +31,9 @@
                 <div class="modal-content">
                     <div class="modal-header align-items-center">
                         <h5 class="modal-title mb-0">图片管理</h5>
-                        <!-- header 右侧操作区：批量删除 / 勾选态操作 + 关闭按钮 -->
-                        <div class="d-flex align-items-center gap-1 pe-1">
+                        <!-- header 右侧操作区：批量删除 / 勾选态操作 + 关闭按钮。
+                             不留右侧内边距（无 pe-1）：关闭按钮完整贴齐容器最右边缘 -->
+                        <div class="d-flex align-items-center gap-1">
                             <!-- 必须是 <t t-if>：HTML 的 <template> 元素是惰性容器，
                                  其内容不会被渲染（此前误用 <template t-if> 导致进入
                                  勾选模式后只剩缩略图勾选圈，看不到「删除 / 取消」按钮） -->
@@ -243,17 +244,19 @@
                             </t>
                         </div>
                     </div>
+                    <!-- 按钮顺序：确认删除在左，「取消」在最右侧（最易点击的位置）。
+                         样式与交互逻辑不变，仅交换两者的排列顺序 -->
                     <div class="o_gallery_manage-confirm-foot">
-                        <button type="button"
-                                class="btn btn-sm btn-secondary"
-                                t-on-click="cancelConfirm">
-                            取消
-                        </button>
                         <button type="button"
                                 class="btn btn-sm btn-danger"
                                 t-on-click="confirmDelete">
                             <i class="fa fa-trash me-1"/>
                             <t t-esc="state.confirm.confirmLabel"/>
+                        </button>
+                        <button type="button"
+                                class="btn btn-sm btn-secondary"
+                                t-on-click="cancelConfirm">
+                            取消
                         </button>
                     </div>
                 </div>
