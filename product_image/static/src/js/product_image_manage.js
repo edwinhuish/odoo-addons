@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, onWillDestroy, useRef, useState } from "@odoo/owl";
+import { Component, onPatched, onWillDestroy, useRef, useState } from "@odoo/owl";
 import { useAutofocus, useService } from "@web/core/utils/hooks";
 import { getDataURLFromFile } from "@web/core/utils/urls";
 import { checkFileSize } from "@web/core/utils/files";
@@ -80,6 +80,19 @@ export class ProductImageManageDialog extends Component {
         // 拖动结束后吞掉紧随其后的合成 click（防止落位瞬间误切选中）；事件链结束后复位
         this._suppressClick = false;
         this._clickGuardTimer = null;
+        // 排序首帧（position 从 relative 切 absolute、transform 从 none 起算）必须
+        // 禁用 transform 过渡，否则所有缩略图会从网格左上角“飞入”目标格；
+        // 首帧补丁完成后切到 move 阶段，恢复过渡以呈现避让动画。
+        onPatched(() => this._onSortPatched());
+    }
+
+    /** 排序渲染后的阶段推进：init（无过渡落位）→ move（过渡生效，避让动画）。 */
+    _onSortPatched() {
+        const drag = this.state.drag;
+        if (drag && drag.phase === "init") {
+            drag.phase = "move";
+            this.state.drag = { ...drag };
+        }
     }
 
     // ------------------------------------------------------------------
@@ -367,12 +380,17 @@ export class ProductImageManageDialog extends Component {
             return;
         }
         ev.preventDefault();
+        // 记录抓取点在缩略图内的偏移：拖动时保持「鼠标下仍是这一点」，
+        // 抓取瞬间块不会跳到以鼠标为中心的位置，移动全程贴合鼠标
+        const tileRect = ev.currentTarget.getBoundingClientRect();
         this._sort = {
             pointerId: ev.pointerId,
             from: i,
             moved: false,
             lastX: ev.clientX,
             lastY: ev.clientY,
+            grabX: this._clampVal(ev.clientX - tileRect.left, 0, SORT_TILE),
+            grabY: this._clampVal(ev.clientY - tileRect.top, 0, SORT_TILE),
         };
         window.addEventListener("pointermove", this._sortCleanup = (e) => this._onSortMove(e), {
             passive: false,
@@ -407,6 +425,7 @@ export class ProductImageManageDialog extends Component {
                 floatX: 0,
                 floatY: 0,
                 spacerH: geo.spacerH,
+                phase: "init", // 首帧无过渡落位，onPatched 后转 move
             };
         }
         const geo = this._sortGeo();
@@ -427,12 +446,15 @@ export class ProductImageManageDialog extends Component {
         const drag = this.state.drag;
         drag.hole = hole;
         // 拖拽块逐帧跟随指针（块左/顶夹在网格内容范围内，允许贴到末行底部）。
-        // availX/Y 均以内容起点为 0（与 tile 的 absolute 定位点一致），
-        // 只减掉块自身尺寸：块中心对齐鼠标、块底可到内容底。
+        // availX/Y 均以内容起点为 0（与排序态 tile 的 absolute 定位点一致），
+        // 只减掉块自身尺寸：块可贴到内容底部，不会被 padding 提前截断。
         const availX = Math.max(0, geo.grid.clientWidth - geo.padL - geo.padR - SORT_TILE);
         const availY = Math.max(0, geo.spacerH - SORT_TILE);
-        drag.floatX = this._clampVal(contentX - SORT_TILE / 2, 0, availX);
-        drag.floatY = this._clampVal(contentY - SORT_TILE / 2, 0, availY);
+        // 以抓取偏移定位（缺省退化为居中）：块上被按住的那一点始终在鼠标下
+        const grabX = typeof sort.grabX === "number" ? sort.grabX : SORT_TILE / 2;
+        const grabY = typeof sort.grabY === "number" ? sort.grabY : SORT_TILE / 2;
+        drag.floatX = this._clampVal(contentX - grabX, 0, availX);
+        drag.floatY = this._clampVal(contentY - grabY, 0, availY);
         // 每次 pointermove 都重建 drag 对象强制渲染：hole 不变时（行内平移、
         // 停留在边缘等待自动滚动）拖拽块也必须持续跟随指针，不能只等 hole 变化。
         this.state.drag = { ...drag };
@@ -568,6 +590,24 @@ export class ProductImageManageDialog extends Component {
 
     _clampVal(v, min, max) {
         return Math.max(min, Math.min(max, v));
+    }
+
+    /**
+     * 渲染用：网格 class。
+     * - is-sorting：拖动中，网格切绝对定位 + transform 布局（tile 必须真正
+     *   脱离流内，否则 translate 会叠加在流内位置之上产生巨大间隙）
+     * - is-sorting-init：排序首帧，禁用 tile 的 transform 过渡（避免从左上角飞入）
+     */
+    gridClass() {
+        let c = "o_gallery_manage-grid";
+        const drag = this.state.drag;
+        if (drag) {
+            c += " is-sorting";
+            if (drag.phase === "init") {
+                c += " is-sorting-init";
+            }
+        }
+        return c;
     }
 
     /** 渲染用：缩略图附加 class（选中态 / 勾选态 / 可拖 / 正在拖动）。 */

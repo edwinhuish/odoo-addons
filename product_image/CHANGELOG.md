@@ -1,5 +1,36 @@
 # 变更日志
 
+## [19.0.2.3.2] - 2026-09-06（待验证）
+
+### 变更（修复：拖动排序布局）
+
+- **根因修复——拖动瞬间缩略图出现巨大间隙并顶出横向滚动条**：模板中缩略图带 Bootstrap 工具类 `position-relative`，而 `.position-relative` 的定义是 `position: relative !important`（已核对 `web/static/lib/bootstrap/dist/css/bootstrap.css`），**压过**排序态 `.o_gallery_manage-grid.is-sorting .o_gallery_manage-tile { position: absolute }`。tile 因此始终留在流内，`transform: translate(col*76, row*76)` 叠加在流内位置之上，偏移量随序号累积 → 巨大间隙、横向溢出（`overflow-y:auto` 会让 `overflow-x` 的 `visible` 计算成 `auto`，于是出现横向滚动条），拖拽块也远离鼠标。
+  - 缩略图不再使用 `position-relative` 工具类，常态定位改由 SCSS 的 `.o_gallery_manage-tile { position: relative; }` 提供（无 `!important`），排序态的 `absolute` 得以生效 → 拖动时缩略图保持原有 8px 间距、与原流内位置完全重合；
+  - 网格补 `overflow-x: hidden`，任何越界都不再产生横向滚动条；
+  - 网格 / 缩略图的 class 改由 `gridClass()` + `t-attf-class` 统一输出（拖拽态 `is-sorting`、首帧 `is-sorting-init`）。
+  - 已核实（对照 `web/static/lib/owl/owl.js` 的 `setClass` / `updateClass`）：Owl 的 `t-att-class` 走 `classList.add/remove`，是 **token 级增删**，不会清掉元素静态 `class`——故本问题与 class 合并无关，真因就是 `!important` 覆盖。
+- **排序首帧不再“从左上角飞入”**：排序开始时 position 由 relative 切 absolute、transform 由 `none` 起算，若带过渡会把所有缩略图从网格左上角动画到目标格。现首帧加 `is-sorting-init` 禁用 tile 的 transform 过渡（目标格本就与流内位置重合，视觉完全不动），`onPatched` 后切到 `move` 阶段恢复过渡，保留避让动画。
+- **拖拽块贴合鼠标**：按下时记录抓取点在缩略图内的偏移（`grabX/grabY`），拖动时保持该点始终在鼠标下——抓取瞬间不跳位、移动全程贴合；并保留 19.0.2.3.1 的逐帧渲染 + 拖拽块无过渡（松手 `o_gm-snap` 恢复落位动画）。
+
+### 影响
+
+- 仅前端 JS / SCSS / XML 与 manifest 版本；模型 / 字段 / 视图 / 权限未变。
+- 交互变化：拖动时缩略图间隙与静态布局一致（无额外间隙、无横向滚动条），抓取与移动全程拖拽块跟手；避让动画与落位动画保留。
+
+### 文档
+
+- 同步 `__manifest__.py` 版本（19.0.2.3.2）、`AGENTS.md`（当前版本 / 核心约束 / 实现要点）、`README.md`（版本记录 / 验证清单）、根 `README.md` / `AGENTS.md` 模块一览表。
+
+### 待验证
+
+- 目标环境升级后验证（前端资源 `-u` 后强刷）：
+- 一按下拖动：缩略图**间隙不变**（仍为 8px）、位置与松开前完全一致，网格**不出现横向滚动条**；
+- 拖动全程：拖拽块保持按住的那一点贴合鼠标（不跳位、不滞后），跨行 / 跨列避让平滑；
+- 排序首帧无“全部缩略图从左上角飞入”的动画；
+- 松手落位 + 顺序写回 `sequence` 正常，主图仍固定首位不可拖。
+
+---
+
 ## [19.0.2.3.1] - 2026-09-06（待验证）
 
 ### 变更（修复）

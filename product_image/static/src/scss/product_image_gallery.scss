@@ -342,6 +342,9 @@
         gap: 8px;
         padding: 10px;
         overflow-y: auto;
+        // 显式禁止横向滚动：overflow-y:auto 会让 overflow-x 的 visible 计算成 auto，
+        // 任何越界（含过渡中途）都会顶出横向滚动条
+        overflow-x: hidden;
         border: 1px solid #e9ecef;
         border-radius: 0.375rem;
         background: #fafbfc;
@@ -356,6 +359,12 @@
 
         // 单个缩略图：蓝色选中描边（border 占位避免尺寸抖动）
         .o_gallery_manage-tile {
+            // 常态为 relative（供右上角 × / 左上角勾选圈绝对定位）；
+            // 排序态由 .is-sorting 覆盖为 absolute。
+            // 注意：此处不要用 Bootstrap 的 .position-relative 工具类——它带
+            // !important，会压过排序态的 absolute，使 transform 叠加在流内位
+            // 置之上，产生巨大间隙与横向滚动条。
+            position: relative;
             width: 68px;
             height: 68px;
             flex: 0 0 auto;
@@ -419,6 +428,16 @@
         .o_gallery_manage-del,
         .o_gallery_manage-check {
             display: none;
+        }
+    }
+
+    // 排序首帧：tile 刚从流内切换为 absolute、transform 由 none 起算，
+    // 若带过渡会从网格左上角“飞入”目标格；首帧禁用过渡即可瞬间就位
+    // （目标格与流内位置本来重合，视觉上完全不动），之后交由 onPatched
+    // 切到 move 阶段恢复过渡呈现避让动画。
+    .o_gallery_manage-grid.is-sorting-init {
+        .o_gallery_manage-tile {
+            transition: none;
         }
     }
 

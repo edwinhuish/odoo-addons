@@ -105,13 +105,19 @@
                                  （含主图）右上角 ×；超高内部滚动，不参与行高计算。
                                  拖动排序 / 勾选模式下网格切为绝对定位 + transform 布局 -->
                             <div class="o_gallery_manage-thumbs flex-fill d-flex flex-column">
-                                <div class="o_gallery_manage-grid"
-                                     t-ref="grid"
-                                     t-att-class="state.drag ? ' is-sorting' : ''">
+                                <!-- 网格 class 由 gridClass() 统一输出（常态 / is-sorting /
+                                     首帧 is-sorting-init），单一来源更直观 -->
+                                <div t-ref="grid"
+                                     t-attf-class="{{ gridClass() }}">
                                     <t t-if="items.length">
                                         <t t-foreach="items" t-as="it" t-key="it.key">
-                                            <div class="o_gallery_manage-tile position-relative"
-                                                 t-att-class="tileClasses(it_index)"
+                                            <!-- 绝不能加 Bootstrap 的 .position-relative：它是
+                                                 position:relative !important，会压过排序态的
+                                                 position:absolute，tile 不脱离流内 → transform
+                                                 叠加在流内位置之上 → 拖动时出现巨大间隙并顶出
+                                                 横向滚动条。常态定位由 SCSS 的
+                                                 .o_gallery_manage-tile 提供（无 !important） -->
+                                            <div t-attf-class="o_gallery_manage-tile{{ tileClasses(it_index) }}"
                                                  t-att-style="tileStyle(it_index)"
                                                  t-on-click="(ev) => this.onTileClick(it_index, ev)"
                                                  t-on-pointerdown="(ev) => this.onSortPointerDown(it_index, ev)">
