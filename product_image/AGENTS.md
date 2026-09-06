@@ -224,3 +224,76 @@
 - **预览弹窗性能套路**：`translate3d` + `will-change` 上 GPU、移除 transform 过渡求 1:1；每视图独立状态缓存避免重复操作丢失；挂 window 级 mousemove/mouseup 保证拖出区域仍能拖/能停。
 - **overflow 裁切规避**：角标/badge 类负偏移元素，要么移入容器内侧，要么给滚动容器加同向 padding 吸收溢出，并显式 `overflow:visible` 上层容器。
 - **Odoo 19 适配**：`name_get/name_search` 已废、`_sql_constraints` 已废（用 `models.Constraint`）、QWeb 内勿 `_t()`、自定义 widget 走 `registry.category("fields").add` + `fieldDependencies`。
+
+---
+
+## 开发复盘与关键经验（T-005）
+
+> 2026-09-06 完成，落地 `19.0.2.4.2`（本轮批次 `19.0.2.3.0` ~ `19.0.2.4.2`）。以下记录供后续类似「网格拖拽排序 + 弹窗交互」需求复用。
+
+### 本轮优化要点
+
+- **统一数组 + diff 最小写回**：前端把「主图 + 图库」视为同一个数组（`displayItems` / `displayKeys`，顺序即下标），后端仍分开存（产品 `image_1920` 字段 + `product.image.gallery.sequence`）。拖动后 `onManageReorder(after)` 与拖动前的 `displayKeys` 比对：长度不一致即放弃（防并发增删错位）；图库顺序统一由 `_writeGalleryOrder()` 按 10 步长写入，且**逐项与当前 `sequence` 比对，只写位置真的变了的记录**，避免无谓 dirty 与重排抖动。
+- **主图可拖动（首位即主图）**：`after[0]` 不是 `main` 且有主图时走 `_writeOrderWithNewMain()`——被拖到首位的图提升为主图（数据写入 `image_1920` + 删除其图库记录），原主图按它在新数组中的下标落位新建为图库记录。**移动语义**，图片不重复、不丢失；无主图时只重排图库、不凭空造主图。
+- **拖拽排序几何**：排序态网格切「绝对定位 + `transform`」布局，格距常量 `SORT_CELL = 76`（图块 68 + gap 8），由 hole（插入位）映射其余图块的格位，`transition: transform` 形成避让动画；拖拽块按抓取点偏移跟随指针，松手 snap 到落位单元再提交。
+- **删除确认 / 批量删除**：任何删除（单张 × / 批量）先弹含缩略图清单的确认框；批量删除走 header 勾选模式，删除按「先图库、后主图」顺序（先删主图会触发提升、打乱剩余图库 key 定位）。
+- **弹窗细节**：大图选中主图时名称行留空（`&#160;` 占位保行高）；确认框底部按钮为「删除」→「取消」（取消在最右）；header 右侧操作区去掉 `pe-1`，关闭按钮与弹窗右缘贴齐。
+
+### 遇到的问题及解决方案（坑点）
+
+1. **`&nbsp;` 让整个后端前端崩溃**
+   - 现象：QWeb 模板名称行占位写 `&nbsp;`，浏览器加载 `web.assets_web.bundle.xml` 抛 `Entity 'nbsp' not defined`，随后 `Missing template: web.WebClient`，**整个后台白屏**。
+   - 根因：QWeb 模板按 **XML** 解析，XML 只内置 `&amp; &lt; &gt; &quot; &apos;` 五个实体，`&nbsp;` 是 HTML 实体、未定义即报错；又因资源按 bundle 整体编译，一处非法实体会连带整个 bundle 加载失败。
+   - 解决：改用 XML 数字实体 `&#160;`（同样是不换行空格）。**经验：QWeb 里一律用数字实体，不要用 HTML 命名实体；改完必须 `-u` 升级并强刷（bundle 有缓存）**。
+2. **Bootstrap `.position-relative` 的 `!important` 压过排序态定位（本轮最隐蔽的坑）**
+   - 现象：一按下拖动，缩略图之间出现**巨大间隙**、网格冒出**横向滚动条**、拖拽块远离鼠标。
+   - 根因：缩略图模板带 Bootstrap 工具类 `position-relative`，其定义为 `position: relative !important`（已核对 `web/static/lib/bootstrap/dist/css/bootstrap.css`），压过 `.is-sorting .o_gallery_manage-tile { position: absolute }`。tile 因此**从未脱离流内**，`transform: translate(col*76, row*76)` 叠加在流内位置之上，偏移随序号累积。
+   - 解决：移除该工具类，常态定位改由模块 SCSS 的 `.o_gallery_manage-tile { position: relative; }` 提供（无 `!important`），排序态 `absolute` 才生效。
+   - **经验：覆盖任何 Bootstrap 工具类前，先确认它是否带 `!important`；工具类几乎都带，选择器优先级再高也压不过**。
+3. **`<template t-if>` 让按钮「凭空消失」**
+   - 现象：点「批量删除」进入勾选模式后只剩缩略图勾选圈，「已选 N 张 / 删除 / 取消」全不可见，也不报错。
+   - 根因：`<template>` 是 HTML **惰性容器元素**，其内容不会渲染到文档；QWeb 里条件分支必须用 `<t t-if>`。
+   - 顺带核实（对照 `web/static/lib/owl/owl.js` 的 `setClass` / `updateClass`）：Owl 的 `t-att-class` 走 `classList.add/remove`，是 **token 级增删**，不会清掉元素静态 `class`——排查时应区分「没渲染」与「class 被覆盖」两类问题。
+4. **`overflow-y: auto` 隐式让 `overflow-x` 变 `auto`**
+   - 现象：横向越界（哪怕是过渡动画中途）就冒出横向滚动条。
+   - 解决：网格显式 `overflow-x: hidden`。**经验：只要容器设了 `overflow-y:auto`，横向就等于可滚动，越界必出条**（与 T-004 坑 1 同源）。
+5. **排序占位高度多算 2px → 滚动条闪现 → 列数跳变**
+   - 现象：内容「刚好满高」时一进入排序就闪出滚动条，随后整网格重排、间隙错乱。
+   - 根因：占位高度写成 `rows*76 - 8 + 2`，比原 flex 内容高 2px → 溢出 2px 出滚动条 → `clientWidth` 变小 → `cols` 变小 → 所有图块重排。
+   - 解决：占位高度取**与原 flex 布局完全等高**的 `rows*SORT_CELL - SORT_GAP`（不含 padding，padding 由 grid 自身再加）。
+6. **拖拽块不跟手（只在 hole 变化时才动 + 过渡滞后）**
+   - 根因：① 原实现只在插入位 `hole` 变化时才重建 `drag` 触发渲染，行内平移时 `floatX/Y` 改了却不渲染；② 拖拽块自身带 `transition: transform 0.16s`，每次位移都被缓动 160ms。
+   - 解决：每次 `pointermove` 都重建 `drag` 对象强制逐帧渲染；拖拽块 `transition: none`（1:1 跟手），松手落位时加 `o_gm-snap` 类恢复过渡保留落位动画。
+7. **坐标原点漏算边框 / 夹取误扣 padding**
+   - 原点：`getBoundingClientRect().left` 是 border box 外缘，内容区起点要再扣 `borderLeftWidth + paddingLeft`，否则拖拽块恒定偏离鼠标 1px。
+   - 夹取：`availY` 原先额外扣了上下 padding，块到末行前 10px 就被夹住、对不齐底部；改为只扣块自身尺寸（`spacerH - 68`），块底可贴到内容底。
+8. **排序首帧「全部缩略图从左上角飞入」**
+   - 根因：排序开始时 position 由 relative 切 absolute、`transform` 由 `none` 起算，带过渡就会从网格左上角动画到目标格。
+   - 解决：首帧加 `is-sorting-init` 禁用 tile 的 `transform` 过渡（目标格本就与流内位置重合，视觉完全不动），`onPatched` 后切 `move` 阶段恢复避让动画。
+9. **已保存图片的 `image_1920` 可能是 binary size 占位**
+   - 现象：把图库图提升为主图时，若直接把 `rec.data.image_1920` 写进主图字段，写进去的是 `"12.3 Kb"` 这类占位串。
+   - 解决：`_readGalleryImageBase64()` / `_readMainImageBase64()` 在值为空或 `isBinarySize()` 时用 `orm.read` 取真实 base64；且**原主图必须在覆盖主图字段之前读取**，否则原图丢失。
+10. **未保存图库记录的 key 不是数字 id**
+    - 现象：原主图落位新建的图库记录 key 形如 `gvirtual_1`，`_gidFromKey` 原先 `Number("virtual_1")` 得 NaN → 记录匹配不到 → 后续再拖动 / 删除该图**静默失败**。
+    - 解决：`_gidFromKey` 兼容虚拟 id（非数字时返回原始字符串），与 `record.resId || record.id` 严格相等命中。
+11. **更换主图后 key 漂移**
+    - 现象：主图变更后 `'main'` 指向另一张图，弹窗按旧 key 锚定会选中错误的图。
+    - 解决：排序提交后按**落位索引** `prefer: hole` 重拉列表，不按 key 锚定。
+12. **写回的并发保护**：`onManageReorder` 先比对 `displayKeys.length !== after.length`（期间发生过增删）就直接放弃，避免按过期顺序写错位。
+
+### 接口与字段变更（本轮）
+
+- **无模型 / 字段 / 视图 / 权限变更**，仅前端 JS / XML / SCSS 与 manifest 版本、描述；无需迁移脚本。
+- widget 侧（`product_image_gallery.js`）：新增 `displayKeys` getter、`_galleryKeysOf()`、`_writeOrderWithNewMain()`、`_writeGalleryOrder()`、`_readGalleryImageBase64()`、`_readMainImageBase64()`；`onManageReorder(after)` 改为统一数组 diff 入口；`_gidFromKey()` 兼容虚拟 id。
+- 弹窗侧（`product_image_manage.js`）：新增 `gridClass()`；`drag` 状态新增 `phase`（`init` / `move`）与 `snapping`；抓取偏移 `grabX/grabY`；`_dragEnabled` 改为「至少两张图片」；插入位允许为 0。
+- 样式（`product_image_gallery.scss`）：新增 `.is-sorting-init`、`.o_gm-drag.o_gm-snap`；网格加 `overflow-x: hidden`；`.o_gallery_manage-tile` 承担常态 `position: relative`。
+- 模板（`product_image_manage.xml`）：`<template t-if>` → `<t t-if>`；网格与缩略图 class 由 `gridClass()` + `t-attf-class` 统一输出；名称行占位 `&#160;`；确认框按钮顺序调整；header 去掉 `pe-1`。
+
+### 可复用设计思路
+
+- **前端统一数组 + diff 最小写回**：当后端把「首位资源」与「排序明细」分开存时，前端合成一个数组做唯一顺序来源，拖动后先 diff 再分别写回，并对未变动项**不产生任何写操作**（减少 dirty 与重排抖动）；diff 前先校验长度，防止并发增删错位。
+- **网格拖拽排序套路**：排序态切「绝对定位 + `transform`」+ 插入位（hole）映射其余项格位；拖拽块与避让块用同一套「内容区坐标系」（原点 = border 内沿 + padding）；拖拽块无过渡逐帧跟手、落位时再开过渡；首帧必须禁过渡，否则从原点飞入。
+- **覆盖 Bootstrap 工具类前先查 `!important`**：工具类（`.position-*`/`.d-*` 等）多带 `!important`，模块内需要被覆盖的定位/显示，一律写进模块 SCSS，不要依赖工具类。
+- **Owl 模板两条硬规则**：条件分支用 `<t t-if>`（`<template>` 是惰性容器，内容不渲染）；`t-att-class` 是 token 级增删、不会清掉静态 class，需要整体控制时用 `t-attf-class` + 组件 getter 统一输出。
+- **二进制图片字段的两条顺序规则**：① 已保存记录的值可能是 binary size 占位，写入前必须 `orm.read` 取真实 base64；② 「替换主资源」类操作必须**先读旧值再写新值**，否则旧数据丢失。
+- **更换主资源用「移动」而非「复制」**：提升明细为主资源时删除该明细记录、把原主资源落位为明细，保证总数不变、不重复展示。
