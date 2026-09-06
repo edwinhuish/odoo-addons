@@ -302,3 +302,60 @@
 - **Owl 模板两条硬规则**：条件分支用 `<t t-if>`（`<template>` 是惰性容器，内容不渲染）；`t-att-class` 是 token 级增删、不会清掉静态 class，需要整体控制时用 `t-attf-class` + 组件 getter 统一输出。
 - **二进制图片字段的两条顺序规则**：① 已保存记录的值可能是 binary size 占位，写入前必须 `orm.read` 取真实 base64；② 「替换主资源」类操作必须**先读旧值再写新值**，否则旧数据丢失。
 - **更换主资源用「移动」而非「复制」**：提升明细为主资源时删除该明细记录、把原主资源落位为明细，保证总数不变、不重复展示。
+
+---
+
+## 会话修改总结与风险提示（2026-09-06，`19.0.2.3.0` → `19.0.2.4.3`）
+
+> 供后续 AI / 开发者**快速查阅与规避已知问题**。逐条含：问题描述 → 涉及文件 → 当前处理方式 → 潜在风险提示。
+
+### A. 缺陷修复（按影响面从大到小）
+
+| # | 问题描述 | 涉及文件 | 当前处理方式 | 潜在风险提示 |
+|---|----------|----------|--------------|--------------|
+| A1 | QWeb 模板写 `&nbsp;`，导致 `web.assets_web.bundle.xml` 解析失败、**整个后端前端白屏** | `static/src/xml/product_image_manage.xml` | 改用 XML 数字实体 `&#160;` | **任何 HTML 命名实体（`&nbsp;`/`&mdash;`/…）都会阻断整个 bundle**；新增模板文本前先检查；改完必须 `-u` 升级 + 强刷 |
+| A2 | 一按下拖动，缩略图出现**巨大间隙**、冒出**横向滚动条**、拖拽块远离鼠标 | `.../xml/product_image_manage.xml`、`.../scss/product_image_gallery.scss`（`.o_gallery_manage-tile`） | 去掉 tile 上的 `.position-relative`（其 `!important` 压过排序态 `absolute`），常态定位写进模块 SCSS；网格加 `overflow-x: hidden` | **禁止再给可拖动 tile 加任何 Bootstrap `position-*` 工具类**；网格横向滚动已关闭，若将来要横向滚动需重新评估拖拽夹取逻辑 |
+| A3 | 点「批量删除」后只有勾选圈，「已选 N 张 / 删除 / 取消」全不可见 | `.../xml/product_image_manage.xml` | `<template t-if>` → `<t t-if>`（`<template>` 是惰性容器，内容不渲染） | **全仓禁止 `<template t-if>`**；新增条件分支一律 `<t t-if>` / `t-elif` |
+| A4 | 拖拽块滞后、行内平移时不动（不跟手） | `.../js/product_image_manage.js`（`_onSortMove`）、`.../scss`（`.o_gm-drag`） | 每次 `pointermove` 重建 `drag` 强制渲染；拖拽块 `transition: none`；按抓取点偏移定位；坐标原点扣 border | **不要再给拖拽块加 transform 过渡**（否则重现 160ms 滞后）；落位动画依赖 `o_gm-snap` 类，勿删 |
+| A5 | 拖动时闪现滚动条 → 列数变化 → 整网格跳变 | `.../js/product_image_manage.js`（`_sortGeo`） | 占位高度改为与原 flex **完全等高** `rows*76-8`（原多算 2px） | 改 tile 尺寸 / gap 时必须同步 `SORT_TILE/SORT_GAP/SORT_CELL` 三个常量与 SCSS，否则几何全面错位 |
+| A6 | 排序首帧「全部缩略图从左上角飞入」 | `.../js`（`drag.phase` + `onPatched`）、`.../scss`（`.is-sorting-init`） | 首帧 `is-sorting-init` 禁用 tile 过渡，`onPatched` 后切 `move` | `phase` 状态机不可省略；`onPatched` 内切换状态会多一次渲染（有意为之） |
+| A7 | 拖拽块到末行前被夹住、且与鼠标恒定偏 1px | `.../js`（`availY` / `originX,Y`） | `availY` 只扣块尺寸；原点 = `rect + border + padding`（运行时读取） | 网格 border/padding 若改，几何依赖运行时取值，一般不会错；但**不要改回硬编码 10px** |
+| A8 | 更换主图时把 binary size 占位串（如 `12.3 Kb`）写进主图字段 | `.../js/product_image_gallery.js`（`_readGalleryImageBase64` / `_readMainImageBase64`） | 值为空或 `isBinarySize()` 时用 `orm.read` 取真实 base64；**先读旧主图再覆盖** | 若将来改由后端方法实现，必须保留「先读旧值再写新值」的顺序与失败提示，否则原图丢失 |
+| A9 | 原主图落位生成的新图库记录无法再次拖动 / 删除（静默失败） | `.../js/product_image_gallery.js`（`_gidFromKey`） | 兼容未保存记录的虚拟 id 字符串（`gvirtual_1`） | 保存后 id 会由虚拟 id 变真实 id，**跨保存不要缓存复用 key** |
+| A10 | 更换主图后弹窗选中项漂移（`main` key 指向了另一张图） | `.../js/product_image_manage.js`（`_commitReorder`） | 按**落位索引** `prefer: hole` 重拉，不按 key 锚定 | 若改回按 key 锚定会重现漂移 |
+| A11 | 缩略图列末端「+」占位符被压成约 18px 扁条 | `.../scss`（`.o_gallery_thumb_upload`、`.o_gallery_thumb_wrap`） | `flex: 0 0 auto` 禁止收缩 + `min-width/min-height: 56px` 兜底 | **竖向 flex 列中新增任何固定尺寸项都要加 `flex: 0 0 auto`**，否则溢出时被压到 min-content 尺寸 |
+
+### B. 功能新增
+
+| 功能 | 涉及文件 | 处理方式 | 风险提示 |
+|------|----------|----------|----------|
+| 主图可拖动、序列首位即主图 | `product_image_manage.js`（`_dragEnabled` / `onSortPointerDown` / `tileClasses`）、`product_image_gallery.js`（`_writeOrderWithNewMain`） | 至少 2 张图即可拖；插入位允许 0；`after[0]` 非 `main` 且有主图时提升该图为主图、原主图落位图库 | 是**移动语义**（被提升的图库记录删除、原主图新建记录），不是复制；无主图时不造主图 |
+| 统一数组 + diff 最小写回 | `product_image_gallery.js`（`displayKeys` / `onManageReorder` / `_writeGalleryOrder` / `_galleryKeysOf`） | 前端合成 `[main, g<id>…]`，拖动后与 `displayKeys` diff；长度不一致即放弃；只写 `sequence` 真变了的记录 | **排序写回只走 `_writeGalleryOrder`**，不要在别处散写 sequence；diff 前长度校验不可去掉（防并发增删错位） |
+| 删除确认 / 批量删除 / 名称行留空（`19.0.2.3.0` 既有） | `product_image_manage.js` / `.xml` | 单张 × 与批量均先弹含缩略图清单的确认框；删除顺序「先图库、后主图」 | 破坏「先图库后主图」会导致剩余图库 key 定位错乱 |
+
+### C. UI 调整
+
+| 调整 | 涉及文件 | 处理方式 | 风险提示 |
+|------|----------|----------|----------|
+| 确认框按钮：删除在左、**取消置右** | `.../xml/product_image_manage.xml`（`.o_gallery_manage-confirm-foot`） | 交换两个 button 顺序（容器 `justify-content: flex-end`） | 事件与样式未变；若改容器对齐方式会改变「最右」语义 |
+| 关闭按钮贴齐最右（去 `pe-1`） | `.../xml/product_image_manage.xml`（header 右侧操作区） | 移除 `pe-1`（4px 右内边距） | 若再加回右侧 padding，按钮会与边框产生缝隙 |
+| 「+」占位符 56×56 正方形 | `.../scss` | `flex: 0 0 auto` + min 尺寸兜底（尺寸本身由模板内联 style 给定） | 模板内联尺寸与 SCSS 兜底需保持一致 |
+
+### D. 实现难点（为什么这样设计）
+
+1. **前端统一数组 vs 后端分开存储**：主图是产品字段、图库是 One2many + `sequence`，无法用一条写操作表达「换主图」。方案是前端合成数组 → diff → 分两路写回（主图字段 / 图库 sequence），并统一走最小写回。
+2. **主图更换的顺序敏感性**：必须先读原主图 base64 再覆盖主图字段；且已保存记录的图片值可能是 binary size，需 ORM 读取。顺序错了就是**数据丢失**。
+3. **网格拖拽的坐标系统一**：排序态切「绝对定位 + transform」，坐标原点必须定义为「border 内沿 + padding」（= 内容区起点），否则 transform 会叠加在流内位置之上（A2 的另一种表现）。
+4. **逐帧跟手 vs 落位动画的矛盾**：跟手要求无过渡，落位要求有过渡 → 用 `transition: none` + 落位时 `o_gm-snap` 类开过渡，首帧再用 `is-sorting-init` 关过渡避免飞入。
+5. **两类「看不见的数据差异」**：binary size 占位串、虚拟 id（`virtual_x`）——都是运行时才出现、静态代码看不出来的坑。
+
+### E. 已知风险与规避清单（后续改动必读）
+
+- **禁止**：`<template t-if>`；QWeb 里的 HTML 命名实体；给可拖动 tile 加 Bootstrap `position-*` 工具类；给拖拽块加 transform 过渡。
+- **必做**：改 tile 尺寸/gap 同步 `SORT_TILE/SORT_GAP/SORT_CELL` + SCSS；竖向 flex 列新增固定尺寸项加 `flex: 0 0 auto`；排序写回只走 `_writeGalleryOrder`；前端任何改动后 `-u product_image` 升级并强刷浏览器（资源 bundle 有缓存）。
+- **复核点**：`image_1920` 可能是 binary size（写入前 ORM 读取）；新建记录的 key 是虚拟 id；更换主图是**移动**（会删除图库记录）。
+- **待观察（当前实现的已知取舍）**：
+  - 网格边缘自动滚动只在 `pointermove` 时按 14px 步进，**指针停在边缘不会持续滚动**；
+  - `_writeGalleryOrder` 逐条 `rec.update()`，图片极多时理论上存在瞬时排序抖动（最终顺序正确）；
+  - 排序态网格仍可能出现纵向滚动条（内容确实超高时，属预期）。
+- **文档落点**：各版本细节见 [`CHANGELOG.md`](CHANGELOG.md)；坑点详版见上文「开发复盘与关键经验（T-005）」；用户侧验证项见 [`README.md`](README.md) → 验证清单。
