@@ -54,6 +54,10 @@
         // 用 wrap 的真实 border（默认透明占位，选中变蓝），四周都显示，
         // 不被滚动容器 overflow 裁切（box-shadow/outline 会被 overflow-y:auto 的水平裁切，只留上下）
         .o_gallery_thumb_wrap {
+            // 禁止被压缩：列向 flex 容器（.o_gallery_thumb_scroll）溢出时，
+            // flex 项默认 flex-shrink:1 会被压扁（图片有固定 56px 高，靠
+            // min-height:auto 兜底；显式禁止收缩可避免任何挤压 / 重叠）
+            flex: 0 0 auto;
             border: 2px solid transparent;
             border-radius: 0.375rem;
             // 默认透明 border 占位，避免选中时尺寸跳变
@@ -65,8 +69,16 @@
             }
         }
 
-        // 上传占位符
+        // 上传占位符（末端「+」，尺寸 56x56 由模板内联 style 给定）
         .o_gallery_thumb_upload {
+            // 必须禁止收缩：列向 flex 容器的 flex 项默认 flex-shrink:1，
+            // 缩略图总高超出滚动区时会被压缩；本元素 min-content 高度仅为
+            // 图标行高（约 18px），于是被压成 18px 的扁条（缩略图因内含
+            // 56px 图片、min-height:auto 兜底才未被压）
+            flex: 0 0 auto;
+            // 兜底确保正方形：任何情况下都保持 56x56
+            min-width: 56px;
+            min-height: 56px;
             background: #fafafa;
             transition: border-color 0.1s ease, color 0.1s ease;
             &:hover {
