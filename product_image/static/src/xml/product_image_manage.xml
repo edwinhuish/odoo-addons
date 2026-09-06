@@ -94,7 +94,7 @@
                                 </div>
                                 <div class="o_gallery_manage-name text-muted small text-center mt-1 text-truncate">
                                     <span t-if="showName" t-esc="currentName"/>
-                                    <span t-if="!showName">&nbsp;</span>
+                                    <span t-if="!showName">&#160;</span>
                                 </div>
                                 <div class="o_gallery_manage-hint text-muted text-center mt-1">
                                     拖动缩略图可排序；删除均有确认（批量删除在右上角）
