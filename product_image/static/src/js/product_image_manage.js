@@ -413,25 +413,29 @@ export class ProductImageManageDialog extends Component {
         // 边缘自动滚动（拖到网格上下边缘附近时）
         this._autoScroll(ev.clientY, geo);
         const rect = geo.grid.getBoundingClientRect();
-        const contentX = ev.clientX - rect.left - geo.padL;
-        const contentY = ev.clientY - rect.top - geo.padT + geo.grid.scrollTop;
+        // 指针相对「内容区起点」（内容区 = border 内侧再内缩 padding）的坐标；
+        // 与排序态 tile 的 absolute 定位（left/top:10=内容起点）同原点
+        const originX = rect.left + geo.bL + geo.padL;
+        const originY = rect.top + geo.bT + geo.padT;
+        const contentX = ev.clientX - originX;
+        const contentY = ev.clientY - originY + geo.grid.scrollTop;
         const n = this.state.items.length;
         let hole = this._holeFromPointer(contentX, contentY, geo.cols, n);
         if (this.hasMain && hole < 1) {
             hole = 1;
         }
         const drag = this.state.drag;
-        const changed = drag.hole !== hole;
         drag.hole = hole;
-        // 拖拽块跟随指针（中心对齐，夹在网格内容范围内）
+        // 拖拽块逐帧跟随指针（块左/顶夹在网格内容范围内，允许贴到末行底部）。
+        // availX/Y 均以内容起点为 0（与 tile 的 absolute 定位点一致），
+        // 只减掉块自身尺寸：块中心对齐鼠标、块底可到内容底。
         const availX = Math.max(0, geo.grid.clientWidth - geo.padL - geo.padR - SORT_TILE);
-        const availY = Math.max(0, geo.spacerH - geo.padT - geo.padB - SORT_TILE);
+        const availY = Math.max(0, geo.spacerH - SORT_TILE);
         drag.floatX = this._clampVal(contentX - SORT_TILE / 2, 0, availX);
         drag.floatY = this._clampVal(contentY - SORT_TILE / 2, 0, availY);
-        if (changed) {
-            // hole 变化 → 重渲染其余缩略图（transform 过渡 = 避让动画）
-            this.state.drag = { ...drag };
-        }
+        // 每次 pointermove 都重建 drag 对象强制渲染：hole 不变时（行内平移、
+        // 停留在边缘等待自动滚动）拖拽块也必须持续跟随指针，不能只等 hole 变化。
+        this.state.drag = { ...drag };
     }
 
     _onSortEnd(ev, canceled) {
@@ -457,6 +461,7 @@ export class ProductImageManageDialog extends Component {
         const drag = this.state.drag;
         const cols = drag.cols;
         const cell = drag.hole;
+        drag.snapping = true; // 落位阶段恢复 transition（拖动中为 1:1 跟手已关）
         drag.floatX = (cell % cols) * SORT_CELL;
         drag.floatY = Math.floor(cell / cols) * SORT_CELL;
         this.state.drag = { ...drag };
@@ -507,15 +512,21 @@ export class ProductImageManageDialog extends Component {
         const padR = parseFloat(cs.paddingRight) || 0;
         const padT = parseFloat(cs.paddingTop) || 0;
         const padB = parseFloat(cs.paddingBottom) || 0;
+        // 边框宽度：rect（border box）→ 内容区起点要扣除 border + padding
+        const bL = parseFloat(cs.borderLeftWidth) || 0;
+        const bT = parseFloat(cs.borderTopWidth) || 0;
         const cols = Math.max(
             1,
             Math.floor((grid.clientWidth - padL - padR + SORT_GAP) / SORT_CELL)
         );
         const n = this.state.items.length;
         const rows = Math.max(1, Math.ceil(n / cols));
-        // 与原 flex 布局等高的内容占位高度（absolute 布局下保证可滚动到底）
-        const spacerH = padT + padB + rows * SORT_CELL - SORT_GAP + 2;
-        return { grid, cols, padL, padR, padT, padB, spacerH };
+        // 与原 flex 布局（padding + 每行 68 + 行间 gap 8）等高的占位高度，
+        // 不含 padding（spacer 是 grid 内容里的 flex 项，padding 会另加）：
+        // 高度必须与 flow 布局完全一致，多出 2px 会在“刚好满高”时撑出滚动条、
+        // 引发 cols 变化导致拖拽布局跳变。
+        const spacerH = Math.max(0, rows * SORT_CELL - SORT_GAP);
+        return { grid, cols, padL, padR, padT, padB, bL, bT, spacerH };
     }
 
     /** 指针所在位置对应的插入位（0..n-1，按行主序、末尾夹取）。 */
@@ -578,6 +589,9 @@ export class ProductImageManageDialog extends Component {
         }
         if (this.state.drag && i === this.state.drag.from) {
             c += " o_gm-drag";
+            if (this.state.drag.snapping) {
+                c += " o_gm-snap"; // 落位阶段恢复 transform 过渡
+            }
         }
         return c;
     }
