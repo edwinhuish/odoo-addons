@@ -33,7 +33,10 @@
                         <h5 class="modal-title mb-0">图片管理</h5>
                         <!-- header 右侧操作区：批量删除 / 勾选态操作 + 关闭按钮 -->
                         <div class="d-flex align-items-center gap-1 pe-1">
-                            <template t-if="state.selectMode">
+                            <!-- 必须是 <t t-if>：HTML 的 <template> 元素是惰性容器，
+                                 其内容不会被渲染（此前误用 <template t-if> 导致进入
+                                 勾选模式后只剩缩略图勾选圈，看不到「删除 / 取消」按钮） -->
+                            <t t-if="state.selectMode">
                                 <span class="small text-muted o_gm_selcount"
                                       t-att-class="checkedCount ? 'o_gm_selcount-on' : ''">
                                     已选 <t t-esc="checkedCount"/> 张
@@ -51,7 +54,7 @@
                                         t-on-click="_exitSelectMode">
                                     取消
                                 </button>
-                            </template>
+                            </t>
                             <button t-elif="items.length > 1"
                                     type="button"
                                     class="o_gm_headerbtn btn btn-sm btn-light d-inline-flex align-items-center gap-1"

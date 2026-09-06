@@ -21,7 +21,8 @@ const placeholder = "/web/static/img/placeholder.png";
  * 替换原生 image_1920 字段的 widget，在同一位置（头像区域）渲染多图浏览：
  * - 主图与图库解耦：产品主图 image_1920 由原生字段独立管理（列表 / 看板 / 报价单展示它），
  *   图库 product.image.gallery 只存补充图，不反向同步 / 不覆盖 / 不清空主图
- * - 展示序列：[原生主图（若有）] + [图库图片按 sequence 升序]，主图永远是第一张
+ * - 展示序列：[原生主图（若有）] + [图库图片按 sequence 升序]，主图永远是第一张；
+ *   「第一张即主图」——管理弹窗拖动排序可改变首位，从而更换主图（见 onManageReorder）
  * - 主图放大 2 倍显示（180x180），无上一张/下一张按钮、无序号
  * - 鼠标悬浮主图区：左侧优先（屏幕宽度不足转下方，下方仍不足按比例缩小）显示 540×540 放大窗（内含 1080×1080 图）
  * - 点击主图区弹出全屏预览弹窗（放大/缩小/旋转，见 product_image_preview.js）
@@ -497,53 +498,198 @@ export class ProductImageGallery extends Component {
     }
 
     /**
-     * 管理弹窗内拖动排序：把最终展示序列（keys，'main' 恒为第一项）写回图库 sequence。
-     * 图库项按 10 为步长重排（与后端默认 10、追加末尾时 +10 的策略一致，
-     * 避免 1..N 连续重排后新增图片的默认 10 插到中间）。
+     * 统一展示数组的稳定 key 序列（前端唯一的顺序来源，用于排序 diff）：
+     * [主图 'main'（若有）] + [图库 'g<id>' 按 sequence 升序]，与 displayItems 一一对应。
      */
-    async onManageReorder(keys) {
-        const gallery = this.galleryRecords;
-        if (!gallery.length || !Array.isArray(keys)) {
+    get displayKeys() {
+        return this.displayItems.map((item) => this._itemKey(item));
+    }
+
+    /**
+     * 管理弹窗内拖动排序的写回入口：把「拖动后的统一数组顺序」落到后端。
+     *
+     * 前端把主图与图库视为**同一个数组**（顺序 = 数组下标），后端却是分开存的
+     * （主图 = 产品 image_1920 字段，图库 = One2many 的 sequence），
+     * 所以这里做的是「数组 diff → 分别写回」：
+     *
+     * 1. before = 当前统一数组 key 序列（displayKeys），after = 拖动后的新序列；
+     * 2. 首位变化（有主图 且 after[0] !== 'main'）→ 说明换了主图：
+     *    after[0] 那张图提升为主图，原主图按它在 after 中的下标落位为图库记录；
+     *    仅在此时写 image_1920（见 _writeOrderWithNewMain）；
+     * 3. 图库部分按 after 的顺序重排 sequence，且**只写位置真的变了**的记录
+     *    （见 _writeGalleryOrder）。
+     */
+    async onManageReorder(after) {
+        if (!Array.isArray(after) || after.length < 2) {
             return;
         }
-        // 解析最终顺序：key → sequence（主图项不参与，始终占首位）
-        const target = new Map(); // resId → 目标 sequence
-        let seq = 0;
-        for (const key of keys) {
+        const before = this.displayKeys;
+        if (before.length !== after.length) {
+            return; // 期间发生过增删（并发操作），放弃本次排序避免错位
+        }
+        if (!this.galleryRecords.length) {
+            return;
+        }
+        // 首位变化 = 更换主图（无主图时不凭空造主图，只重排图库）
+        if (this.hasMainImage && after[0] !== "main") {
+            await this._writeOrderWithNewMain(after);
+            return;
+        }
+        await this._writeGalleryOrder(this._galleryKeysOf(after));
+    }
+
+    /** 从统一数组 key 序列中取出图库部分（去掉主图项 'main'）。 */
+    _galleryKeysOf(keys) {
+        return keys.filter((key) => key !== "main");
+    }
+
+    /**
+     * 拖动后首位发生变化 → 更换主图：把 after[0] 那张图设为主图，
+     * 原主图按它在新数组中的下标落位为图库记录（**移动**，不复制、不丢图）。
+     *
+     * 流程（顺序不能颠倒）：
+     * 1. 读出「新主图」的 base64（已保存记录可能只持 binary size，需 ORM 读取）；
+     * 2. 读出「原主图」的 base64——必须在覆盖主图字段之前，否则读不到原图；
+     * 3. 原主图先落位为图库记录，再把新主图数据写入主图字段并删除其图库记录；
+     * 4. 新图库顺序 = after 去掉首位、'main' 处换成新建的原主图记录，
+     *    交给 _writeGalleryOrder 按 diff 写 sequence。
+     */
+    async _writeOrderWithNewMain(after) {
+        const newMainGid = this._gidFromKey(after[0]);
+        const newMainRec = this.galleryRecords.find((rec) => (rec.resId || rec.id) === newMainGid);
+        if (!newMainRec) {
+            return;
+        }
+        const newMainData = await this._readGalleryImageBase64(newMainRec);
+        if (!newMainData) {
+            this.notification.add(_t("读取图片数据失败，未更换主图。"), { type: "danger" });
+            return;
+        }
+        // 原主图数据必须在覆盖主图字段之前读取
+        const oldMainData = await this._readMainImageBase64();
+        if (!oldMainData) {
+            this.notification.add(_t("读取原主图失败，原主图未保留在图库中。"), {
+                type: "warning",
+            });
+        }
+        // 原主图落位为图库记录（先占位，稍后与其余图库项一起按新顺序写 sequence）
+        const galleryList = this.galleryList;
+        let oldMainRecord = null;
+        if (oldMainData && galleryList) {
+            oldMainRecord = await galleryList.addNewRecord(false);
+            await oldMainRecord.update({ image_1920: oldMainData });
+        }
+        // 提升新主图：数据写入主图字段 + 删除其图库记录
+        const command = newMainRec.isNew
+            ? x2ManyCommands.unlink(newMainRec.id)
+            : x2ManyCommands.delete(newMainRec.resId);
+        await this.props.record.update({
+            [this.props.name]: newMainData,
+            image_gallery_ids: [command],
+        });
+        // 拖动后的新图库顺序：去掉已提升为主图的首位，'main' 处换成新建的原主图记录
+        const galleryKeys = [];
+        for (const key of after.slice(1)) {
             if (key === "main") {
-                continue;
+                if (oldMainRecord) {
+                    galleryKeys.push(`g${oldMainRecord.id}`);
+                }
+                continue; // 原主图读取失败时不占位，避免后续顺序错位
             }
+            galleryKeys.push(key);
+        }
+        await this._writeGalleryOrder(galleryKeys);
+        // 主图已更换：页面展示回到新的第一张
+        this.state.currentIndex = 0;
+        this._clampIndex();
+        requestAnimationFrame(() => this._updateThumbOverflow());
+    }
+
+    /**
+     * 按目标图库顺序写 sequence（diff 后最小写回）：
+     * 逐项把「目标顺序」与记录当前 sequence 比对，**只有位置真的变了的记录才写**，
+     * 未变动的记录不产生任何写操作（避免无谓的 dirty 与重排抖动）。
+     * 步长为 10（与后端默认 10、追加末尾时 +10 一致，避免新增图默认 10 插到中间）。
+     */
+    async _writeGalleryOrder(galleryKeys) {
+        // 目标：图库记录标识 → sequence（1..n 的顺序位 × 10）
+        const targets = new Map();
+        let seq = 0;
+        for (const key of galleryKeys) {
             const gid = this._gidFromKey(key);
             if (gid === null) {
                 continue;
             }
             seq += 10;
-            target.set(gid, seq);
+            targets.set(gid, seq);
         }
-        if (!target.size) {
+        if (!targets.size) {
             return;
         }
-        const updates = [];
-        for (const rec of gallery) {
+        // 差异项：当前 sequence 与目标不一致的记录（快照后再逐个写回）
+        const changed = [];
+        for (const rec of this.galleryRecords) {
             const id = rec.resId || rec.id;
-            const next = target.get(id);
+            const next = targets.get(id);
             if (next !== undefined && (rec.data.sequence ?? 10) !== next) {
-                updates.push([rec, next]);
+                changed.push([rec, next]);
             }
         }
-        for (const [rec, next] of updates) {
+        for (const [rec, next] of changed) {
             await rec.update({ sequence: next });
         }
     }
 
-    /** 把弹窗 key（'g<resId>'）解析为图库记录 id；非法返回 null。 */
+    /** 读取图库记录的图片 base64（已保存记录可能只有 binary size，需 ORM 读取）。 */
+    async _readGalleryImageBase64(rec) {
+        let data = rec.data.image_1920;
+        if ((!data || isBinarySize(data)) && rec.resId && !rec.isNew) {
+            try {
+                const result = await this.orm.read("product.image.gallery", [rec.resId], [
+                    "image_1920",
+                ]);
+                data = result[0]?.image_1920;
+            } catch (_e) {
+                data = false;
+            }
+        }
+        return data || false;
+    }
+
+    /** 读取产品主图字段的 base64（同样可能只有 binary size，需 ORM 读取）。 */
+    async _readMainImageBase64() {
+        const record = this.props.record;
+        let data = record.data[this.props.name];
+        if ((!data || isBinarySize(data)) && record.resId) {
+            try {
+                const result = await this.orm.read(record.resModel, [record.resId], [
+                    this.props.name,
+                ]);
+                data = result[0]?.[this.props.name];
+            } catch (_e) {
+                data = false;
+            }
+        }
+        return data || false;
+    }
+
+    /**
+     * 把弹窗 key（'g<id>'）解析为图库记录标识；非法返回 null。
+     * - 已保存记录：数字 resId；
+     * - 未保存记录（如原主图落位新建的图库项）：虚拟 id 字符串（如 virtual_1），
+     *   原样返回，与 `record.resId || record.id` 严格相等比较即可命中。
+     */
     _gidFromKey(key) {
         const s = String(key ?? "");
         if (!s.startsWith("g")) {
             return null;
         }
-        const n = Number(s.slice(1));
-        return Number.isFinite(n) ? n : null;
+        const raw = s.slice(1);
+        if (!raw) {
+            return null;
+        }
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : raw;
     }
 
     // ------------------------------------------------------------------

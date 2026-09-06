@@ -21,8 +21,10 @@ const SNAP_DELAY = 160; // 松手后“落位”动画时长（ms），之后再
  *   布局固定：大图列宽 250（大图盒 250×250，名称行 / 提示行恒定行高）→ 切换任意
  *   图片（含有无图片）弹窗尺寸不变；缩略图网格占满剩余宽高（超高内部滚动）。
  * - 大图名称行：主图项留空不显示“主图”（行高用占位保持）；图库图显示名称。
- * - 缩略图拖动排序（主图固定首位不参与）：拖动时其余缩略图按位次平滑避让
- *   （transition transform），松手落位动画后写回图库 sequence；上传后仍追加末尾。
+ * - 缩略图拖动排序（含主图）：拖动时其余缩略图按位次平滑避让
+ *   （transition transform），松手落位动画后写回顺序；上传后仍追加末尾。
+ *   序列首位即主图——把任意图拖到首位即把它设为主图，把主图拖到后面则让
+ *   上位图成为新主图（写回由 gallery.onManageReorder 完成）。
  * - 删除：任何删除（缩略图右上角 ×、批量删除）都先弹确认框（带图片缩略图，
  *   主图有自动提升提示）；批量删除在 modal-header 开启勾选模式逐张勾选。
  * - 下半部分：图片 dropzone（点击选择 / 拖放 / Ctrl+V），上传队列逐张显示
@@ -32,7 +34,8 @@ const SNAP_DELAY = 160; // 松手后“落位”动画时长（ms），之后再
  * - 弹窗不直接持有记录，通过 props 回调与 gallery widget 交互：
  *   · getItems()：取最新展示列表快照（增删后重新拉取，避免快照过期）
  *   · onDelete(type, key)：删除图库记录 / 主图（主图删除自动提升图库首张；按 key 定位）
- *   · onReorder(keys)：拖动排序后的最终展示序列（主图 key 恒为 'main' 且始终首位）
+ *   · onReorder(keys)：拖动排序后的最终展示序列（'main' 为当前主图项、'g<id>'
+ *     为图库项；首位即主图，首位变化时由 widget 负责更换主图）
  *   · onUploaded(info)：写入主图或追加图库，返回新增项索引
  * - 以顶层 main_components overlay 挂载（与 gallery 渲染树解耦），
  *   避免 record.update 重渲染 gallery 时弹窗被重建 / 闪烁。
@@ -356,22 +359,25 @@ export class ProductImageManageDialog extends Component {
     // 松手先把拖拽块 snap 到落位单元，动画结束再提交（写图库 sequence）并还原静态布局。
     // ------------------------------------------------------------------
 
-    /** 是否具备排序条件：至少两张图库图可移动（主图固定、单张图库无意义）。 */
+    /**
+     * 是否具备排序条件：至少两张图片（主图也可拖动）。
+     * 展示序列首位即主图，因此把任意一张图拖到首位 = 更换主图，
+     * 把主图拖到后面 = 让后面的图上位为主图（写回逻辑见 gallery.onManageReorder）。
+     */
     _dragEnabled() {
-        if (this.state.selectMode) {
+        if (this.state.selectMode || this.state.confirm) {
             return false;
         }
-        const galleryCount = this.state.items.filter((it) => it.type === "gallery").length;
-        return galleryCount >= 2;
+        return this.state.items.length >= 2;
     }
 
     onSortPointerDown(i, ev) {
-        if (!this._dragEnabled() || this.state.confirm) {
+        if (!this._dragEnabled()) {
             return;
         }
         const item = this.state.items[i];
-        if (!item || item.type === "main") {
-            return; // 主图固定首位
+        if (!item) {
+            return;
         }
         if (ev.pointerType === "mouse" && ev.button !== 0) {
             return;
@@ -439,10 +445,8 @@ export class ProductImageManageDialog extends Component {
         const contentX = ev.clientX - originX;
         const contentY = ev.clientY - originY + geo.grid.scrollTop;
         const n = this.state.items.length;
-        let hole = this._holeFromPointer(contentX, contentY, geo.cols, n);
-        if (this.hasMain && hole < 1) {
-            hole = 1;
-        }
+        // 插入位允许为 0：拖到首位即「设为第一张（主图）」，主图可被顶到后面
+        const hole = this._holeFromPointer(contentX, contentY, geo.cols, n);
         const drag = this.state.drag;
         drag.hole = hole;
         // 拖拽块逐帧跟随指针（块左/顶夹在网格内容范围内，允许贴到末行底部）。
@@ -510,10 +514,12 @@ export class ProductImageManageDialog extends Component {
         if (this.props.onReorder) {
             try {
                 await this.props.onReorder(keys);
-                this._reload({ key: anchor });
+                // 排序改变首位时会更换主图：旧主图变为新的图库记录（key 变化），
+                // 故按「被拖动图片的落位索引」重拉，而不是按旧 key 锚定
+                this._reload({ prefer: hole });
             } catch (_e) {
                 this.notification.add(_t("保存排序失败，请重试。"), { type: "danger" });
-                this._reload({ key: anchor });
+                this._reload({ prefer: hole });
             }
         }
     }
@@ -624,8 +630,8 @@ export class ProductImageManageDialog extends Component {
             if (this.state.checkedKeys.includes(it.key)) {
                 c += " is-checked";
             }
-        } else if (this._dragEnabled() && it.type !== "main") {
-            c += " o_gm-sortable";
+        } else if (this._dragEnabled()) {
+            c += " o_gm-sortable"; // 主图也可拖动（拖到后面即换上位图为新主图）
         }
         if (this.state.drag && i === this.state.drag.from) {
             c += " o_gm-drag";
