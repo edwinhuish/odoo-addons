@@ -47,10 +47,10 @@
             </xpath>
 
             <!-- ============================================================ -->
-            <!-- 原生 Logistics 组：增加产品 Dimension Unit 与 Dimensions，      -->
-            <!-- 当 Volume 为 0 时由 onchange 自动计算并填充                      -->
+            <!-- 原生 Logistics 组：在 Volume 之前增加产品 Dimension Unit 与      -->
+            <!-- Dimensions，尺寸变化时自动同步更新 Volume                        -->
             <!-- ============================================================ -->
-            <xpath expr="//div[@name='volume']" position="after">
+            <xpath expr="//label[@for='volume']" position="before">
                 <label for="product_dimension_unit" string="Dimension Unit"
                        invisible="product_variant_count &gt; 1 and not is_product_variant"/>
                 <div class="o_row" name="product_dimension_unit"

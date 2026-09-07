@@ -14,6 +14,7 @@
   - 增加 `create` / `write` 覆盖，保证通过导入、API 或表单保存时 `volume` 都能同步更新
   - 保留 `@api.onchange`，表单端实时可见
 - 新增 `_compute_volume_from_dimensions` 辅助方法，统一厘米 / 米到立方米的换算逻辑
+- 视图布局调整：把 `Dimension Unit` 与 `Dimensions` 放在原生 `Volume` 之前，更符合「先输入尺寸再得到体积」的操作习惯
 
 ### 影响
 
