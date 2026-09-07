@@ -1,6 +1,6 @@
 # 产品包装信息
 
-Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信息，包括装箱数、纸箱长宽高、毛重、净重与自动计算的 CBM，所有字段直接整合在产品表单的 Inventory 标签页中。
+Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信息，包括装箱数、纸箱长宽高、毛重、净重、自动计算的 CBM，以及产品自身的长宽高（可自动填充原生 Volume），所有字段直接整合在产品表单的 Inventory 标签页中。
 
 > 模块技术名：`product_packing`  
 > 无前身模块，首次安装即可使用。
@@ -9,6 +9,8 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 
 ## 功能概述
 
+- 在产品 Inventory 标签页原生 Logistics 组中新增产品 Dimension Unit 与 Dimensions
+- 当原生 Volume 为 0 时，输入产品长宽高后自动计算并填充 Volume
 - 在产品 Inventory 标签页新增「纸箱与包装（Carton & Packing）」分组
 - 支持录入每个纸箱的装箱数（Units per Carton）
 - 纸箱长、宽、高分为三个独立字段，单位可在厘米 / 米之间按产品配置
@@ -23,11 +25,12 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 
 | 设计点 | 说明 |
 |--------|------|
-| 与 Inventory 原生信息整合 | 继承 `product.product_template_form_view`，在原 Logistics 组之后插入新分组，不另开标签页，减少切换 |
-| 单位配置放在产品级 | 每个产品单独选择厘米或米，避免全局单位与具体业务冲突；CBM 始终按立方米计算，保证跨产品可比 |
+| 与 Inventory 原生信息整合 | 继承 `product.product_template_form_view`，在原 Logistics 组中直接加入产品 Dimension Unit / Dimensions，并在 Logistics 组之后插入「纸箱与包装」组，不另开标签页，减少切换 |
+| 单位配置放在产品级 | 每个产品单独选择厘米或米，避免全局单位与具体业务冲突；CBM / Volume 始终按立方米计算，保证跨产品可比 |
 | 独立长宽高字段 | 分开三个 Float 字段便于后续报表、导出、接口直接读取，不依赖字符串解析 |
+| 自动同步原生 Volume | 产品尺寸任一字段变化时，`@api.onchange` 实时更新表单 `volume`，`create` / `write` 同步更新数据库，保证表单与后台一致 |
 | 计算字段 | `carton_cbm` 与 `carton_dimension_spec` 为 `store=True` 计算字段，列表视图可直接显示而不触发逐行计算 |
-| 校验在模型层 | `@api.constrains` 统一校验，错误信息带具体数值，用户可直接看懂 |
+| 校验在模型层 | `@api.constrains` 统一校验纸箱字段，错误信息带具体数值，用户可直接看懂 |
 | 最小依赖 | 仅依赖 `product`，不依赖 `stock` / `sale` / `purchase` |
 
 ---
@@ -38,6 +41,10 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
+| `product_dimension_unit` | `Selection`（`cm` / `m`） | 产品尺寸单位，默认厘米 |
+| `product_length` | `Float` | 产品长度（按所选单位） |
+| `product_width` | `Float` | 产品宽度（按所选单位） |
+| `product_height` | `Float` | 产品高度（按所选单位） |
 | `carton_qty_per_carton` | `Integer` | 每个纸箱可装的产品数量 |
 | `carton_dimension_unit` | `Selection`（`cm` / `m`） | 纸箱长宽高单位，默认厘米 |
 | `carton_length` | `Float` | 纸箱长度（按所选单位） |
@@ -52,7 +59,9 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 
 ## 视图
 
-- **产品表单**：Inventory 页新增「纸箱与包装」组，放在原生 Logistics 组之后；CBM 只读，尺寸单位与长宽高编辑后实时重算
+- **产品表单**：
+  - 原生 Logistics 组内新增 `Dimension Unit` 与 `Dimensions`（长 × 宽 × 高）；产品尺寸变化时实时自动计算并更新原生 `Volume`
+  - Logistics 组之后新增「纸箱与包装」组；CBM 只读，尺寸单位与长宽高编辑后实时重算
 - **产品列表**：新增「纸箱」「CBM」两列，默认隐藏，用户可手动显示
 
 ---
@@ -79,7 +88,7 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 ### 全新安装
 
 1. 将 `product_packing` 目录放入 Odoo 19 的 `addons_path`
-2. 更新应用列表后安装模块：`产品纸箱尺寸`
+2. 更新应用列表后安装模块：`Product Packing`
 3. 打开任意产品表单，切换到 Inventory 标签页，在「纸箱与包装」组录入数据并保存
 
 ### CBM 计算示例
@@ -91,9 +100,10 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 
 ### 操作要点
 
-- 切换「尺寸单位」后，已录入的长宽高数值保持不变，CBM 会按新单位重新计算
+- 切换「尺寸单位」后，已录入的长宽高数值保持不变，CBM / Volume 会按新单位重新计算
 - 任一尺寸为 0 或负数时，CBM 显示为 0
 - 净重必须 ≤ 毛重；所有数值必须 ≥ 0
+- 产品尺寸任一字段变化时，原生 `Volume` 会自动按最新尺寸重算；清空尺寸或全部置 0 后，`Volume` 会变为 0
 
 ---
 
@@ -104,11 +114,15 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 | 验证项 | 期望 | 结果 |
 |--------|------|------|
 | 模块安装 | `odoo -d <db> -i product_packing --stop-after-init` 成功，无报错 | 待验证 |
-| Inventory 标签页 | 消费品（`type = consu`）产品表单中可见「纸箱与包装」组 | 待验证 |
-| 字段录入与保存 | 装箱数、长宽高、单位、毛重、净重可正常输入并保存 | 待验证 |
+| Logistics 组产品尺寸 | 消费品产品表单 Logistics 组内可见 `Dimension Unit` 与 `Dimensions` | 待验证 |
+| Volume 自动更新 | 输入 50×40×30 cm 后 `Volume` 自动变为 0.06；切换单位为 m 后按新单位重算 | 待验证 |
+| Volume 清空尺寸归零 | 清空任一长宽高后 `Volume` 自动变为 0 | 待验证 |
+| 后台同步 | 通过导入或 API 更新尺寸后，`Volume` 同样被更新 | 待验证 |
+| Inventory 标签页纸箱组 | 消费品产品表单中可见「纸箱与包装」组 | 待验证 |
+| 字段录入与保存 | 装箱数、纸箱长宽高、单位、毛重、净重可正常输入并保存 | 待验证 |
 | CBM 自动计算（厘米） | 50×40×30 cm → CBM = 0.06 | 待验证 |
 | CBM 自动计算（米） | 0.5×0.4×0.3 m → CBM = 0.06 | 待验证 |
-| 单位切换 | cm 切到 m 后，CBM 按米重新计算 | 待验证 |
+| 单位切换 | cm 切到 m 后，CBM / Volume 按新单位重新计算 | 待验证 |
 | 校验：负数 | 保存负数时报中文/英文错误并带出具体值 | 待验证 |
 | 校验：净重 > 毛重 | 保存时报中文/英文错误 | 待验证 |
 | 列表可选列 | 产品列表可选显示「纸箱」「CBM」列 | 待验证 |

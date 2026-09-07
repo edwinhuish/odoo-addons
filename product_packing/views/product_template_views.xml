@@ -46,6 +46,30 @@
                 </group>
             </xpath>
 
+            <!-- ============================================================ -->
+            <!-- 原生 Logistics 组：增加产品 Dimension Unit 与 Dimensions，      -->
+            <!-- 当 Volume 为 0 时由 onchange 自动计算并填充                      -->
+            <!-- ============================================================ -->
+            <xpath expr="//div[@name='volume']" position="after">
+                <label for="product_dimension_unit" string="Dimension Unit"
+                       invisible="product_variant_count &gt; 1 and not is_product_variant"/>
+                <div class="o_row" name="product_dimension_unit"
+                     invisible="product_variant_count &gt; 1 and not is_product_variant">
+                    <field name="product_dimension_unit" class="oe_inline" style="max-width: 7rem;"/>
+                </div>
+
+                <label for="product_length" string="Dimensions"
+                       invisible="product_variant_count &gt; 1 and not is_product_variant"/>
+                <div class="o_row" name="product_dimensions"
+                     invisible="product_variant_count &gt; 1 and not is_product_variant">
+                    <field name="product_length" placeholder="L" class="oe_inline" style="max-width: 6rem;"/>
+                    <span class="oe_inline">x</span>
+                    <field name="product_width" placeholder="W" class="oe_inline" style="max-width: 6rem;"/>
+                    <span class="oe_inline">x</span>
+                    <field name="product_height" placeholder="H" class="oe_inline" style="max-width: 6rem;"/>
+                </div>
+            </xpath>
+
         </field>
     </record>
 

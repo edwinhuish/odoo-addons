@@ -27,6 +27,7 @@ msgstr "每个纸箱可装的产品数量。"
 
 #. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_dimension_unit
+#: model:ir.model.fields,field_description:product_packing.field_product_template__product_dimension_unit
 msgid "Dimension Unit"
 msgstr "尺寸单位"
 
@@ -36,17 +37,25 @@ msgid "Unit used for carton length, width and height. CBM is always calculated i
 msgstr "纸箱长、宽、高所使用的单位。CBM 始终按立方米计算。"
 
 #. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__product_dimension_unit
+msgid "Unit used for product length, width and height. Used to auto-fill the standard Volume field when it is currently 0."
+msgstr "产品长、宽、高所使用的单位。当标准 Volume 字段当前为 0 时，用其自动填充。"
+
+#. module: product_packing
 #: model:ir.model.fields.selection,name:product_packing.selection__product_template__carton_dimension_unit__cm
+#: model:ir.model.fields.selection,name:product_packing.selection__product_template__product_dimension_unit__cm
 msgid "Centimeters"
 msgstr "厘米"
 
 #. module: product_packing
 #: model:ir.model.fields.selection,name:product_packing.selection__product_template__carton_dimension_unit__m
+#: model:ir.model.fields.selection,name:product_packing.selection__product_template__product_dimension_unit__m
 msgid "Meters"
 msgstr "米"
 
 #. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_length
+#: model:ir.model.fields,field_description:product_packing.field_product_template__product_length
 msgid "Length"
 msgstr "长"
 
@@ -56,7 +65,13 @@ msgid "Carton length in the selected dimension unit."
 msgstr "纸箱长度（按所选单位）。"
 
 #. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__product_length
+msgid "Product length in the selected dimension unit."
+msgstr "产品长度（按所选单位）。"
+
+#. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_width
+#: model:ir.model.fields,field_description:product_packing.field_product_template__product_width
 msgid "Width"
 msgstr "宽"
 
@@ -66,7 +81,13 @@ msgid "Carton width in the selected dimension unit."
 msgstr "纸箱宽度（按所选单位）。"
 
 #. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__product_width
+msgid "Product width in the selected dimension unit."
+msgstr "产品宽度（按所选单位）。"
+
+#. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_height
+#: model:ir.model.fields,field_description:product_packing.field_product_template__product_height
 msgid "Height"
 msgstr "高"
 
@@ -74,6 +95,11 @@ msgstr "高"
 #: model:ir.model.fields,help:product_packing.field_product_template__carton_height
 msgid "Carton height in the selected dimension unit."
 msgstr "纸箱高度（按所选单位）。"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__product_height
+msgid "Product height in the selected dimension unit."
+msgstr "产品高度（按所选单位）。"
 
 #. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_gross_weight

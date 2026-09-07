@@ -13,7 +13,7 @@
 - 继承模型：`product.template`
 - 自定义组件（前端模块）：无
 - 主依赖：`product`（不依赖 `stock` / `sale` / `purchase`）
-- 当前版本：`19.0.1.0.0`
+- 当前版本：`19.0.1.1.1`
 
 ---
 
@@ -41,6 +41,10 @@
    - 使用 `@api.constrains` + `ValidationError`，占位符用 `%(name)s`
    - 违反后果：用户看不懂报错位置；译者无法调整语序
 
+6. **产品尺寸变化时始终同步更新原生 Volume**
+   - `product_length` / `product_width` / `product_height` 或 `product_dimension_unit` 发生变化时，`volume` 必须按最新尺寸重新计算；计算同时覆盖表单（`onchange`）与后台写入（`create` / `write`）路径
+   - 违反后果：表单与数据库中的体积数据不一致，导致物流 / 报价 / 库存计算错误
+
 ---
 
 ## 国际化约束（i18n）
@@ -60,7 +64,7 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 模块元数据、版本、依赖、数据文件登记 |
-| `models/product_template.py` | 扩展 `product.template`，定义纸箱字段、CBM / 尺寸规格计算、数值校验 |
+| `models/product_template.py` | 扩展 `product.template`，定义产品尺寸字段（自动填充原生 Volume）、纸箱字段、CBM / 尺寸规格计算、数值校验 |
 | `views/product_template_views.xml` | 继承产品表单与列表视图，集成 Inventory 标签页与列表可选列 |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`） |
 | `README.md` | 用户可见功能、字段表、安装与使用步骤、验证清单 |

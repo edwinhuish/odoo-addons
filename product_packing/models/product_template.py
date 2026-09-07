@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""扩展 product.template，增加外贸常用的装箱与纸箱尺寸字段。"""
+"""扩展 product.template，增加外贸常用的产品尺寸与纸箱尺寸字段。"""
 
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
@@ -73,6 +73,40 @@ class ProductTemplate(models.Model):
     )
 
     # ------------------------------------------------------------------
+    # 产品自身尺寸（用于自动计算原生 Volume）
+    # ------------------------------------------------------------------
+
+    product_dimension_unit = fields.Selection(
+        string="Dimension Unit",
+        selection=[
+            ("cm", "Centimeters"),
+            ("m", "Meters"),
+        ],
+        default="cm",
+        required=True,
+        help="Unit used for product length, width and height. Used to auto-fill "
+             "the standard Volume field when it is currently 0.",
+    )
+    product_length = fields.Float(
+        string="Length",
+        default=0.0,
+        digits=(10, 2),
+        help="Product length in the selected dimension unit.",
+    )
+    product_width = fields.Float(
+        string="Width",
+        default=0.0,
+        digits=(10, 2),
+        help="Product width in the selected dimension unit.",
+    )
+    product_height = fields.Float(
+        string="Height",
+        default=0.0,
+        digits=(10, 2),
+        help="Product height in the selected dimension unit.",
+    )
+
+    # ------------------------------------------------------------------
     # 计算字段
     # ------------------------------------------------------------------
 
@@ -107,6 +141,48 @@ class ProductTemplate(models.Model):
                 tmpl.carton_dimension_spec = f"{length:g} x {width:g} x {height:g} {unit}"
             else:
                 tmpl.carton_dimension_spec = False
+
+    def _compute_volume_from_dimensions(self):
+        """根据产品尺寸计算原生 Volume（立方米）。"""
+        for tmpl in self:
+            length = tmpl.product_length or 0.0
+            width = tmpl.product_width or 0.0
+            height = tmpl.product_height or 0.0
+            if not (length > 0 and width > 0 and height > 0):
+                tmpl.volume = 0.0
+                continue
+
+            factor = 1_000_000.0 if tmpl.product_dimension_unit == "cm" else 1.0
+            tmpl.volume = length * width * height / factor
+
+    @api.onchange(
+        "product_length", "product_width", "product_height", "product_dimension_unit",
+    )
+    def _onchange_product_dimensions(self):
+        """产品尺寸变化时实时更新原生 Volume。"""
+        self._compute_volume_from_dimensions()
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        """创建产品时，若包含尺寸字段则同步计算 Volume。"""
+        records = super().create(vals_list)
+        for vals, tmpl in zip(vals_list, records):
+            if any(k in vals for k in (
+                "product_length", "product_width", "product_height",
+                "product_dimension_unit",
+            )):
+                tmpl._compute_volume_from_dimensions()
+        return records
+
+    def write(self, vals):
+        """更新产品时，若尺寸字段变化则同步重算 Volume。"""
+        res = super().write(vals)
+        if any(k in vals for k in (
+            "product_length", "product_width", "product_height",
+            "product_dimension_unit",
+        )):
+            self._compute_volume_from_dimensions()
+        return res
 
     # ------------------------------------------------------------------
     # 校验

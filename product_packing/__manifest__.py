@@ -1,6 +1,6 @@
 {
     "name": "Product Packing",
-    "version": "19.0.1.0.0",
+    "version": "19.0.1.1.1",
     "summary": "Add packing/carton fields (units per carton, dimensions, gross/net weight, auto CBM) to the product Inventory tab",
     "description": """
         Product carton packing module for foreign trade SOHO scenarios.
