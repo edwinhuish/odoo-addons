@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 参考号明细模型：独立列表/表单视图（便于管理员单独检索与维护） -->
+    <!-- ============================================================ -->
+
+    <record id="product_reference_code_list_view" model="ir.ui.view">
+        <field name="name">product.reference.code.list</field>
+        <field name="model">product.reference.code</field>
+        <field name="arch" type="xml">
+            <list string="Product References" editable="bottom">
+                <field name="sequence" widget="handle" readonly="is_internal"/>
+                <field name="reference_code" required="1"/>
+                <field name="reference_type" readonly="is_internal"/>
+                <field name="is_internal" readonly="1" optional="show"/>
+                <field name="product_tmpl_id" readonly="1"/>
+                <field name="active" widget="boolean_toggle" readonly="is_internal"/>
+                <field name="note" readonly="is_internal"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="product_reference_code_form_view" model="ir.ui.view">
+        <field name="name">product.reference.code.form</field>
+        <field name="model">product.reference.code</field>
+        <field name="arch" type="xml">
+            <form string="Product Reference">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="reference_code" required="1"
+                                   placeholder="e.g. REF-A, SKU-1234"/>
+                            <field name="reference_type" readonly="is_internal"/>
+                            <field name="is_internal" readonly="1"/>
+                            <field name="active" readonly="is_internal"/>
+                        </group>
+                        <group>
+                            <field name="product_tmpl_id"/>
+                            <field name="sequence" readonly="is_internal"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="note"
+                               placeholder="Optional, e.g. customer / version / effective date"
+                               readonly="is_internal"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="product_reference_code_search_view" model="ir.ui.view">
+        <field name="name">product.reference.code.search</field>
+        <field name="model">product.reference.code</field>
+        <field name="arch" type="xml">
+            <search string="Product References">
+                <field name="reference_code"/>
+                <field name="reference_type"/>
+                <field name="product_tmpl_id"/>
+                <separator/>
+                <filter string="Internal" name="internal"
+                        domain="[('is_internal', '=', True)]"/>
+                <filter string="Other References" name="not_internal"
+                        domain="[('is_internal', '=', False)]"/>
+                <separator/>
+                <filter string="Active" name="active"
+                        domain="[('active', '=', True)]"/>
+                <filter string="Archived" name="inactive"
+                        domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_product_reference_code" model="ir.actions.act_window">
+        <field name="name">Product References</field>
+        <field name="res_model">product.reference.code</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="product_reference_code_search_view"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a product reference
+            </p>
+            <p>A product can carry several references (internal / customer / factory / alias). They are usually maintained on the "References" page of the product form; this view is meant for bulk search and maintenance.</p>
+        </field>
+    </record>
+
+</odoo>

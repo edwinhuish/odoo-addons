@@ -1,0 +1,244 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#	* product_reference
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-07 00:00+0000\n"
+"PO-Revision-Date: 2026-09-07 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: product_reference
+#: model_terms:ir.actions.act_window,help:product_reference.action_product_reference_code
+msgid "Create a product reference"
+msgstr "创建一条产品参考号"
+
+#. module: product_reference
+#: model_terms:ir.actions.act_window,help:product_reference.action_product_reference_code
+msgid ""
+"A product can carry several references (internal / customer / factory / alias). They are "
+"usually maintained on the \"References\" page of the product form; this view is "
+"meant for bulk search and maintenance."
+msgstr ""
+"一个产品可挂多条参考号（内部参考 / 客户参考号 / 工厂参考号 / 别名）。通常在产品表单的「参考号」页内维护，此处用于批量检索与维护。"
+
+#. module: product_reference
+#: model:ir.actions.act_window,name:product_reference.action_product_reference_code
+#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_list_view
+#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+msgid "Product References"
+msgstr "产品参考号"
+
+#. module: product_reference
+#: model:ir.model,name:product_reference.model_product_reference_code
+#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_form_view
+msgid "Product Reference"
+msgstr "产品参考号"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_form_view
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+msgid "e.g. REF-A, SKU-1234"
+msgstr "如 REF-A、SKU-1234"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
+#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__active
+msgid "Active"
+msgstr "启用"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
+msgid "Archived"
+msgstr "停用"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+msgid "References"
+msgstr "参考号"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_template__reference_code_line_ids
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+msgid "Reference Lines"
+msgstr "参考号明细"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+msgid ""
+"Hint: the first row mirrors the Odoo Reference from the General Information tab and cannot be deleted. Other references (customer / factory / alias) cannot be repeated inside the same product, but the same reference may be used by other products. Searching a product by any of its references finds this product."
+msgstr ""
+"提示：第一行镜像自「常规信息」页中的 Odoo Reference，不可删除。其余参考号（客户参考号 / 工厂参考号 / 别名）在同一产品内不可重复；不同产品间可重复。搜索产品时按任一参考号均可命中本产品。"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_list_inherit
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_search_inherit
+#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__reference_code
+msgid "Reference"
+msgstr "参考号"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_reference_code__reference_code
+msgid ""
+"Reference code of the product. It cannot be repeated inside the same product, "
+"but the same code may be used by other products; when a search hits a "
+"reference, the result shows \"Product (Matching reference: xxx)\" to tell them "
+"apart."
+msgstr ""
+"产品参考号，同一产品内不可重复；不同产品间可重复，搜索时命中会显示「产品名（命中参考号：xxx）」以区分。"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__reference_type
+msgid "Reference Type"
+msgstr "参考号类型"
+
+#. module: product_reference
+#: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__internal
+msgid "Internal Reference"
+msgstr "内部参考"
+
+#. module: product_reference
+#: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__customer
+msgid "Customer Reference"
+msgstr "客户参考号"
+
+#. module: product_reference
+#: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__factory
+msgid "Factory Reference"
+msgstr "工厂参考号"
+
+#. module: product_reference
+#: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__alias
+msgid "Alias"
+msgstr "别名"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_reference_code__reference_type
+msgid ""
+"Purpose of this reference: internal references mirror the General Information "
+"Reference field; customer references are used on outgoing documents, factory "
+"references for purchasing, aliases for historical or colloquial names."
+msgstr ""
+"区分该参考号的用途：内部参考镜像自「常规信息」页的 Reference 字段；客户参考号用于对外单据；工厂参考号用于采购；别名用于历史/俗称匹配。"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__is_internal
+#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
+msgid "Internal"
+msgstr "内部"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_reference_code__is_internal
+msgid ""
+"When checked, this row mirrors the product's Odoo Reference (default_code) from "
+"the General Information tab. It always appears first and cannot be deleted."
+msgstr ""
+"勾选表示该行镜像自产品「常规信息」页中的 Odoo Reference（default_code），始终排在参考号列表第一，且不可删除。"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
+msgid "Other References"
+msgstr "其他参考号"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__sequence
+msgid "Sequence"
+msgstr "排序"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_reference_code__sequence
+msgid ""
+"Lower values come first; both the list and the One2many lines are ordered by "
+"this value. The internal reference is always pinned to the top regardless of "
+"this value."
+msgstr ""
+"数值小的排在前面，列表与 One2many 行均按此排序；但内部参考始终置顶。"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_reference_code__active
+msgid ""
+"Uncheck to disable a reference without deleting it, so history is kept. The "
+"internal reference cannot be archived."
+msgstr ""
+"取消勾选可停用某条参考号而不删除，便于保留历史。内部参考不可停用。"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__note
+msgid "Note"
+msgstr "备注"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_reference_code__note
+msgid ""
+"Short description of this reference (customer, version, effective date, ...)."
+msgstr "对该参考号的简短说明（如对应客户、版本、生效日期等）。"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__product_tmpl_id
+msgid "Product"
+msgstr "产品"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_reference_code__product_tmpl_id
+msgid ""
+"Product template this reference belongs to; references are removed together "
+"with the product."
+msgstr "该参考号所属的产品模板；删除产品时参考号行随之级联清理。"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_template__reference_code_line_ids
+msgid "All references of this product (internal / customer / factory / alias)."
+msgstr "该产品的所有参考号（内部参考 / 客户参考号 / 工厂参考号 / 别名）。"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_template__reference_code_count
+msgid "Reference Count"
+msgstr "参考号数量"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_template__reference_code_index
+msgid "Reference Search Index"
+msgstr "参考号搜索索引"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_template__reference_code_index
+msgid ""
+"Search index built by concatenating all references of this product. It is "
+"maintained automatically when reference lines change; do not edit it manually."
+msgstr "该产品所有参考号拼接后的搜索索引，由参考号行增删改时自动维护，请勿手工编辑。"
+
+#. module: product_reference
+#: model:ir.model.constraint,message:product_reference.constraint_reference_code_unique_per_template
+msgid "Reference codes must be unique within the same product."
+msgstr "同一产品内参考号不可重复。"
+
+#. module: product_reference
+#. odoo-python
+#: code:addons/product_reference/models/product_reference_code.py:0
+msgid ""
+"The reference \"%(code)s\" already exists for product \"%(product)s\". Reference "
+"codes must be unique within the same product."
+msgstr "参考号“%(code)s”在产品“%(product)s”中已存在，同一产品内参考号不可重复。"
+
+#. module: product_reference
+#. odoo-python
+#: code:addons/product_reference/models/product_reference_code.py:0
+msgid ""
+"The internal reference row (Odoo Reference) cannot be deleted. Change or clear "
+"it in the General Information tab instead."
+msgstr "内部参考行（Odoo Reference）不可删除，请在「常规信息」页修改或清空。"
+
+#. module: product_reference
+#. odoo-python
+#: code:addons/product_reference/models/product_template.py:0
+msgid " (Matching reference: %(codes)s)"
+msgstr "（命中参考号：%(codes)s）"

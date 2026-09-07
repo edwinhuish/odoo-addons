@@ -5,7 +5,7 @@
 ## 1. 业务背景
 
 - 使用者：外贸 SOHO（一人 / 小团队），要求操作简单、少点几下就能录完单据。
-- 核心链路：产品（型号 / 图片）→ 报价单 → 销售订单 → 采购 → 出入库 → 收付款 / 发票。
+- 核心链路：产品（参考号 / 图片）→ 报价单 → 销售订单 → 采购 → 出入库 → 收付款 / 发票。
 - 语言：文档与代码注释统一**简体中文**；**模块源语言为英文（`en_US`），默认展示英文**，简体中文译文放 `i18n/zh_CN.po`，语言切换后界面随之更新（详见第 4 节「国际化（i18n）规范」）。金额默认涉及多币种（报价常用 USD）。
 - 对外单据编号是业务刚需：客户编码 + 年份 + 流水号（如 `DZ2602`），内部 `SOxxxx` 不对外。
 
@@ -40,7 +40,7 @@
 - `depends` 最小化：能用 `product` 就不要依赖 `sale`；不要为了方便依赖 `website`。
 - 新增模型必须配 `security/ir.model.access.csv`，权限最小化（普通用户可读写业务数据，管理员可配置）。
 - 数据文件（视图/报表/权限）必须登记进 `data`，顺序：security → views → reports → data。
-- 模块命名：`<业务域>_<功能点>`（如 `sale_order_no`、`product_model`）；纯前端通用增强用 `web_` 技术层前缀（如 `web_image_paste`，符合 Odoo `web_*` 惯例）；**禁止**用 Odoo 官方模块名。**不加项目统一前缀**（`soho_` 等）——会偏离 Odoo 生态惯例，且改名需卸载重装生产库；自研模块归属用 `author: "edwinhuish"` 字段标识。命名约定完整版见 `DOCS_TEMPLATE.md`。
+- 模块命名：`<业务域>_<功能点>`（如 `sale_order_no`、`product_reference`）；纯前端通用增强用 `web_` 技术层前缀（如 `web_image_paste`，符合 Odoo `web_*` 惯例）；**禁止**用 Odoo 官方模块名。**不加项目统一前缀**（`soho_` 等）——会偏离 Odoo 生态惯例，且改名需卸载重装生产库；自研模块归属用 `author: "edwinhuish"` 字段标识。命名约定完整版见 `DOCS_TEMPLATE.md`。
 
 ## 4. 国际化（i18n）规范
 
@@ -68,7 +68,7 @@
 | JS 文案 | `_t("...")` | `code:addons/<module>/static/src/js/<file>.js:0` |
 | QWeb 模板文本 / `title` / `aria-label` | 直接写英文 | `code:addons/<module>/static/src/xml/<file>.xml:0` |
 
-> `<model>` 里的点换成下划线（如 `product.model.code` → `product_model_code`）；`<field>` 前是双下划线。
+> `<model>` 里的点换成下划线（如 `product.reference.code` → `product_reference_code`）；`<field>` 前是双下划线。
 
 ### 4.3 已核实的 Odoo 19 抽取事实（对照 `odoo/tools/translate.py`）
 
@@ -83,7 +83,7 @@
 
 | 反面写法 | 后果 | 正确做法 |
 |----------|------|----------|
-| `hint = "（命中型号：%s）" % codes` | Python 侧硬编码中文，永远不变语言 | `_(" (Matching model: %(codes)s)", codes=codes)` |
+| `hint = "（命中参考号：%s）" % codes` | Python 侧硬编码中文，永远不变语言 | `_(" (Matching reference: %(codes)s)", codes=codes)` |
 | `_("...%s...%s") % (a, b)` | 译者无法调整语序 | `_("...%(name)s...%(other)s", name=a, other=b)` |
 | `t-att-aria-label="'删除' + it.name"` | 动态属性不翻译 | JS 侧 `_t("Delete %(name)s", { name })`，模板调方法 |
 | `<span>已选 <t t-esc="n"/> 张</span>` | 三个术语碎片，无法翻译 | getter 里 `_t("%(count)s selected", {count})` + `t-esc` |
@@ -182,7 +182,7 @@ for f in sorted(glob.glob("*/i18n/*.po")):
 |------|------|------|------|
 | `sale_order_no` | 19.0.1.8.0 | 销售订单 / 报价单自定义编号（`order_no`，客户编码 + 两位年份 + 年度流水），含客户编码格式校验、报表替换、PDF 文件名定制、门户预览定制、批量补号 | 已交付，目标环境已验证（T-001） |
 | `web_image_paste` | 19.0.2.1.0 | 后台图片字段粘贴 / 拖拽上传（patch `ImageField` + `FileUploader`，复用原生上传链路，即时预览 + 进度条；原名 `image_uploader`） | 已交付，目标环境已验证（T-003） |
-| `product_model` | 19.0.1.1.0 | 产品多型号 + 可搜索（One2many 明细 / 冗余 trigram 索引 / 命中提示） | 已交付，目标环境已验证（T-002） |
+| `product_reference` | 19.0.2.1.0 | 产品多参考号 + 可搜索（One2many 明细 / 冗余 trigram 索引 / 命中提示）；`19.0.2.0.0` 由 `product_model` 改名（模型 `product.model.code` → `product.reference.code`，含幂等迁移脚本与升级前置 SQL）；`19.0.2.1.0` 新增内部参考行镜像 `default_code`（Reference），双向同步且不可删除 | 已交付，目标环境已验证（T-002）；`19.0.2.0.0` 改名与 `19.0.2.1.0` 内部参考行均待目标环境验证 |
 | `product_image` | 19.0.2.5.0 | 产品多图（原生主图独立 + 图库补充图 / 主图无删除入口/ 首张上传即主图 / 主图 2 倍 / 悬浮局部放大（540窗口+1080图片平移·左侧不足转下方/缩小·选框按比例·留白区白色）/ 点击预览（多图切换+右侧缩略图·关闭按钮暗色半透明·底部条默认透明悬浮淡入·图片初始避开上下条放大可覆盖全屏·任意大小可拖拽grab/grabbing·GPU 1:1顺滑·切图保留状态·无滚动条·缩略图未选中无边框）/ 右侧竖排缩略图（蓝色选中边框·编辑态无删除按钮·滚动不越界且与主图区顶底贴边·仅切换不写库）/ 图片管理弹窗（「+」打开·顶层overlay：上半大图（仅预览、无删除按钮）+平铺缩略图（每张含主图右上角×：删图库删记录·删主图自动提升图库首张·点缩略图只切弹窗大图·缩略图可拖排序(含主图·首位即主图·避让动画)·删除均先确认(含缩略图·主图提示提升)·批量删除(勾选模式+含缩略图清单确认)·大图固定尺寸缩略图占满余量超高滚动·选中主图名称行留空）·下半dropzone 点击/拖放/Ctrl+V（上传中缩略图+动画·粘贴后不自动关闭·上传不改页面大图）·header 最右侧正方形×关闭按钮 hover 变红）/ 继承 image.mixin 复用多尺寸；原名 `product_multi_image`） | 已交付，目标环境已验证（T-005，19.0.2.4.2，含 19.0.2.2.10~4.2：拖动排序（含主图·首位即主图）/ 删除确认 / 批量删除 / 选中主图名称行留空 / 确认框按钮顺序 / 关闭按钮贴边）；坑点与风险提示见模块 `AGENTS.md` →「会话修改总结与风险提示」/「开发复盘与关键经验（T-005）」 |
 
 ## 10. 验证流程
