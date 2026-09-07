@@ -14,6 +14,7 @@
     设置唯一字段标签（`Product Dimension Unit` / `Product Length` / `Product Width` / `Product Height`）
   - 纸箱尺寸字段保持原标签不变；视图中的 `<label>` 仍显示「Dimension Unit / Dimensions」，用户界面不变
 - 同步拆分 `i18n/zh_CN.po` 中产品尺寸与纸箱尺寸的字段描述翻译条目
+- 补充 `i18n/zh_CN.po` 中视图术语 `Dimension Unit` 的简体中文翻译，使产品表单中的「尺寸单位」标签在中文环境下正确显示
 
 ### 影响
 

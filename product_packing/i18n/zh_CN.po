@@ -187,6 +187,11 @@ msgstr "纸箱与包装"
 
 #. module: product_packing
 #: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "Dimension Unit"
+msgstr "尺寸单位"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
 msgid "Dimensions"
 msgstr "尺寸"
 
