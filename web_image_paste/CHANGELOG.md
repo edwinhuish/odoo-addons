@@ -16,6 +16,7 @@
 ### 文档
 
 - 同步 `__manifest__.py`（版本 19.0.2.1.0、name / summary / description 英文化）、`README.md`、`AGENTS.md`、根 `README.md`。
+- **经验沉淀**：根 `AGENTS.md` 新增第 4 节「国际化（i18n）规范」（可翻译入口对照表 / 已核实的抽取事实 / 禁止写法 / 执行 SOP / 自校验脚本）；本模块 `AGENTS.md` 新增「开发复盘与关键经验（T-006 i18n）」。
 
 ### 待验证
 

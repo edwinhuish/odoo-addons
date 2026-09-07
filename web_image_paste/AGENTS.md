@@ -69,6 +69,23 @@
 
 ---
 
+## 开发复盘与关键经验（T-006 i18n，19.0.2.1.0）
+
+> 通用规则见根 [`AGENTS.md`](../AGENTS.md) 第 4 节「国际化（i18n）规范」，本节只记本模块特有的坑。
+
+### 本模块特有的改动点
+
+- **只有 `code:` 类型条目**：纯前端模块没有模型 / 字段 / 视图，`.po` 里不会出现 `model:` / `model_terms:` 条目，只有 JS `_t()`（`code:...image_field_paste.js:0`）与 QWeb 模板文本（`code:...image_field_paste.xml:0`）。
+- **模板里的 `Uploading…` 不用写 `_t()`**：它是静态文本节点 + 无动态属性，OWL 渲染时按术语翻译，直接写英文即可；**前提是保持单个完整文本节点**。
+- **已有英文文案也要补中文**：`_t("There was a problem while uploading your file.")`、`_t("Oops! '%(fileName)s' didn't upload since its format isn't allowed.")` 原本就是英文（复用核心文案），本次一并在 `.po` 里补了 `msgstr`，不要遗漏这类「本来就英文」的条目。
+- 超大图报错走 `checkFileSize`（核心实现），其文案由 `web` 模块自带译文，本模块**不要**重复造一条。
+
+### 维护提醒
+
+- 改 JS 文案或模板文本后必须 `-u` 升级 **+ 强刷浏览器**，前端术语缓存会让「改了没生效」看起来像代码 bug。
+
+---
+
 ## 文件职责
 
 | 文件 | 职责 |

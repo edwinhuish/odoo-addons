@@ -143,6 +143,24 @@ WHERE r.model='sale.order' ORDER BY imd.module, imd.name;
 
 ---
 
+## 开发复盘与关键经验（T-006 i18n，19.0.1.8.0）
+
+> 通用规则见根 [`AGENTS.md`](../AGENTS.md) 第 4 节「国际化（i18n）规范」，本节只记本模块特有的坑。
+
+### 本模块特有的改动点
+
+- **`订单编号` 这个中文在四个地方出现，英文后全部收敛为 `Order Number`**：字段标签、列表列标题、搜索项标题、批量补号的通知标题。`.po` 里必须**合并成一条** `msgid "Order Number"`（4 个 `#:` 引用：`code:...sale_order.py`、`arch_db`×2、`field_description`），写多条会解析失败。
+- **报表与门户不参与翻译**：`print_report_name` 表达式（`'Quotation - %s' % (object.order_no or object.name)`）与门户模板输出的是编号本身，不是自然语言，`.po` 里**不要**为它们建条目；`_force_order_no_print_name` 逐语言写入同一表达式是既有行为，与 i18n 改造无关，不要动。
+- **约束消息的 po 键名**：Odoo 19 的 `models.Constraint` 生成 xmlid 规则是 `<module>.constraint_<属性名去掉前导下划线>`，**不带模型名**，即 `sale_order_no.constraint_order_no_unique`（老式 `_sql_constraints` 是带模型名的，别照抄旧写法）。
+- `res_partner.py` 的客户编号校验报错含换行（`\n`），`.po` `msgid` 里要用两段字符串拼接写成 `"...\n" "Current value: %(value)s"`，别写成字面 `\n` 之外的形式。
+
+### 维护提醒
+
+- 编号规则（客户编码 + 两位年份 + 流水）与语言无关，改文案不要动 `_build_order_no`。
+- 验证时**两种语言都要看 PDF 文件名**：都应使用 `order_no`，这是本模块最容易在 i18n 后被忽略的回归点。
+
+---
+
 ## 文件职责
 
 | 文件 | 职责 |

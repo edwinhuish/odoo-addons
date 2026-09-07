@@ -90,6 +90,29 @@
 
 ---
 
+## 开发复盘与关键经验（T-006 i18n，19.0.2.5.0）
+
+> 通用规则见根 [`AGENTS.md`](../AGENTS.md) 第 4 节「国际化（i18n）规范」，本节只记本模块特有的坑。
+
+### 本模块特有的改动点
+
+- **`Product Image` 与 `Product Images` 只差一个 s**：模型 `_description` / 表单视图标题是 `Product Image`（单数），widget `displayName` 是 `Product Images`（复数）。`.po` 里是两条不同 `msgid`，不要图省事合并。
+- **同一个英文词被多处复用时必须合并成一条**：`Product Image` 同时出现在 `model:ir.model,name`、`arch_db:...form_view`、两个 JS 文件里 → 一条 `msgid` 挂 4 个 `#:` 引用；写两条会导致 po 解析失败。
+- **`No image` 出现在两个模板**（gallery 的占位、manage 的大图占位）→ 同样合并成一条多引用。
+- **模板拼接句全部下沉到 JS**（本次改动最大的地方）：
+  - 「已选 N 张」→ `checkedCountLabel` getter（`_t("%(count)s selected")`），模板改 `t-esc`；
+  - 缩略图删除按钮 `t-att-aria-label="'删除' + it.name"` → `deleteAriaLabel(it)`（动态属性不会被翻译）；
+  - `<kbd>Ctrl</kbd>+<kbd>V</kbd>` 提示 → `pasteHintPrefix` / `pasteHintSuffix` 两个 getter。
+  - 后续新增弹窗文案时**优先写成单个完整文本节点**，不要在文本里插元素。
+- **多行文本节点要压成单行**：管理弹窗底部的「拖动缩略图可排序…」原本跨两行，术语会带上换行缩进，已改单行。
+
+### 维护提醒
+
+- 前端术语有缓存：改 `_t()` 或模板文本后，`-u` 升级 **+ 强刷浏览器**才生效；排查「翻译没变」先怀疑缓存。
+- `_t()` 的动态值一律用 `%(name)s` 命名占位符传参，禁止 `.replace("%s", x)`（语序无法调整，存量已全部改掉）。
+
+---
+
 ## 文件职责
 
 | 文件 | 职责 |
