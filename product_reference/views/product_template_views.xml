@@ -14,19 +14,21 @@
 
             <xpath expr="//page[@name='general_information']" position="after">
                 <page string="References" name="reference_codes">
+                    <group>
+                        <field name="default_code" string="Reference"/>
+                    </group>
                     <field name="reference_code_line_ids" widget="one2many">
                         <list string="Reference Lines" editable="bottom">
-                            <field name="is_internal" column_invisible="1"/>
-                            <field name="sequence" widget="handle" readonly="is_internal"/>
+                            <field name="sequence" widget="handle"/>
                             <field name="reference_code"
                                    placeholder="e.g. REF-A, SKU-1234"
                                    required="1"/>
-                            <field name="reference_type" readonly="is_internal"/>
-                            <field name="active" widget="boolean_toggle" readonly="is_internal"/>
-                            <field name="note" placeholder="Optional, e.g. customer / version / effective date" readonly="is_internal"/>
+                            <field name="reference_type"/>
+                            <field name="active" widget="boolean_toggle"/>
+                            <field name="note" placeholder="Optional, e.g. customer / version / effective date"/>
                         </list>
                     </field>
-                    <p class="text-muted small oe_edit_only">Hint: the first row mirrors the Odoo Reference from the General Information tab and cannot be deleted. Other references (customer / factory / alias) cannot be repeated inside the same product, but the same reference may be used by other products. Searching a product by any of its references finds this product.</p>
+                    <p class="text-muted small oe_edit_only">Hint: references cannot be repeated inside the same product, but the same reference may be used by other products. Searching a product by any of its references finds this product.</p>
                 </page>
             </xpath>
 

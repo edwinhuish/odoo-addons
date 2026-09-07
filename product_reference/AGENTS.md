@@ -53,19 +53,12 @@
 7. **删除产品级联清理参考号**
    - `product_tmpl_id` 的 `ondelete='cascade'`，禁止改成 `set null` 或 `restrict`
 
-8. **内部参考行（Odoo Reference）的特殊规则**
-   - 标记 `is_internal=True` 的行是 `product.template.default_code` 在「参考号」页里的镜像
-   - 它始终排在参考号列表第一（`_order = "is_internal desc, ..."`），不可删除
-   - 修改它（`reference_code`）必须回写 `default_code`；修改 `default_code` 必须同步更新/删除它
-   - 禁止手工创建/删除/归档内部参考行；仅通过 `default_code` 间接维护
-   - 如果已存在同代码的普通参考号行，同步时直接提升该行，避免唯一约束冲突
-
-9. **Odoo 19 API 事实"
+8. **Odoo 19 API 事实"
    - `name_get()` / `name_search()` 已从核心移除，只重写 `_compute_display_name` 与 `_search_display_name`
    - `_sql_constraints` 已废弃，用 `models.Constraint("UNIQUE(...)", "提示")`
    - `Domain` 从 `odoo.fields` 导入，`Domain.NEGATIVE_OPERATORS` 判断否定操作符
 
-10. **模块 / 模型 / 字段改名必须有迁移与运维步骤**
+9. **模块 / 模型 / 字段改名必须有迁移与运维步骤**
    - 结构变更一律写 `migrations/<版本>/pre-migration.py`，且脚本必须幂等（可重复执行）
    - 模块改名（`product_model` → `product_reference`）需先手工执行
      `README.md` →「从 product_model 升级」的 SQL，否则 Odoo 会当成新模块安装
@@ -91,14 +84,13 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 模块元数据、依赖、数据文件声明（security → views） |
-| `models/product_reference_code.py` | 参考号明细模型：字段、同产品去重约束、冗余索引同步、级联、内部参考行保护 |
-| `models/product_template.py` | 扩展 `product.template`：One2many、冗余字段、`_search_display_name`、`web_search_read`、内部参考行同步 |
-| `models/product_product.py` | 扩展 `product.product`：变体 `default_code` 修改时同步到模板侧内部参考行 |
-| `views/product_template_views.xml` | 产品表单参考号页、列表参考号列、搜索框并入参考号搜索 |
+| `models/product_reference_code.py` | 参考号明细模型：字段、同产品去重约束、冗余索引同步、级联 |
+| `models/product_template.py` | 扩展 `product.template`：One2many、冗余字段、`_search_display_name`、`web_search_read` |
+| `views/product_template_views.xml` | 产品表单参考号页（含原生 `default_code` 字段）、列表参考号列、搜索框并入参考号搜索 |
 | `views/product_reference_code_views.xml` | 参考号独立列表/表单/搜索视图与菜单动作 |
 | `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |
 | `migrations/19.0.2.0.0/pre-migration.py` | `product_model` → `product_reference` 的模块 / 模型 / 字段 / 索引 / 元数据改名（幂等） |
-| `migrations/19.0.2.1.0/post-migration.py` | 为已有 `default_code` 的产品补建内部参考行 |
+| `migrations/19.0.2.2.0/pre-migration.py` | 清理 `19.0.2.1.0` 遗留的内部参考行（如未部署则无影响） |
 
 ---
 

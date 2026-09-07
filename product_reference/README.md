@@ -9,9 +9,8 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 ## 功能概述
 
-- 一个产品可挂多个参考号（内部参考 / 客户参考号 / 工厂参考号 / 别名）
-- 第一行固定为 Odoo `default_code`（General Information 的 `Reference`）的镜像，始终置顶且不可删除
-- 修改内部参考行会回写 `default_code`；修改 `default_code` 会同步更新/删除内部参考行
+- 一个产品可挂多个参考号（客户参考号 / 工厂参考号 / 别名）
+- 原生 Odoo `default_code`（General Information 的 `Reference`）在产品表单的「参考号」页顶部直接显示，可统一编辑
 - 参考号用独立明细模型 + `One2many` 挂在 `product.template` 上
 - 同一产品内参考号不可重复；不同产品间允许同参考号，重复时命中提示区分
 - 搜索能力在数据库层实现：冗余可存储字段 `reference_code_index` + trigram 索引
@@ -25,7 +24,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 | 设计点 | 说明 |
 |--------|------|
-| 内部参考行 | `is_internal=True` 的行镜像 `product.template.default_code`，`_order` 固定置顶，不可删除；双向同步 |
+| 原生 Reference 统一编辑 | 在产品「参考号」页顶部直接放置 Odoo 原生 `default_code` 字段，用户无需切回「常规信息」页 |
 | 独立明细模型 | 参考号存于 `product.reference.code`，禁止逗号分隔塞进单个 `Char` |
 | 数据库层搜索 | 冗余字段 `reference_code_index`（`Text` + trigram 索引）拼接所有参考号，由参考号行增删改时自动同步 |
 | `_search_display_name` 扩展 | Many2one 下拉、搜索建议、快速搜索按 `reference_code_index` 命中产品 |
@@ -50,10 +49,9 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `reference_code` | `Char`（required, index） | 参考号，同产品内不可重复 |
-| `reference_type` | `Selection` | 内部参考 / 客户参考号 / 工厂参考号 / 别名 |
-| `is_internal` | `Boolean`（index, copy=False） | 是否 Odoo `default_code` 的镜像行，始终置顶且不可删除 |
-| `sequence` | `Integer` | 排序，数值小的在前；内部参考始终置顶 |
-| `active` | `Boolean` | 启用状态，可停用而不删除（内部参考不可停用） |
+| `reference_type` | `Selection` | 客户参考号 / 工厂参考号 / 别名 |
+| `sequence` | `Integer` | 排序，数值小的在前 |
+| `active` | `Boolean` | 启用状态，可停用而不删除 |
 | `note` | `Char` | 备注（对应客户、版本、生效日期等） |
 | `product_tmpl_id` | `Many2one` → `product.template`（required, index, cascade） | 所属产品 |
 
@@ -61,7 +59,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 ## 视图
 
-- **产品表单**：「常规信息」页之后新增「参考号（References）」页，内嵌 One2many 行，可增删改排序
+- **产品表单**：「常规信息」页之后新增「参考号（References）」页，顶部放置原生 `default_code`（Reference）字段，下方内嵌 One2many 行，可增删改排序其他参考号
 - **产品列表**：新增「参考号」列（可选显示），展示 `reference_code_index` 拼接结果
 - **产品搜索**：顶部搜索框并入参考号搜索；新增独立的「参考号」搜索项
 - **参考号独立视图**：`产品参考号` 菜单动作，供管理员批量检索与维护
@@ -91,8 +89,8 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 1. 将 `product_reference` 目录放入 Odoo 19 的 `addons_path`（**替换**旧的 `product_model` 目录）
 2. 更新应用列表后升级 / 安装模块：`产品多参考号`
-3. 打开任意产品表单，在「常规信息」页填写 `Reference`；保存后该值会自动出现在「参考号」页第一行
-4. 在「参考号」页可继续添加客户参考号、工厂参考号、别名；第一行内部参考的修改会同步回 `Reference`
+3. 打开任意产品表单，切换到「参考号（References）」页，可直接在页顶编辑 Odoo `Reference`；下方继续添加客户参考号、工厂参考号、别名
+4. 在「常规信息」页编辑 `Reference` 同样有效；两处修改的是同一个原生字段
 5. 在产品列表搜索框输入参考号，或销售订单行选产品时输入参考号，均可命中对应产品
 
 ### 从 product_model 升级（已装旧模块的库必做）
@@ -119,16 +117,11 @@ odoo -d <db> -u product_reference --stop-after-init
 > 未执行上述 SQL 就直接安装 `product_reference`，会被 Odoo 当成新模块：旧 `product_model`
 > 的数据不会自动接上。此时请回滚到升级前备份再按上面顺序重来。
 
-### 内部参考行（Odoo Reference）
+### 原生 Reference 在参考号页统一编辑
 
-- 产品表单「常规信息」页中的 `Reference` 字段（即 `product.template.default_code`）
-  会自动在「参考号」页显示为第一行，类型为 **Internal Reference**。
-- 该行的 `reference_code` 与 `Reference` 字段**双向同步**：
-  - 在「常规信息」页修改 `Reference` → 内部参考行同步更新
-  - 在「参考号」页修改内部参考行 → `Reference` 字段同步更新
-- 内部参考行始终排在列表第一，不可删除、不可归档、不可调整类型和排序。
-- 清空 `Reference` 字段后，内部参考行会被自动移除。
-- 若已有普通参考号行的代码与 `Reference` 相同，同步时会直接提升为内部参考行，避免唯一约束冲突。
+- 产品表单的「参考号（References）」页顶部直接放置 Odoo 原生的 `default_code` 字段，标签显示为 `Reference`。
+- 该字段与「常规信息」页的 `Reference` 是同一个字段，修改任意一处都会同步生效。
+- 它不属于 `product.reference.code` 明细行，因此不占用参考号行的唯一约束，也不参与参考号行的排序。
 
 ### 批量录入参考号
 
@@ -144,10 +137,8 @@ odoo -d <db> -u product_reference --stop-after-init
 |--------|------|------|
 | 升级后模块名 | 应用列表显示 `产品多参考号`（`product_reference`），无 `product_model` 残留 | 待验证 |
 | 历史数据 | 旧型号数据完整出现在产品「参考号」页与 `product_reference_code` 表 | 待验证 |
-| 产品表单参考号页 | 可增删改排序参考号行 | 待验证 |
-| 内部参考行 | 在「常规信息」页填写 `Reference` 后，「参考号」页第一行自动出现 Internal Reference，且不可删除 | 待验证 |
-| 内部参考双向同步 | 修改任一端的 `Reference` / 内部参考行代码，另一端同步变化 | 待验证 |
-| 清空 Reference | 内部参考行被自动移除；如已有同代码普通行，升级后不会重复 | 待验证 |
+| 产品表单参考号页 | 页顶可编辑 Odoo `Reference`；下方可增删改排序其他参考号行 | 待验证 |
+| Reference 统一编辑 | 在「参考号」页修改页顶 `Reference`，「常规信息」页同步变化，反之亦然 | 待验证 |
 | 同产品重复参考号 | 阻止并给中文提示，带出具体值与产品名 | 待验证 |
 | 产品列表搜索框输入参考号 | 命中对应产品，`name` 显示「产品名（命中参考号：xxx）」 | 待验证 |
 | 销售订单行选产品输入参考号 | 命中对应产品 | 待验证 |

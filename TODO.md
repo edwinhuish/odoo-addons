@@ -91,27 +91,27 @@
     - 回滚：恢复升级前数据库备份 + 切回旧模块目录（旧版本 `19.0.1.1.0`）。
     - 仓库内无 Odoo 运行环境，**无法自验**，需在目标环境升级后逐项确认；验证通过后整条移出本文件。
 
-- [ ] 🚧 T-008 ｜ product_reference ｜ P1 ｜ 产品「参考号」页第一行固定为 Odoo Reference（`default_code`）镜像，双向同步且不可删除
+- [ ] 🚧 T-008 ｜ product_reference ｜ P1 ｜ 产品「参考号」页顶部直接显示 Odoo 原生 `Reference`（`default_code`）供统一编辑
 
   - 设计约束（动工前必读）
-    - 用 `product.reference.code.is_internal` 标识内部参考行；`_order` 用 `is_internal desc` 置顶。
-    - 内部参考行随 `product.template.default_code` 创建 / 更新 / 删除而同步；修改内部参考行的 `reference_code` 要回写 `default_code`。
-    - 禁止用户删除 / 归档内部参考行（`unlink` 抛 `ValidationError`；视图把 `active`、`reference_type`、`sequence`、`note` 设为 readonly）。
-    - 若普通参考号行代码与 `default_code` 相同，同步时直接提升为内部参考行，避免唯一约束冲突。
-    - 已有数据通过 `migrations/19.0.2.1.0/post-migration.py` 回填。
+    - **不在 `product.reference.code` 中存储 Odoo Reference**：`default_code` 是 Odoo 原生字段，
+      避免通过镜像行维护同步，减少数据冗余和一致性风险。
+    - 在「参考号（References）」页顶部直接放置原生 `default_code` 字段，标签保持 `Reference`，
+      与「常规信息」页共享同一个字段。
+    - 参考号明细行只保存 customer / factory / alias 等额外参考号；`_order` 仅按 `sequence` 排序。
+    - 若已部署过 `19.0.2.1.0`，升级 `19.0.2.2.0` 时由 `pre-migration.py` 清理遗留的内部参考行。
 
   - 验收标准
-    - [ ] 在「常规信息」页填写 `Reference`，保存后「参考号」页第一行自动出现 Internal Reference 行
-    - [ ] 修改「常规信息」页 `Reference`，内部参考行同步更新；清空 `Reference`，内部参考行自动消失
-    - [ ] 在「参考号」页修改第一行代码，`Reference` 字段同步更新
-    - [ ] 内部参考行始终排在第一，不可删除（点击删除给出中文提示）
+    - [ ] 「参考号」页顶部可见 `Reference` 字段，可查看和编辑
+    - [ ] 在「参考号」页修改 `Reference` 保存后，「常规信息」页同步变化
+    - [ ] 在「常规信息」页修改 `Reference` 保存后，「参考号」页同步变化
+    - [ ] `Reference` 为空时，参考号行列表不受影响，不会自动生成任何内部行
     - [ ] 普通参考号行可正常增删改排序；同产品重复参考号仍被阻止
-    - [ ] 独立参考号视图可筛选 Internal / Other References
-    - [ ] 从旧版本升级后，`default_code` 非空的产品自动出现 Internal Reference 行，无重复
+    - [ ] 从 `19.0.2.1.0` 升级后，旧的 `is_internal` / `reference_type='internal'` 行被清理
 
   - 备注
-    - 落地版本 `19.0.2.1.0`（功能新增，第三位 +1）；改动清单见 [`product_reference/CHANGELOG.md`](product_reference/CHANGELOG.md)。
-    - 回滚：恢复升级前数据库备份 + 切回旧版本目录（`19.0.2.0.0`）。
+    - 落地版本 `19.0.2.2.0`（功能调整，第三位 +1）；改动清单见 [`product_reference/CHANGELOG.md`](product_reference/CHANGELOG.md)。
+    - 回滚：恢复升级前数据库备份 + 切回旧版本目录（`19.0.2.1.0` 或 `19.0.2.0.0`）。
     - 仓库内无 Odoo 运行环境，**无法自验**，需在目标环境升级后逐项确认；验证通过后整条移出本文件。
     - 把 4.6 的自校验脚本固化为仓库脚本（如 `scripts/check_i18n.py`），提交前一键跑。
     - 若中文用户为主，可评估再加 `zh_TW` 或把默认语言配置写进部署文档，减少每次手工切语言。

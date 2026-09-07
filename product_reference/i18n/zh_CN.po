@@ -24,11 +24,12 @@ msgstr "创建一条产品参考号"
 #. module: product_reference
 #: model_terms:ir.actions.act_window,help:product_reference.action_product_reference_code
 msgid ""
-"A product can carry several references (internal / customer / factory / alias). They are "
-"usually maintained on the \"References\" page of the product form; this view is "
-"meant for bulk search and maintenance."
+"A product can carry several references (customer / factory / alias), in "
+"addition to the standard Odoo Reference. They are usually maintained on the "
+"\"References\" page of the product form; this view is meant for bulk search "
+"and maintenance."
 msgstr ""
-"一个产品可挂多条参考号（内部参考 / 客户参考号 / 工厂参考号 / 别名）。通常在产品表单的「参考号」页内维护，此处用于批量检索与维护。"
+"一个产品除标准 Odoo Reference 外，还可挂多条参考号（客户参考号 / 工厂参考号 / 别名）。通常在产品表单的「参考号」页内维护，此处用于批量检索与维护。"
 
 #. module: product_reference
 #: model:ir.actions.act_window,name:product_reference.action_product_reference_code
@@ -75,9 +76,10 @@ msgstr "参考号明细"
 #. module: product_reference
 #: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
 msgid ""
-"Hint: the first row mirrors the Odoo Reference from the General Information tab and cannot be deleted. Other references (customer / factory / alias) cannot be repeated inside the same product, but the same reference may be used by other products. Searching a product by any of its references finds this product."
-msgstr ""
-"提示：第一行镜像自「常规信息」页中的 Odoo Reference，不可删除。其余参考号（客户参考号 / 工厂参考号 / 别名）在同一产品内不可重复；不同产品间可重复。搜索产品时按任一参考号均可命中本产品。"
+"Hint: references cannot be repeated inside the same product, but the same "
+"reference may be used by other products. Searching a product by any of its "
+"references finds this product."
+msgstr "提示：同一产品内参考号不可重复；不同产品间可重复。搜索产品时按任一参考号均可命中本产品。"
 
 #. module: product_reference
 #: model_terms:ir.ui.view,arch_db:product_reference.product_template_list_inherit
@@ -102,11 +104,6 @@ msgid "Reference Type"
 msgstr "参考号类型"
 
 #. module: product_reference
-#: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__internal
-msgid "Internal Reference"
-msgstr "内部参考"
-
-#. module: product_reference
 #: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__customer
 msgid "Customer Reference"
 msgstr "客户参考号"
@@ -124,30 +121,9 @@ msgstr "别名"
 #. module: product_reference
 #: model:ir.model.fields,help:product_reference.field_product_reference_code__reference_type
 msgid ""
-"Purpose of this reference: internal references mirror the General Information "
-"Reference field; customer references are used on outgoing documents, factory "
-"references for purchasing, aliases for historical or colloquial names."
-msgstr ""
-"区分该参考号的用途：内部参考镜像自「常规信息」页的 Reference 字段；客户参考号用于对外单据；工厂参考号用于采购；别名用于历史/俗称匹配。"
-
-#. module: product_reference
-#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__is_internal
-#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
-msgid "Internal"
-msgstr "内部"
-
-#. module: product_reference
-#: model:ir.model.fields,help:product_reference.field_product_reference_code__is_internal
-msgid ""
-"When checked, this row mirrors the product's Odoo Reference (default_code) from "
-"the General Information tab. It always appears first and cannot be deleted."
-msgstr ""
-"勾选表示该行镜像自产品「常规信息」页中的 Odoo Reference（default_code），始终排在参考号列表第一，且不可删除。"
-
-#. module: product_reference
-#: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
-msgid "Other References"
-msgstr "其他参考号"
+"Purpose of this reference: customer references are used on outgoing documents, "
+"factory references for purchasing, aliases for historical or colloquial names."
+msgstr "区分该参考号的用途：客户参考号用于对外单据，工厂参考号用于采购，别名用于历史/俗称匹配。"
 
 #. module: product_reference
 #: model:ir.model.fields,field_description:product_reference.field_product_reference_code__sequence
@@ -158,18 +134,14 @@ msgstr "排序"
 #: model:ir.model.fields,help:product_reference.field_product_reference_code__sequence
 msgid ""
 "Lower values come first; both the list and the One2many lines are ordered by "
-"this value. The internal reference is always pinned to the top regardless of "
 "this value."
-msgstr ""
-"数值小的排在前面，列表与 One2many 行均按此排序；但内部参考始终置顶。"
+msgstr "数值小的排在前面，列表与 One2many 行均按此排序。"
 
 #. module: product_reference
 #: model:ir.model.fields,help:product_reference.field_product_reference_code__active
 msgid ""
-"Uncheck to disable a reference without deleting it, so history is kept. The "
-"internal reference cannot be archived."
-msgstr ""
-"取消勾选可停用某条参考号而不删除，便于保留历史。内部参考不可停用。"
+"Uncheck to disable a reference without deleting it, so history is kept."
+msgstr "取消勾选可停用某条参考号而不删除，便于保留历史。"
 
 #. module: product_reference
 #: model:ir.model.fields,field_description:product_reference.field_product_reference_code__note
@@ -196,8 +168,8 @@ msgstr "该参考号所属的产品模板；删除产品时参考号行随之级
 
 #. module: product_reference
 #: model:ir.model.fields,help:product_reference.field_product_template__reference_code_line_ids
-msgid "All references of this product (internal / customer / factory / alias)."
-msgstr "该产品的所有参考号（内部参考 / 客户参考号 / 工厂参考号 / 别名）。"
+msgid "All references of this product (customer / factory / alias)."
+msgstr "该产品的所有参考号（客户参考号 / 工厂参考号 / 别名）。"
 
 #. module: product_reference
 #: model:ir.model.fields,field_description:product_reference.field_product_template__reference_code_count
@@ -228,14 +200,6 @@ msgid ""
 "The reference \"%(code)s\" already exists for product \"%(product)s\". Reference "
 "codes must be unique within the same product."
 msgstr "参考号“%(code)s”在产品“%(product)s”中已存在，同一产品内参考号不可重复。"
-
-#. module: product_reference
-#. odoo-python
-#: code:addons/product_reference/models/product_reference_code.py:0
-msgid ""
-"The internal reference row (Odoo Reference) cannot be deleted. Change or clear "
-"it in the General Information tab instead."
-msgstr "内部参考行（Odoo Reference）不可删除，请在「常规信息」页修改或清空。"
 
 #. module: product_reference
 #. odoo-python

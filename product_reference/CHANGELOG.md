@@ -1,5 +1,44 @@
 # 变更日志
 
+## [19.0.2.2.0] - 2026-09-07（待验证）
+
+### 变更（功能回退与简化）
+
+- **不在参考号表中存储 Odoo Reference**：移除 `19.0.2.1.0` 引入的
+  `product.reference.code.is_internal` 字段、`("internal", "Internal Reference")`
+  selection 值以及所有双向同步逻辑（`_sync_internal_reference_line`、
+  `product.template.create/write` 重写、`product.product.write` 钩子、内部行保护）。
+- **前端直接显示原生 `default_code`**：在产品表单「参考号（References）」页顶部放置
+  Odoo 原生 `default_code` 字段（标签 `Reference`），用户可在该页直接查看和修改，
+  与「常规信息」页共享同一个字段，无需维护同步。
+- **参考号明细行恢复纯扩展角色**：`product.reference.code` 只保存 customer / factory /
+  alias 等额外参考号；`_order` 恢复为 `sequence, product_tmpl_id, id`。
+- **清理历史内部行**：新增 `migrations/19.0.2.2.0/pre-migration.py`，在 ORM 删除
+  `is_internal` 列前，先删除 `19.0.2.1.0` 遗留的 `is_internal = TRUE` 或
+  `reference_type = 'internal'` 行（如该版本未部署则无影响）。
+- **i18n 清理**：移除 `Internal` / `Internal Reference` / `Other References` 及内部行
+  不可删除提示；恢复 `reference_type` help、active help、sequence help、页面提示等
+  到 `19.0.2.0.0` 状态。
+- **文档同步**：更新 `README.md`、`AGENTS.md`。
+
+### 影响
+
+- `default_code` 仍是 Odoo 原生字段，不进入 `product_reference_code` 表；
+  修改它不会在参考号行列表中生成/删除任何记录。
+- 已升级到 `19.0.2.1.0` 并产生内部参考行的库，再次升级到 `19.0.2.2.0` 时
+  pre-migration 会自动清理这些行；请确保升级前已备份。
+- 如果 `19.0.2.1.0` 从未部署，此版本升级与 `19.0.2.0.0` → `19.0.2.2.0` 等价，
+  仅新增参考号页顶部的 `default_code` 字段。
+
+### 待验证
+
+- 「参考号」页顶部可见并可直接编辑 `Reference`（`default_code`）。
+- 在「参考号」页修改 `Reference` 后，「常规信息」页同步变化，反之亦然。
+- 参考号行列表不再出现 Internal Reference 行；customer / factory / alias 行可正常维护。
+- 从 `19.0.2.1.0` 升级后，旧的内部参考行被清理，无脏数据残留。
+
+---
+
 ## [19.0.2.1.0] - 2026-09-07（待验证）
 
 ### 变更（功能）

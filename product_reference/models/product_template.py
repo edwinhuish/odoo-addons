@@ -6,8 +6,6 @@
 2. 搜索在数据库层：冗余可存储字段 ``reference_code_index`` + trigram 索引
 3. ``_search_display_name`` 让 Many2one / 下拉 / 快速搜索命中参考号
 4. ``web_search_read`` 在列表请求 name 时附加「命中参考号」提示
-5. ``default_code``（General Information 的 Reference）在参考号页有镜像行，
-   始终排在第一且不可删除，双向同步
 """
 
 from odoo import _, api, fields, models
@@ -26,7 +24,7 @@ class ProductTemplate(models.Model):
         comodel_name="product.reference.code",
         inverse_name="product_tmpl_id",
         copy=False,
-        help="All references of this product (internal / customer / factory / alias)."
+        help="All references of this product (customer / factory / alias).",
     )
     reference_code_count = fields.Integer(
         string="Reference Count",
@@ -59,75 +57,6 @@ class ProductTemplate(models.Model):
         for tmpl in self:
             codes = tmpl.reference_code_line_ids.mapped("reference_code")
             tmpl.reference_code_index = "\n".join(c for c in codes if c) or False
-
-    def _sync_internal_reference_line(self, code=None):
-        """把 ``default_code``（General Information 的 Reference）镜像为内部参考号行。
-
-        内部参考行满足：
-        - ``is_internal=True``、``reference_type='internal'``，始终排在参考号列表第一；
-        - 不可删除，仅随 ``default_code`` 清空而被同步删除；
-        - 修改它时会回写 ``product.template.default_code``；修改 ``default_code`` 时同步更新它。
-
-        参数 ``code`` 在 ``product.template.write`` 场景下显式传入，避免读取尚未刷新的
-        计算/存储字段旧值；为 ``None`` 时按各记录当前 ``default_code`` 同步。
-        """
-        Line = self.env["product.reference.code"].with_context(active_test=False)
-        existing = Line.search([
-            ("product_tmpl_id", "in", self.ids),
-            ("is_internal", "=", True),
-        ])
-        by_tmpl = {}
-        for line in existing:
-            by_tmpl.setdefault(line.product_tmpl_id.id, []).append(line)
-
-        to_create_vals = []
-        for tmpl in self:
-            desired = code
-            if desired is None:
-                desired = (tmpl.default_code or "").strip()
-
-            lines = by_tmpl.get(tmpl.id, [])
-
-            if not desired:
-                # 清空 default_code 时，同步删除内部参考行（如其中某些是普通参考号
-                # 因代码相同被“提升”而来，也一并删除；这是内部参考的镜像语义）。
-                if lines:
-                    Line.browse(sum((l.ids for l in lines), [])).with_context(
-                        reference_sync=True,
-                    ).unlink()
-                continue
-
-            if lines:
-                keep = lines[0]
-                for dup in lines[1:]:
-                    dup.with_context(reference_sync=True).unlink()
-                if keep.reference_code != desired:
-                    keep.with_context(reference_sync=True).write({
-                        "reference_code": desired,
-                    })
-            else:
-                # 若已存在同代码的普通参考号行，直接提升为内部行，避免唯一约束冲突。
-                adopt = Line.search([
-                    ("product_tmpl_id", "=", tmpl.id),
-                    ("reference_code", "=", desired),
-                    ("is_internal", "=", False),
-                ], limit=1)
-                if adopt:
-                    adopt.with_context(reference_sync=True).write({
-                        "is_internal": True,
-                        "reference_type": "internal",
-                    })
-                else:
-                    to_create_vals.append({
-                        "product_tmpl_id": tmpl.id,
-                        "reference_code": desired,
-                        "reference_type": "internal",
-                        "is_internal": True,
-                        "sequence": 0,
-                    })
-
-        if to_create_vals:
-            Line.with_context(reference_sync=True).create(to_create_vals)
 
     # ------------------------------------------------------------------
     # 显示名称：命中参考号时附加「（命中参考号：xxx）」便于区分
@@ -204,19 +133,6 @@ class ProductTemplate(models.Model):
                 if hint not in base:
                     rec["name"] = base + hint
         return result
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        templates = super().create(vals_list)
-        templates._sync_internal_reference_line()
-        return templates
-
-    def write(self, vals):
-        res = super().write(vals)
-        if "default_code" in vals:
-            # 显式传入 code，避免回读到计算/存储字段未刷新的旧值
-            self._sync_internal_reference_line(code=vals.get("default_code"))
-        return res
 
     @api.model
     def _extract_reference_code_search_terms(self, domain):

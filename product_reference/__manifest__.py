@@ -1,7 +1,7 @@
 {
     "name": "Product References",
-    "version": "19.0.2.1.0",
-    "summary": "Attach several references to one product (customer reference / factory reference / alias) and find the product from any of its references, both in lists and when selecting a product",
+    "version": "19.0.2.2.0",
+    "summary": "Attach several references to one product and find the product from any of its references; the standard Odoo Reference is also editable on the References tab",
     "description": """
         Product reference management module for foreign trade SOHO scenarios.
 
@@ -9,11 +9,11 @@
         translation ships in i18n/zh_CN.po.
 
         Key features:
-        - One product can carry several reference lines (internal / customer /
-          factory / alias); the first line mirrors the standard Odoo Reference
-          (default_code) and cannot be deleted
-        - The Odoo Reference shown in the General Information tab is kept in
-          sync with the internal reference row on the References tab
+        - One product can carry several reference lines (customer / factory /
+          alias), in addition to the standard Odoo Reference
+        - The standard Odoo Reference (default_code) is displayed and editable
+          directly on the References tab, so users do not need to switch back
+          to General Information
         - References live in a dedicated line model exposed as a One2many on
           product.template; they are never squeezed into a comma separated Char
         - A reference cannot be repeated inside the same product; different
