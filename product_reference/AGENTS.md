@@ -11,7 +11,7 @@
 - 新建模型：`product.reference.code`（原名 `product.model.code`）
 - 继承模型：`product.template`
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.2.0.0`
+- 当前版本：`19.0.2.2.0`
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用

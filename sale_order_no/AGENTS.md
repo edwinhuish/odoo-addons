@@ -11,7 +11,7 @@
 - 技术目录：`sale_order_no`
 - 继承模型：`sale.order`、`res.partner`、`ir.actions.report`
 - 主依赖：`sale`、`sale_pdf_quote_builder`
-- 当前版本：`19.0.1.7.0`（仅支持全新安装，已删除 migrations）
+- 当前版本：`19.0.1.8.0`（T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；仅支持全新安装，已删除 migrations）
 
 ---
 

@@ -131,21 +131,21 @@ odoo -d <db> -u product_reference --stop-after-init
 
 ## 验证清单
 
-> 本次改名尚未在目标环境验证，升级后按下表逐项确认。
+> 目标环境已验证通过（2026-09-07，落地版本 `19.0.2.2.0`；`19.0.2.0.0` 完成 `product_model` → `product_reference` 改名与数据迁移，T-007；`19.0.2.2.0` 完成参考号页顶部原生 `Reference` 统一编辑，T-008）。
 
 | 验证项 | 期望 | 结果 |
 |--------|------|------|
-| 升级后模块名 | 应用列表显示 `产品多参考号`（`product_reference`），无 `product_model` 残留 | 待验证 |
-| 历史数据 | 旧型号数据完整出现在产品「参考号」页与 `product_reference_code` 表 | 待验证 |
-| 产品表单参考号页 | 页顶可编辑 Odoo `Reference`；下方可增删改排序其他参考号行 | 待验证 |
-| Reference 统一编辑 | 在「参考号」页修改页顶 `Reference`，「常规信息」页同步变化，反之亦然 | 待验证 |
-| 同产品重复参考号 | 阻止并给中文提示，带出具体值与产品名 | 待验证 |
-| 产品列表搜索框输入参考号 | 命中对应产品，`name` 显示「产品名（命中参考号：xxx）」 | 待验证 |
-| 销售订单行选产品输入参考号 | 命中对应产品 | 待验证 |
-| 删除参考号行 | 不报错，列表 `reference_code_index` 按剩余行重算 | 待验证 |
-| 删除产品 | 参考号行随之级联清理 | 待验证 |
-| 中英双语 | 英文界面为 `Reference` 系列文案，中文界面为「参考号」系列文案 | 待验证 |
-| 索引 | `product_template__reference_code_index_index`（trigram）与 `product_reference_code_reference_code_unique_per_template` 存在 | 待验证 |
+| 升级后模块名 | 应用列表显示 `产品多参考号`（`product_reference`），无 `product_model` 残留 | 通过 |
+| 历史数据 | 旧型号数据完整出现在产品「参考号」页与 `product_reference_code` 表 | 通过 |
+| 产品表单参考号页 | 页顶可编辑 Odoo `Reference`；下方可增删改排序其他参考号行 | 通过 |
+| Reference 统一编辑 | 在「参考号」页修改页顶 `Reference`，「常规信息」页同步变化，反之亦然 | 通过 |
+| 同产品重复参考号 | 阻止并给中文提示，带出具体值与产品名 | 通过 |
+| 产品列表搜索框输入参考号 | 命中对应产品，`name` 显示「产品名（命中参考号：xxx）」 | 通过 |
+| 销售订单行选产品输入参考号 | 命中对应产品 | 通过 |
+| 删除参考号行 | 不报错，列表 `reference_code_index` 按剩余行重算 | 通过 |
+| 删除产品 | 参考号行随之级联清理 | 通过 |
+| 中英双语 | 英文界面为 `Reference` 系列文案，中文界面为「参考号」系列文案 | 通过 |
+| 索引 | `product_template__reference_code_index_index`（trigram）与 `product_reference_code_reference_code_unique_per_template` 存在 | 通过 |
 
 ### 执行流程
 
