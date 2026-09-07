@@ -77,7 +77,7 @@ class ProductTemplate(models.Model):
     # ------------------------------------------------------------------
 
     product_dimension_unit = fields.Selection(
-        string="Dimension Unit",
+        string="Product Dimension Unit",
         selection=[
             ("cm", "Centimeters"),
             ("m", "Meters"),
@@ -88,19 +88,19 @@ class ProductTemplate(models.Model):
              "the standard Volume field when it is currently 0.",
     )
     product_length = fields.Float(
-        string="Length",
+        string="Product Length",
         default=0.0,
         digits=(10, 2),
         help="Product length in the selected dimension unit.",
     )
     product_width = fields.Float(
-        string="Width",
+        string="Product Width",
         default=0.0,
         digits=(10, 2),
         help="Product width in the selected dimension unit.",
     )
     product_height = fields.Float(
-        string="Height",
+        string="Product Height",
         default=0.0,
         digits=(10, 2),
         help="Product height in the selected dimension unit.",

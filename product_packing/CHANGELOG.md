@@ -5,6 +5,31 @@
 
 ---
 
+## [19.0.1.1.2] - 2026-09-07（待验证）
+
+### 变更
+
+- 修复 Odoo 启动时 `ir.model` 的字段标签重复 WARNING：
+  - 为产品自身尺寸字段 `product_dimension_unit` / `product_length` / `product_width` / `product_height`
+    设置唯一字段标签（`Product Dimension Unit` / `Product Length` / `Product Width` / `Product Height`）
+  - 纸箱尺寸字段保持原标签不变；视图中的 `<label>` 仍显示「Dimension Unit / Dimensions」，用户界面不变
+- 同步拆分 `i18n/zh_CN.po` 中产品尺寸与纸箱尺寸的字段描述翻译条目
+
+### 影响
+
+- 无数据库结构变更、无业务逻辑变更，无需迁移脚本
+- 视图/导出/高级搜索中产品尺寸字段的显示名从「Dimension Unit / Length / Width / Height」
+  变为「Product Dimension Unit / Product Length / Product Width / Product Height」，纸箱字段不变
+- `19.0.1.1.2` 直接替代 `19.0.1.1.1`
+
+### 文档
+
+- 同步更新 `__manifest__.py` 版本至 `19.0.1.1.2`
+- 同步更新 `AGENTS.md` 当前版本
+- 同步更新根目录 `README.md` / `AGENTS.md` / `TODO.md` 版本号
+
+---
+
 ## [19.0.1.1.1] - 2026-09-07（待验证）
 
 ### 变更

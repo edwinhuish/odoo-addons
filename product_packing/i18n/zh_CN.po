@@ -27,9 +27,13 @@ msgstr "每个纸箱可装的产品数量。"
 
 #. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_dimension_unit
-#: model:ir.model.fields,field_description:product_packing.field_product_template__product_dimension_unit
 msgid "Dimension Unit"
 msgstr "尺寸单位"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__product_dimension_unit
+msgid "Product Dimension Unit"
+msgstr "产品尺寸单位"
 
 #. module: product_packing
 #: model:ir.model.fields,help:product_packing.field_product_template__carton_dimension_unit
@@ -55,9 +59,13 @@ msgstr "米"
 
 #. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_length
-#: model:ir.model.fields,field_description:product_packing.field_product_template__product_length
 msgid "Length"
 msgstr "长"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__product_length
+msgid "Product Length"
+msgstr "产品长"
 
 #. module: product_packing
 #: model:ir.model.fields,help:product_packing.field_product_template__carton_length
@@ -71,9 +79,13 @@ msgstr "产品长度（按所选单位）。"
 
 #. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_width
-#: model:ir.model.fields,field_description:product_packing.field_product_template__product_width
 msgid "Width"
 msgstr "宽"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__product_width
+msgid "Product Width"
+msgstr "产品宽"
 
 #. module: product_packing
 #: model:ir.model.fields,help:product_packing.field_product_template__carton_width
@@ -87,9 +99,13 @@ msgstr "产品宽度（按所选单位）。"
 
 #. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_height
-#: model:ir.model.fields,field_description:product_packing.field_product_template__product_height
 msgid "Height"
 msgstr "高"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__product_height
+msgid "Product Height"
+msgstr "产品高"
 
 #. module: product_packing
 #: model:ir.model.fields,help:product_packing.field_product_template__carton_height
