@@ -1,0 +1,179 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* product_packing
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-07 00:00+0000\n"
+"PO-Revision-Date: 2026-09-07 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: \n"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_qty_per_carton
+msgid "Units per Carton"
+msgstr "装箱数"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_qty_per_carton
+msgid "Number of product units packed in one carton."
+msgstr "每个纸箱可装的产品数量。"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_dimension_unit
+msgid "Dimension Unit"
+msgstr "尺寸单位"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_dimension_unit
+msgid "Unit used for carton length, width and height. CBM is always calculated in cubic meters."
+msgstr "纸箱长、宽、高所使用的单位。CBM 始终按立方米计算。"
+
+#. module: product_packing
+#: model:ir.model.fields.selection,name:product_packing.selection__product_template__carton_dimension_unit__cm
+msgid "Centimeters"
+msgstr "厘米"
+
+#. module: product_packing
+#: model:ir.model.fields.selection,name:product_packing.selection__product_template__carton_dimension_unit__m
+msgid "Meters"
+msgstr "米"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_length
+msgid "Length"
+msgstr "长"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_length
+msgid "Carton length in the selected dimension unit."
+msgstr "纸箱长度（按所选单位）。"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_width
+msgid "Width"
+msgstr "宽"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_width
+msgid "Carton width in the selected dimension unit."
+msgstr "纸箱宽度（按所选单位）。"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_height
+msgid "Height"
+msgstr "高"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_height
+msgid "Carton height in the selected dimension unit."
+msgstr "纸箱高度（按所选单位）。"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_gross_weight
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "Gross Weight"
+msgstr "毛重"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_gross_weight
+msgid "Carton gross weight in kilograms."
+msgstr "纸箱毛重（千克）。"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_net_weight
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "Net Weight"
+msgstr "净重"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_net_weight
+msgid "Carton net weight in kilograms."
+msgstr "纸箱净重（千克）。"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_cbm
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "CBM"
+msgstr "CBM"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_cbm
+msgid "Carton cubic meters, automatically calculated from dimensions."
+msgstr "纸箱立方米数，根据长宽高自动计算。"
+
+#. module: product_packing
+#: model:ir.model.fields,field_description:product_packing.field_product_template__carton_dimension_spec
+msgid "Carton Dimensions"
+msgstr "纸箱规格"
+
+#. module: product_packing
+#: model:ir.model.fields,help:product_packing.field_product_template__carton_dimension_spec
+msgid "Human-readable carton dimensions, e.g. 50 x 40 x 30 cm."
+msgstr "便于阅读的纸箱尺寸文本，例如 50 x 40 x 30 cm。"
+
+#. module: product_packing
+#: code:addons/product_packing/models/product_template.py:0
+msgid "Units per carton cannot be negative (%(qty)s)."
+msgstr "装箱数不能为负数（当前值：%(qty)s）。"
+
+#. module: product_packing
+#: code:addons/product_packing/models/product_template.py:0
+msgid "Carton dimensions cannot be negative (length=%(length)s, width=%(width)s, height=%(height)s)."
+msgstr "纸箱尺寸不能为负数（长=%(length)s、宽=%(width)s、高=%(height)s）。"
+
+#. module: product_packing
+#: code:addons/product_packing/models/product_template.py:0
+msgid "Carton weights cannot be negative (gross=%(gross)s, net=%(net)s)."
+msgstr "纸箱重量不能为负数（毛重=%(gross)s、净重=%(net)s）。"
+
+#. module: product_packing
+#: code:addons/product_packing/models/product_template.py:0
+msgid "Net weight (%(net)s kg) cannot exceed gross weight (%(gross)s kg)."
+msgstr "净重（%(net)s 千克）不能超过毛重（%(gross)s 千克）。"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "Carton & Packing"
+msgstr "纸箱与包装"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "Dimensions"
+msgstr "尺寸"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "L"
+msgstr "长"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "W"
+msgstr "宽"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "H"
+msgstr "高"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "kg"
+msgstr "千克"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
+msgid "m³"
+msgstr "立方米"
+
+#. module: product_packing
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_list_inherit_carton
+msgid "Carton"
+msgstr "纸箱"

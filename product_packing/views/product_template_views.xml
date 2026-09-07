@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 产品表单视图：在 Inventory 页的 Logistics 组之后新增           -->
+    <!-- "Carton & Packing" 组，与原生库存信息融为一体                  -->
+    <!-- ============================================================ -->
+    <record id="product_template_form_inherit_carton" model="ir.ui.view">
+        <field name="name">product.template.form.inherit.carton</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//page[@name='inventory']/group[@name='inventory']/group[@name='group_lots_and_weight']" position="after">
+                <group string="Carton &amp; Packing" name="group_carton_packing" invisible="type != 'consu'">
+                    <field name="carton_qty_per_carton"/>
+                    <field name="carton_dimension_unit"/>
+
+                    <label for="carton_length" string="Dimensions"/>
+                    <div class="o_row" name="carton_dimensions">
+                        <field name="carton_length" placeholder="L" class="oe_inline" style="max-width: 6rem;"/>
+                        <span class="oe_inline">x</span>
+                        <field name="carton_width" placeholder="W" class="oe_inline" style="max-width: 6rem;"/>
+                        <span class="oe_inline">x</span>
+                        <field name="carton_height" placeholder="H" class="oe_inline" style="max-width: 6rem;"/>
+                        <field name="carton_dimension_spec" class="oe_inline oe_read_only" nolabel="1"/>
+                    </div>
+
+                    <label for="carton_gross_weight" string="Gross Weight"/>
+                    <div class="o_row" name="carton_gross_weight">
+                        <field name="carton_gross_weight" class="oe_inline" style="max-width: 7rem;"/>
+                        <span>kg</span>
+                    </div>
+
+                    <label for="carton_net_weight" string="Net Weight"/>
+                    <div class="o_row" name="carton_net_weight">
+                        <field name="carton_net_weight" class="oe_inline" style="max-width: 7rem;"/>
+                        <span>kg</span>
+                    </div>
+
+                    <label for="carton_cbm" string="CBM"/>
+                    <div class="o_row" name="carton_cbm">
+                        <field name="carton_cbm" class="oe_inline" readonly="1" style="max-width: 7rem;"/>
+                        <span>m³</span>
+                    </div>
+                </group>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- 产品列表视图：增加纸箱规格与 CBM 可选列                        -->
+    <!-- ============================================================ -->
+    <record id="product_template_list_inherit_carton" model="ir.ui.view">
+        <field name="name">product.template.list.inherit.carton</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_tree_view"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//field[@name='standard_price']" position="after">
+                <field name="carton_dimension_spec" string="Carton" optional="hide"/>
+                <field name="carton_cbm" optional="hide"/>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>
