@@ -166,56 +166,64 @@ odoo -d <db> -u product_reference --stop-after-init
 
 ## 验证清单
 
-> 目标环境已验证通过（2026-09-07，落地版本 `19.0.2.2.0`；`19.0.2.0.0` 完成 `product_model` → `product_reference` 改名与数据迁移，T-007；`19.0.2.2.0` 完成参考号页顶部原生 `Reference` 统一编辑，T-008）。
+> 目标环境已验证通过（2026-09-08，落地版本 `19.0.2.5.0`，T-011；
+> `19.0.2.0.0` 完成 `product_model` → `product_reference` 改名与数据迁移，T-007；
+> `19.0.2.2.0` 完成参考号页顶部原生 `Reference` 统一编辑，T-008）。
+> 完整验收记录见 `CHANGELOG.md` →「验收记录（T-011）」/「交付记录（T-011）」。
+
+| 验证项 | 期望 | 结果 |
+|--------|------|------|
+| 升级 | `odoo -d <db> -u product_reference --stop-after-init` 不报错（升级后强刷浏览器） | 通过 |
+| 产品模板表单 | 产品名下方出现 `Ref.` 标签 + Reference 输入框，可编辑并保存；常规信息页不再重复出现 Reference | 通过 |
+| 变体主表单 / 变体独立编辑表单 | 同样出现编辑器；常规信息 / Codes 组不再重复出现 Reference | 通过 |
+| 输入框内「+」管理弹窗 | 新增 / 改值 / 改类型 / 停用 / 删除 / 上移下移均正常，关闭后徽标数量正确 | 通过 |
+| 标签 `Ref.` | 中英界面输入框前都显示 `Ref.`（不随语言变化） | 通过 |
+| 新建未保存产品 | 先加参考号再保存产品，保存后参考号落库且索引已同步 | 通过 |
+| 徽标 tooltip | 悬停「+N」徽标显示参考号清单（中英双语各验一遍） | 通过 |
+| 只读态 | 只显示 Reference 文本与徽标 tooltip，无输入框与「+」 | 通过 |
+| 多变体不共用 | 多变体产品的产品表单整块隐藏；变体 A 加的参考号不出现在变体 B | 通过 |
+| 变体新增行 | 变体表单新增参考号行不报「不能同时归属产品与变体」 | 通过 |
+| 变体搜索 | 订单行选产品输入变体参考号 / 产品共享参考号都能命中；变体列表命中时 name 附加提示 | 通过 |
+| 变体参考号在产品列表可搜 | 在变体里加的参考号，Products 搜索框 / 独立「参考号」搜索项 / Many2one 都能命中并附加提示 | 通过 |
+| 删除变体 / 产品 | 对应参考号行级联清理，索引按剩余行重算 | 通过 |
+| 回归 | 按参考号搜索与命中提示、同产品（变体）去重、删除产品级联清理均正常 | 通过 |
+| 中英双语 | 英文界面 `Ref.` / `Reference` 系列文案，中文界面「参考号」系列文案 | 通过 |
+| 索引与约束 | `product_template__reference_code_index_index`、`product_product__variant_reference_code_index_index`（trigram）与两条 `UNIQUE` 存在 | 通过 |
+
+### 历史验收项（`19.0.2.2.0` 及更早，页签时代，仅供参考）
 
 | 验证项 | 期望 | 结果 |
 |--------|------|------|
 | 升级后模块名 | 应用列表显示 `产品多参考号`（`product_reference`），无 `product_model` 残留 | 通过 |
 | 历史数据 | 旧型号数据完整出现在产品「参考号」页与 `product_reference_code` 表 | 通过 |
-| 产品表单参考号页（`19.0.2.2.0` 及更早） | 页顶可编辑 Odoo `Reference`；下方可增删改排序其他参考号行 | 通过 |
-| Reference 统一编辑（`19.0.2.2.0` 及更早） | 在「参考号」页修改页顶 `Reference`，「常规信息」页同步变化，反之亦然 | 通过 |
-| 同产品重复参考号 | 阻止并给中文提示，带出具体值与产品名 | 通过 |
+| 产品表单参考号页 | 页顶可编辑 Odoo `Reference`；下方可增删改排序其他参考号行 | 通过 |
+| Reference 统一编辑 | 在「参考号」页修改页顶 `Reference`，「常规信息」页同步变化，反之亦然 | 通过 |
+| 同产品重复参考号 | 阻止并给提示，带出具体值与产品名 | 通过 |
 | 产品列表搜索框输入参考号 | 命中对应产品，`name` 显示「产品名（命中参考号：xxx）」 | 通过 |
 | 销售订单行选产品输入参考号 | 命中对应产品 | 通过 |
 | 删除参考号行 | 不报错，列表 `reference_code_index` 按剩余行重算 | 通过 |
 | 删除产品 | 参考号行随之级联清理 | 通过 |
-| 中英双语 | 英文界面为 `Reference` 系列文案，中文界面为「参考号」系列文案 | 通过 |
-| 索引 | `product_template__reference_code_index_index`（trigram）与 `product_reference_code_reference_code_unique_per_template` 存在 | 通过 |
-
-### `19.0.2.3.0` 待验证清单（T-011）
-
-> 尚未在目标环境验证，升级后按下表逐项验收（详见 `CHANGELOG.md` → `[19.0.2.3.0]` / `[19.0.2.4.0]`）。
-
-| 验证项 | 期望 |
-|--------|------|
-| 升级 | `odoo -d <db> -u product_reference --stop-after-init` 不报错 |
-| 产品模板表单 | 产品名下方出现 `Ref.` 标签 + Reference 输入框，可编辑并保存；常规信息页不再重复出现 |
-| 变体主表单 / 变体独立编辑表单 | 同样出现编辑器；常规信息 / Codes 组不再重复出现 Reference |
-| 输入框内「+」管理弹窗 | 新增 / 改值 / 改类型 / 停用 / 删除 / 上移下移均正常，关闭后徽标数量正确 |
-| 标签 | 中英界面输入框前都显示 `Ref.`（不随语言变化） |
-| 多变体不共用（`19.0.2.4.0`） | 多变体产品的产品表单整块隐藏；变体 A 加的参考号不出现在变体 B |
-| 变体新增行（`19.0.2.4.0`） | 变体表单新增参考号行不报「不能同时归属产品与变体」 |
-| 变体搜索（`19.0.2.4.0`） | 订单行选产品输入变体参考号 / 产品共享参考号都能命中；变体列表命中时 name 附加「（命中参考号：xxx）」 |
-| 变体参考号在产品列表可搜（`19.0.2.5.0`） | 在变体里加的参考号，Products 搜索框 / 独立「参考号」搜索项 / Many2one 都能命中，并附加命中提示 |
-| 新建产品 | 先加参考号再保存产品，保存后参考号落库且 `reference_code_index` 已同步 |
-| 徽标 tooltip | 悬停「+N」徽标显示参考号清单（中英双语各验一遍） |
-| 只读态 | 只显示 Reference 文本与徽标 tooltip，无输入框与「+」 |
-| 多变体模板 | 显示「按变体维护」提示，管理入口可用 |
-| 回归 | 按参考号搜索 / Many2one 命中提示 / 同产品去重 / 删除产品级联清理均正常 |
 
 ### 执行流程
 
 1. 备份数据库
-2. 执行上面的改名 SQL
+2. 从 `product_model` 升级的库先执行改名 SQL（全新安装跳过，见「从 product_model 升级」）
 3. `odoo -d <db> -u product_reference --stop-after-init`
-4. 刷新浏览器（前端有缓存），按上表逐项验证
+4. 强刷浏览器（前端资源与译文有缓存），按上表逐项验证
 
 ### 异常情况与处理
 
 - 历史产品无参考号：`reference_code_index` 为空，搜索框输入参考号不命中（预期行为）
 - 同产品重复参考号：`@api.constrains` 阻止 + DB `UNIQUE` 兜底
 - 不同产品同参考号：允许，列表 `name` 附加「命中参考号：xxx」区分
-- 索引与参考号行不一致：shell 执行 `env['product.template'].search([])._sync_reference_index()`
+- 索引与参考号行不一致：shell 执行 `env['product.template'].search([])._sync_reference_index()`，
+  变体侧执行 `env['product.product'].search([])._sync_variant_reference_index()`
+- 变体里加的参考号在产品列表搜不到：先按上一条重算变体索引，再确认产品搜索视图的
+  `filter_domain` 含 `product_variant_ids.variant_reference_code_index`（`19.0.2.5.0` 已修）
+- 变体表单新增参考号行报「不能同时归属产品与变体」：子行被填进了 `product_tmpl_id`；
+  正常入口由 `product.product.create/write` 自动剥离，自定义代码直接建子行时需自行置空
+- 标题区编辑器 / 徽标不显示：前端资源未升级或浏览器未强刷（`-u` 后必须强刷）
+- 弹窗里加的参考号保存后不见了：弹窗改动挂在表单 record 上，必须再点一次产品「保存」才入库
 - 升级报「column model_code does not exist」类错误：说明改名 SQL 未生效或迁移未跑到，
   回滚备份后按「从 product_model 升级」重做
 
@@ -229,7 +237,15 @@ odoo -d <db> -u product_reference --stop-after-init
   `static/src/js/product_reference_manage.js` 与 `static/src/xml/product_reference_manage.xml`
 - 视图挂载点：产品模板表单（继承 `product.product_template_form_view`）、
   变体主表单（`product.product_normal_form_view`）、变体独立编辑表单
-  （`product.product_variant_easy_edit_view`）——新增表单入口时需同步挂 widget 并隐藏重复的原生 Reference
+  （`product.product_variant_easy_edit_view`）——新增表单入口时需同步：挂 widget
+  （变体用 `options="{'lines_field': 'variant_reference_code_line_ids'}"`）、
+  声明不可见的参考号 One2many、隐藏该表单里重复的原生 Reference
+- 改参考号归属 / 新增一类主人（如按公司维度）：先改 `product.reference.code` 的
+  `_check_single_owner` 与两条 `UNIQUE`，再补对应主人的冗余索引字段与 `_search_display_name`
+- 标签 `Ref.` 中英一致：不要给 `i18n/zh_CN.po` 里的 `Ref.` 换成中文译文
+- 验收回归点（改完必跑）：多变体场景（产品表单整块隐藏 + 变体各自一份）、
+  搜索覆盖（产品能搜到变体参考号、变体能搜到产品共享参考号）、
+  删除产品 / 变体后参考号行级联清理与索引重算
 
 ---
 

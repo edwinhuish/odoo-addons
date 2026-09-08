@@ -9,9 +9,11 @@
 - 模块名：`产品多参考号`
 - 技术目录：`product_reference`（原名 `product_model`，`19.0.2.0.0` 起改名，含数据迁移脚本）
 - 新建模型：`product.reference.code`（原名 `product.model.code`）
-- 继承模型：`product.template`
+- 继承模型：`product.template`、`product.product`（变体专属参考号）
+- 自定义组件（前端）：字段 widget `product_reference_editor`、额外参考号管理弹窗
+  （顶层 `main_components` overlay）、徽标 tooltip 模板
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.2.4.0`
+- 当前版本：`19.0.2.5.0`
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用
@@ -38,6 +40,7 @@
      （`product.product.create/write` 里强制 `product_tmpl_id=False`），否则双归属报错
    - 去重约束按主人分别成立：`UNIQUE(product_tmpl_id, reference_code)` 与
      `UNIQUE(product_id, reference_code)`
+   - 违反后果：变体之间共用参考号（客户 / 工厂编码串味），且报错信息指不出真正归属
 
 2. **搜索在数据库层实现，禁止 Python 侧全表过滤**
    - 冗余可存储字段（均 `Text` + trigram 索引）：产品级 `reference_code_index`、
@@ -50,14 +53,18 @@
      Products 搜不到」（`19.0.2.5.0` 修的就是这个）
    - 禁止 `search([])` 后在 Python 里过滤参考号
 
-3. **`reference_code_index` 由参考号行自动同步，勿手工编辑**
-   - `product.reference.code` 的 `create` / `write` / `unlink` 调 `_sync_template_index`
-   - 拼接逻辑在 `product.template._sync_reference_index`（删行后要按剩余行重算）
-   - 只在 `reference_code` / `product_tmpl_id` / `active` / `sequence` 变动时同步，避免无谓写入
+3. **冗余搜索索引由参考号行自动同步，勿手工编辑**
+   - `product.reference.code` 的 `create` / `write` / `unlink` 调 `_sync_owners_index`
+   - 拼接逻辑分主人：产品侧 `product.template._sync_reference_index`、
+     变体侧 `product.product._sync_variant_reference_index`（删行后都要按剩余行重算）
+   - 只在 `reference_code` / `product_tmpl_id` / `product_id` / `active` / `sequence`
+     变动时同步，避免无谓写入
 
-4. **同产品内参考号不可重复**
-   - `@api.constrains('reference_code', 'product_tmpl_id')` 中文提示带出具体值与产品名
-   - 数据库 `UNIQUE(product_tmpl_id, reference_code)` 兜底（并发 / 批量导入）
+4. **同一主人内参考号不可重复**
+   - `@api.constrains('reference_code', 'product_tmpl_id', 'product_id')`
+     （`_check_reference_code_unique_per_owner`）提示带出具体值与归属
+   - 数据库 `UNIQUE(product_tmpl_id, reference_code)` 与
+     `UNIQUE(product_id, reference_code)` 兜底（并发 / 批量导入）
 
 5. **`_search_display_name` 否定操作符取交集**
    - `reference_code_index` 的否定搜索用 `Domain.AND`，否则会查出所有非该参考号的产品
@@ -91,6 +98,7 @@
      与产品级共享行完全独立；widget 通过 `options.lines_field` / `resModel` 分流，
      不要把变体表单接到 `reference_code_line_ids` 上（那会变成变体之间共用）
    - 原生 Reference 在常规信息页 / Codes 组被隐藏，避免与标题区重复；新增表单入口时必须同步处理
+   - 违反后果：出现「页签 + 标题区」两套参考号 UI，或变体表单改的是共享行（变体之间串数据）
 
 10. **模块 / 模型 / 字段改名必须有迁移与运维步骤**
    - 结构变更一律写 `migrations/<版本>/pre-migration.py`，且脚本必须幂等（可重复执行）
@@ -110,6 +118,42 @@
 4. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` 的 `msgid` / `msgstr` → 提升模块版本 → `-u` 升级 + 刷新页面，在英文与中文两种界面各验一遍。
 5. **代码注释保持中文**：注释不参与翻译（符合仓库约定），不要为 i18n 把注释改成英文。
 6. **术语一致**：英文 `reference` ↔ 中文「参考号」；`.po` 的 `msgid` 与源码源文本逐字一致，否则译文不生效。
+
+---
+
+## 开发复盘与关键经验（T-011）
+
+> T-011（2026-09-08，落地 `19.0.2.5.0`，含 `19.0.2.3.0` 界面改造、`19.0.2.4.0` 多变体归属、
+> `19.0.2.5.0` 变体参考号纳入产品搜索）：移除「参考号」页、Reference 上移到产品名下方、
+> 输入框内「+」管理弹窗、徽标 tooltip、多变体参考号不共用。
+
+### 本模块特有改动点
+
+- **widget 复用原生 `CharField`**：标题区输入框直接渲染 Odoo 原生 `CharField`（改值走
+  `record.update`），不自己实现输入 / dirty / 提交逻辑；「+」靠外层容器带 `o_input`
+  （原生 `.o_input .o_input` 规则让嵌套 input 自动去边框 / 去内边距）做到「内置在输入框」。
+- **隐藏的 One2many 必须双声明**：arch 里 `invisible="1"` 的参考号 One2many 不会进入主记录
+  加载 spec，必须同时在 widget 的 `fieldDependencies` 声明，否则徽标数量恒为 0
+  （与 `product_image` 图库同一坑）。
+- **弹窗挂 `main_components`**：管理弹窗注册到顶层 overlay，避免 `record.update` 重渲染表单时
+  弹窗被重建 / 闪烁；弹窗改动只落在 record 上，随产品「保存」提交。
+- **变体子行的 `default_product_tmpl_id`**：变体 action context 会污染子行，必须在
+  `product.product.create/write` 里对 `(0, 0, …)` 命令强制 `product_tmpl_id=False`，
+  否则触发「不能同时归属产品与变体」。
+- **同名术语合并**：JS `_t("Customer Reference")` 等与 selection 标签同 `msgid`，
+  `.po` 里合并为一条多 `#:` 引用；`Product Reference` 与模型名 / 表单标题同理。
+  同一 `msgid` 只能一条，否则整份 po 解析失败。
+- **搜索覆盖要双向**：`product.template` 需并入变体参考号（`any` 子域），
+  `product.product` 需并入产品共享参考号；搜索视图 `filter_domain` 必须同步，
+  否则「变体里加的参考号在 Products 搜不到」。
+
+### 维护提醒
+
+- 前端资源 / 译文改动后 `-u` 升级**并强刷浏览器**（徽标、tooltip、弹窗文案都吃缓存）。
+- 改搜索相关代码后回归三件事：产品能搜到变体参考号、变体能搜到产品共享参考号、命中提示正常。
+- 索引与行不一致时，shell 重建：
+  `env['product.template'].search([])._sync_reference_index()` 与
+  `env['product.product'].search([])._sync_variant_reference_index()`。
 
 ---
 
