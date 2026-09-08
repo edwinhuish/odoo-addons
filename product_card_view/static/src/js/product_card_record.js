@@ -9,6 +9,8 @@ import { getProductCardPayload } from "./product_card_model";
 
 const IMAGE_FIELD = "image_512";
 
+let _setupCount = 0;
+
 /**
  * 单张产品卡片：顶部主图轮播（左右箭头 / 滑动），主体 title / reference /
  * on hand，多变体产品底部按属性分行渲染变体按钮。
@@ -21,6 +23,10 @@ export class ProductCardRecord extends KanbanRecord {
 
     setup() {
         super.setup();
+        _setupCount++;
+        if (_setupCount <= 10) {
+            console.warn("[PCV DEBUG] setup #" + _setupCount);
+        }
         this.cardState = useState({
             selected: {}, // {attribute_id: value_id}
             imgIndex: 0,

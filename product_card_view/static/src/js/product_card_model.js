@@ -28,10 +28,8 @@ export class ProductCardModel extends RelationalModel {
  */
 let _fillCount = 0;
 export async function fillProductCardPayload(records) {
-    if (_fillCount < 3) {
-        _fillCount++;
-        console.warn("[PCV DEBUG] fillProductCardPayload #" + _fillCount, "records=", records?.length);
-    }
+    _fillCount++;
+    console.warn("[PCV DEBUG] fillProductCardPayload #" + _fillCount, "records=", records?.length);
     const templateIds = records
         .map((r) => r.resId ?? r.id)
         .filter((id) => id != null);
@@ -48,6 +46,11 @@ export async function fillProductCardPayload(records) {
 }
 
 /** 卡片组件按 resId 取 payload（非 reactive，不触发 Owl effect）。 */
+let _getCount = 0;
 export function getProductCardPayload(resId) {
+    _getCount++;
+    if (_getCount <= 5 || _getCount % 50 === 0) {
+        console.warn("[PCV DEBUG] getProductCardPayload #" + _getCount, "resId=", resId);
+    }
     return (resId != null && payloadByResId.get(resId)) || null;
 }
