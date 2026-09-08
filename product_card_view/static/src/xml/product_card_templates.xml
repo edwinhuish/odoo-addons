@@ -97,10 +97,7 @@
                                 <t t-foreach="row.values" t-as="value" t-key="value.id">
                                     <button type="button"
                                         class="o_product_card__value btn btn-sm"
-                                        t-attf-class="{{ isValueSelected(row.attr_id, value.id) ? 'active' : '' }}{{ !isValueAllowed(row.attr_id, value.id) ? ' disabled' : '' }}"
-                                        t-on-click.stop="selectValue(row.attr_id, value.id)"
-                                        t-att-disabled="!isValueAllowed(row.attr_id, value.id)"
-                                        t-att-title="value.name">
+                                        t-on-click.stop="selectValue(row.attr_id, value.id)">
                                         <t t-esc="value.name" />
                                     </button>
                                 </t>
