@@ -1,5 +1,41 @@
 # 变更日志
 
+## [19.0.2.6.1] - 2026-09-08
+
+### 变更（修复）
+
+- **修复 19.0.2.6.0 回归（图库图片全部显示占位符）**：上一版把 widget `fieldDependencies` 精简为
+  仅 `write_date`，但表单主记录加载 spec（`getFieldsSpec`，`withInvisible=false`）对 arch 里
+  `invisible="1"` 的 One2many **不生成子字段 spec** → 图库子记录及 `image_1920` 等字段不随主记录
+  读取，产品 / 变体表单的图库图片全部回退占位符（主图不受影响）。
+  - **机制**：arch 的 invisible One2many + 内嵌 `<list>` 只提供 children activeFields 元数据；要让
+    子数据真正随主记录加载，必须靠 widget `fieldDependencies`——`addFieldDependencies` 会把该字段
+    invisible patch 成非常量表达式 `(1) and (False)` → 子字段 spec 生成，渲染仍由 arch invisible
+    保持隐藏。
+  - **修复方式**：`fieldDependencies` 恢复为函数，按 `image_1920` 视图节点 `options.gallery_field`
+    分流图库 One2many（`product.template` → `image_gallery_ids`；`product.product` →
+    `variant_image_gallery_ids`，缺省模板）；产品 / 变体两个视图的 `image_1920` 均在 `options`
+    中补充 `gallery_field` 键（保留原生 options 键 `zoom` / `convert_to_webp` / `preview_image`）。
+
+### 影响
+
+- 产品表单（Products 入口）与变体「独立编辑」表单的图库图片恢复正常加载显示；模板表单行为与
+  19.0.2.5.0 一致，变体多图各项行为不受影响。
+
+### 文档
+
+- 同步 `__manifest__.py`（版本 19.0.2.6.1）、`AGENTS.md`（L1 Odoo 19 机制补充 / T-010 复盘更正与
+  回归小节 / 风险表 row3 更正）、`README.md`（历史说明与执行流程补充）。
+
+### 待验证
+
+- 目标环境 `odoo -d <db> -u product_image --stop-after-init` + 强刷浏览器后验证：
+- 产品表单（Products 入口）已有多张补充图的产品：主图与图库图片全部正常显示（此前为占位符）；
+- 变体「独立编辑」表单图库正常显示与维护；
+- 回归项：模板表单上传 / 删除 / 拖动排序 / 悬浮放大 / 预览、变体图集独立与主图回退行为均正常。
+
+---
+
 ## [19.0.2.6.0] - 2026-09-08
 
 ### 变更（功能）

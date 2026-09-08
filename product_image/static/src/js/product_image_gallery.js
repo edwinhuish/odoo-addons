@@ -940,11 +940,22 @@ export const productImageGalleryField = {
         { label: _t("Preview image"), name: "preview_image", type: "field", availableTypes: ["binary"] },
     ],
     supportedTypes: ["binary"],
-    // 图库 One2many（image_gallery_ids / variant_image_gallery_ids）由产品 / 变体视图 arch 里
-    // 声明的 invisible One2many + 内嵌 <list> 提供子字段 activeFields 并加载记录；
-    // fieldDependencies 无法携带 one2many 的子字段，因此不在此声明图库字段（避免在
-    // product.product 上产生无子字段的冗余依赖），只保留 write_date。
-    fieldDependencies: [{ name: "write_date", type: "datetime" }],
+    // 图库 One2many 必须经 fieldDependencies 声明：视图 arch 里 invisible="1" 的 One2many
+    // 不会进入主记录的加载 spec（getFieldsSpec 只对非 always-invisible 的 x2many 生成子字段
+    // spec），子记录及 image_1920 等字段便不随记录读取 → 图库图片全部显示占位符。
+    // addFieldDependencies 把本字段 invisible patch 为非常量表达式（渲染仍由 arch invisible
+    // 保持隐藏），子字段 spec 才会随主记录一并加载。产品 / 变体视图的 image_1920 节点通过
+    // options.gallery_field 声明各自使用的图库 One2many，dep 据此分流（默认 image_gallery_ids）。
+    fieldDependencies: (fieldNode) => [
+        { name: "write_date", type: "datetime" },
+        {
+            name:
+                fieldNode?.options?.gallery_field === "variant_image_gallery_ids"
+                    ? "variant_image_gallery_ids"
+                    : "image_gallery_ids",
+            type: "one2many",
+        },
+    ],
     isEmpty: () => false,
     extractProps: ({ attrs, options }) => ({
         alt: attrs.alt,

@@ -17,6 +17,9 @@
             <!-- 替换原生头像图片字段的 widget 为多图图库 widget -->
             <xpath expr="//field[@name='image_1920'][hasclass('oe_avatar')]" position="attributes">
                 <attribute name="widget">product_image_gallery</attribute>
+                <!-- gallery_field：告知 widget 本视图使用的图库 One2many（见 JS fieldDependencies），
+                     保留原生 options 键 -->
+                <attribute name="options">{'zoom': True, 'convert_to_webp': True, 'preview_image': 'image_128', 'gallery_field': 'variant_image_gallery_ids'}</attribute>
             </xpath>
 
             <!-- 声明变体图库 One2many（不可见），为 widget 提供字段元数据上下文 -->
