@@ -128,9 +128,27 @@ msgstr "产品"
 #. module: product_image
 #: model:ir.model.fields,help:product_image.field_product_image_gallery__product_tmpl_id
 msgid ""
-"Product template this image belongs to; images are removed together with the "
-"product."
-msgstr "该图片所属的产品模板；删除产品时图片行随之级联清理。"
+"Product template (shared gallery) this image belongs to. Either this field or "
+"'Product Variant' must be set: template images are shared by all the variants "
+"and are removed together with the product."
+msgstr ""
+"该图片所属的产品模板（共享图库）。产品（共享图库）与产品变体（变体图库）两个归属"
+"必须二选一：模板图被该产品的所有变体共享，并随产品删除而级联清理。"
+
+#. module: product_image
+#: model:ir.model.fields,field_description:product_image.field_product_image_gallery__product_id
+msgid "Product Variant"
+msgstr "产品变体"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_image_gallery__product_id
+msgid ""
+"Product variant this image belongs to (variant gallery, independent from the "
+"shared template gallery). Either this field or 'Product' must be set; the "
+"image is removed together with the variant."
+msgstr ""
+"该图片所属的产品变体（变体专属图库，与模板共享图库相互独立）。产品（共享图库）与"
+"产品变体（变体图库）两个归属必须二选一；图片随变体删除而级联清理。"
 
 #. module: product_image
 #: model:ir.model.fields,field_description:product_image.field_product_template__image_gallery_ids
@@ -160,12 +178,44 @@ msgid ""
 msgstr "图库中的补充图片数量（不含产品主图）。"
 
 #. module: product_image
+#: model:ir.model.fields,field_description:product_image.field_product_product__variant_image_gallery_ids
+msgid "Variant Image Gallery"
+msgstr "变体图片图库"
+
+#. module: product_image
+#: model:ir.model.fields,help:product_image.field_product_product__variant_image_gallery_ids
+msgid ""
+"Additional images specific to this product variant, independent from the "
+"shared template gallery. In the variant form the main image (which falls back "
+"to the template main image when the variant has none) comes first and these "
+"images follow in sequence order."
+msgstr ""
+"该产品变体专属的补充图片，与模板共享图库相互独立。变体表单中主图（该变体无专属主"
+"图时回退模板主图）排在最前，其后按排序展示这些图片。"
+
+#. module: product_image
 #. odoo-python
 #: code:addons/product_image/models/product_image.py:0
 msgid ""
-"The image name \"%(name)s\" already exists for product \"%(product)s\". Image "
-"names must be unique within the same product."
-msgstr "图片名称“%(name)s”在产品“%(product)s”中已存在，同一产品内图片名称不可重复。"
+"An image must belong either to a product (shared gallery) or to a product "
+"variant (variant gallery)."
+msgstr "图片必须归属产品（共享图库）或产品变体（变体图库）二者之一。"
+
+#. module: product_image
+#. odoo-python
+#: code:addons/product_image/models/product_image.py:0
+msgid ""
+"An image cannot belong to both a product and a product variant: choose either "
+"the shared product gallery or the variant gallery."
+msgstr "图片不能同时归属产品和产品变体：请在共享图库与变体图库之间二选一。"
+
+#. module: product_image
+#. odoo-python
+#: code:addons/product_image/models/product_image.py:0
+msgid ""
+"The image name \"%(name)s\" already exists for \"%(owner)s\". Image names must "
+"be unique within the same product or product variant."
+msgstr "图片名称“%(name)s”在“%(owner)s”中已存在，同一产品或同一产品变体内图片名称不可重复。"
 
 #. module: product_image
 #. odoo-javascript

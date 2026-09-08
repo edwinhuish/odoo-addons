@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 产品变体（product.product）表单视图：变体「独立编辑」表单的    -->
+    <!-- 图片区（sheet 右上角 oe_avatar）由原生单图改为多图 widget    -->
+    <!-- 该表单管理的是「变体专属补充图」（variant_image_gallery_ids）， -->
+    <!-- 与模板表单的共享补充图（image_gallery_ids）完全独立；主图      -->
+    <!-- image_1920 为原生计算字段，无变体主图时自动回退模板主图       -->
+    <!-- ============================================================ -->
+    <record id="product_variant_easy_edit_view_inherit" model="ir.ui.view">
+        <field name="name">product.product.easy.edit.form.inherit.image.gallery</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_variant_easy_edit_view"/>
+        <field name="arch" type="xml">
+
+            <!-- 替换原生头像图片字段的 widget 为多图图库 widget -->
+            <xpath expr="//field[@name='image_1920'][hasclass('oe_avatar')]" position="attributes">
+                <attribute name="widget">product_image_gallery</attribute>
+            </xpath>
+
+            <!-- 声明变体图库 One2many（不可见），为 widget 提供字段元数据上下文 -->
+            <!-- 不声明则新建图库记录时 activeFields/fields 为空，update 报错 -->
+            <xpath expr="//field[@name='image_1920'][hasclass('oe_avatar')]" position="after">
+                <field name="variant_image_gallery_ids" invisible="1">
+                    <!-- 内嵌 list 视图：声明需要参与新建/读取的字段，保证 activeFields 含 image_1920 等 -->
+                    <list editable="bottom">
+                        <field name="sequence" widget="handle"/>
+                        <field name="image_1920" widget="image"
+                               options="{'convert_to_webp': True, 'preview_image': 'image_128', 'zoom': True}"/>
+                        <field name="name"/>
+                        <field name="active"/>
+                        <field name="note"/>
+                    </list>
+                </field>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

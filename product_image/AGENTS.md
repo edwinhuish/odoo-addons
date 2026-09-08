@@ -9,12 +9,12 @@
 - 模块名：`产品图片`（显示名）
 - 技术目录 / 模块技术名：`product_image`（原名 `product_multi_image`，于 19.0.2.0.0 改名）
 - 新建模型：`product.image.gallery`（模型名保持不变，避免与 `website_sale` 的 `product.image` 冲突）
-- 继承模型：`product.template`
-- 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单原生 `image_1920` 字段 widget）
+- 继承模型：`product.template`、`product.product`（19.0.2.6.0 起支持变体多图）
+- 自定义 widget：`product_image_gallery`（registry key 不变，替换产品表单 / 变体「独立编辑」表单原生 `image_1920` 字段 widget）
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义图片管理弹窗：`ProductImageManageDialog`（点击「+」打开：上半部分大图（仅预览、无删除按钮；选中主图时名称行留空）+ 平铺缩略图（每张缩略图含主图右上角 ×——先确认后删除，删图库图删记录，删主图自动提升图库首张；缩略图可拖动排序、主图固定首位；点击缩略图只切弹窗大图；布局：大图列固定尺寸、缩略图占满剩余宽高并超高滚动），下半部分上传 dropzone（点击/拖放/Ctrl+V，上传中缩略图 + 动画，粘贴不自动关闭，上传不改变页面大图）；header「批量删除」勾选模式 + 批量确认（含缩略图清单）；走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `web_image_paste`）
-- 当前版本：`19.0.2.5.0`（T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；此前的 `19.0.2.4.3` 含管理弹窗拖动排序（含主图，首位即主图）/ 删除确认 / 批量删除；`19.0.2.4.1` 调整确认框按钮顺序（取消置右），`19.0.2.4.2` 关闭按钮贴齐最右侧（去掉 `pe-1`），`19.0.2.4.3` 修复缩略图列「+」占位符被 flex 压成 18px（`flex: 0 0 auto` + 56×56 兜底）；`19.0.2.3.1` 修复拖动跟手与 XML `&nbsp;` 实体崩溃，`19.0.2.3.2` 修复拖拽布局（`position-relative !important` 覆盖），`19.0.2.4.0` 修复勾选模式无操作按钮（`<template t-if>` → `<t t-if>`）；`19.0.2.2.10~2.2.15` 布局与弹窗改动已验证）
+- 当前版本：`19.0.2.6.0`（T-010 产品变体多图：`product.image.gallery` 新增 `product_id`，图片归属产品 / 产品变体二选一；`product.product` 新增 `variant_image_gallery_ids` 变体专属补充图；变体「独立编辑」表单（`product_variant_easy_edit_view`）图片区同样启用 `product_image_gallery` widget，各变体图集互相独立、与模板共享补充图互不串扰——改动细节与风险见文末会话修改总结；此前 `19.0.2.5.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；此前的 `19.0.2.4.3` 含管理弹窗拖动排序（含主图，首位即主图）/ 删除确认 / 批量删除；`19.0.2.4.1` 调整确认框按钮顺序（取消置右），`19.0.2.4.2` 关闭按钮贴齐最右侧（去掉 `pe-1`），`19.0.2.4.3` 修复缩略图列「+」占位符被 flex 压成 18px（`flex: 0 0 auto` + 56×56 兜底）；`19.0.2.3.1` 修复拖动跟手与 XML `&nbsp;` 实体崩溃，`19.0.2.3.2` 修复拖拽布局（`position-relative !important` 覆盖），`19.0.2.4.0` 修复勾选模式无操作按钮（`<template t-if>` → `<t t-if>`）；`19.0.2.2.10~2.2.15` 布局与弹窗改动已验证）
 
 ---
 
@@ -27,7 +27,10 @@
    - 同一位置渲染主图 + 右侧缩略图列，不新增「图库」页、不增加导航层级
 
 2. **图片用独立明细模型，禁止塞进产品主图字段做多图**
-   - `product.image.gallery` + `One2many` 挂在 `product.template` 上
+   - `product.image.gallery` + `One2many` 挂在 `product.template` 上（模板共享补充图）
+   - **变体图库独立（19.0.2.6.0 起）**：`product.product` 经 `_inherits` 自动共享模板字段，
+     变体专属补充图必须挂 `product.product.variant_image_gallery_ids`（反查 `product_id`），
+     与模板共享图库 `image_gallery_ids` 数据互不干扰；不能把变体图也写 `product_tmpl_id`
    - 产品主图 `image_1920` 只是首图的同步镜像，不是图库本体
 
 3. **模型名避开 `product.image`，禁止与 `website_sale` 共用模型**
@@ -62,12 +65,14 @@
    - 用模块内置 `ProductImagePreviewDialog` 独立组件实现放大/缩小/旋转
    - 不再提供「复制到剪贴板」功能（已于 19.0.2.0.2 移除）
 
-8. **同一产品内图片名称不可重复**
-   - `@api.constrains("name", "product_tmpl_id")` 中文提示带出具体值与产品名
-   - 名称非必填，但若填了则同产品内唯一
+8. **同一归属内图片名称不可重复**
+   - `@api.constrains("name", "product_tmpl_id", "product_id")` 中文提示带出具体值与归属名
+   - 名称非必填，但若填了则「同一产品共享图内」或「同一变体专属图内」各自唯一（跨产品 / 跨变体可同名）
 
-9. **删除产品级联清理图片**
-   - `product_tmpl_id` 的 `ondelete='cascade'`，禁止改成 `set null` 或 `restrict`
+9. **删除父记录级联清理图片**
+   - 模板共享图 `product_tmpl_id` 与变体专属图 `product_id` 的 `ondelete='cascade'`，禁止改成 `set null` 或 `restrict`
+   - 一行图的归属字段二选一（`_check_single_owner`）：填了 `product_id` 不得再填 `product_tmpl_id`；
+     变体图不反查 `product_tmpl_id`，避免污染模板共享图库 `image_gallery_ids`
 
 10. **Odoo 19 API 事实**
     - `image.mixin` 提供 `image_1920` + related 的 1024/512/256/128，继承即得
@@ -75,6 +80,14 @@
     - `_sql_constraints` 已废弃，用 `models.Constraint`（本模块当前未用 DB 约束，名称唯一仅应用层）
     - 自定义 widget 通过 `registry.category("fields").add` 注册，`fieldDependencies` 声明依赖字段
     - QWeb 模板内**不要**调用 `_t(...)`：翻译由构建期从 XML 字面量（`title=` / `aria-label=` / 元素文本）抽取，动态文案请在 JS 侧用 getter 返回 `_t(...)`
+
+11. **变体多图入口行为（19.0.2.6.0 起）**
+    - 变体编辑表单主图沿用原生计算字段 `image_1920`（无变体专属主图时回退模板主图）；上传 / 替换 /
+      删除主图走原生 inverse（`_set_template_field`：多变体写变体专属主图、单活动变体写模板主图），
+      **禁止 patch / 绕过原生逻辑**
+    - widget 依据主记录 `resModel` 分流图库字段（`galleryField`）：`product.template` → `image_gallery_ids`；
+      `product.product` → `variant_image_gallery_ids`
+    - 模板表单图片行为必须保持与 19.0.2.5.0 一致（不回归）
 
 ---
 
@@ -118,9 +131,11 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 模块元数据、依赖、数据文件声明、前端资源登记 |
-| `models/product_image.py` | 图片明细模型：字段、名称去重、级联（与主图解耦，无同步） |
+| `models/product_image.py` | 图片明细模型：字段（`product_tmpl_id` / `product_id` 归属二选一）、作用域化名称去重、两级级联（与主图解耦，无同步） |
 | `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口） |
+| `models/product_product.py` | 扩展 `product.product`（变体）：`variant_image_gallery_ids`（变体专属补充图，反查 `product_id`，与模板共享图库独立） |
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
+| `views/product_product_views.xml` | 变体「独立编辑」表单（`product_variant_easy_edit_view`）图片字段 widget 换 `product_image_gallery` + 变体图库不可见 One2many 元数据声明 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
 | `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮局部放大（放大镜跟随鼠标）/ 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（选中切换·滚动·「+」开管理弹窗·选中蓝边框）/ 管理弹窗回调（列表快照 getItems / 删除按 type+key 分派——图库 key 为 `g<id>` 需解析后定位 / 拖动排序 onReorder 按 10 步长写 sequence / 上传写入主图或追加图库且按稳定 key 锚定页面展示不上跳新图） |
 | `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列（无删除按钮）+ 预览弹窗 |
@@ -394,3 +409,77 @@
   - `_writeGalleryOrder` 逐条 `rec.update()`，图片极多时理论上存在瞬时排序抖动（最终顺序正确）；
   - 排序态网格仍可能出现纵向滚动条（内容确实超高时，属预期）。
 - **文档落点**：各版本细节见 [`CHANGELOG.md`](CHANGELOG.md)；坑点详版见上文「开发复盘与关键经验（T-005）」；用户侧验证项见 [`README.md`](README.md) → 验证清单。
+
+---
+
+## 开发复盘与关键经验（T-010，19.0.2.6.0）
+
+> 2026-09-08 完成代码（待目标环境验证）。需求：把产品多图能力扩展到**产品变体**——变体
+> 「独立编辑」表单（`product_variant_easy_edit_view`，模板表单 Variants 入口进入变体列表后
+> 打开）右上角图片区同样用 `product_image_gallery` 多图 widget；**每个变体各自维护一组专属
+> 补充图**；模板表单（Products 入口）行为不变；主图语义跟随原生（选 A，见 L1 约束 11）。
+
+### 为什么变体必须「独立图集」而非复用模板图库
+
+- `product.product` 定义 `_inherits = {'product.template': 'product_tmpl_id'}`，**自动继承模板上
+  的全部字段**：`product.product.image_gallery_ids` 实际指向其模板的共享补充图。若在变体表单
+  直接复用 `image_gallery_ids`，所有变体共享同一组图、无法独立维护——这正是需求要避免的。
+- 因此变体专属补充图挂新反向字段：`product.product.variant_image_gallery_ids`
+  （One2many → `product.image.gallery.product_id`）。两维图行**互斥**：模板共享图填
+  `product_tmpl_id`、`product_id` 留空；变体图只填 `product_id`（**不冗余写 `product_tmpl_id`**，
+  否则模板共享图库 `image_gallery_ids` 会被变体图污染）。
+- 一行图的归属二选一校验在 Python 层（`_check_single_owner`），不做 DB 约束（沿用本模块
+  「名称唯一仅应用层」的既有做法）。`product_tmpl_id` 由必填改为非必填——数据库列本就可空，
+  升级无迁移脚本、既有模板数据行为不变。
+
+### widget 的模型分流（唯一新增抽象）
+
+所有与主记录模型的耦合集中在一处 getter + 三处写回命令：
+
+- `galleryField` getter（按 `props.record.resModel` 分流）：`product.template` → `image_gallery_ids`；
+  `product.product` → `variant_image_gallery_ids`。
+- `galleryList` getter 读 `record.data[this.galleryField]`；上传 / 删除 / 提升主图三处
+  `record.update` 的命令键统一写 `[this.galleryField]`。
+- 主图路径不改：widget 绑定的字段就是原生 `image_1920`，product.product 上是计算字段（回退
+  模板主图），上传 / 替换 / 删除全部经原生 inverse 落库。
+
+**后续若给 widget 增加新的入口模型，只改 `galleryField` 即可**；千万别把 `image_gallery_ids`
+硬编码回这些位置。
+
+### 变体视图声明的必备要素
+
+- 变体表单继承视图必须在图片字段后声明**不可见的 One2many `variant_image_gallery_ids` + 内嵌
+  `<list>`**（与模板表单对 `image_gallery_ids` 的声明方式一致）——否则新建图库记录时
+  activeFields / fields 为空，`record.update` 报错。
+- **`fieldDependencies` 只保留 `write_date`，不再声明 `image_gallery_ids`**：arch 里 invisible
+  One2many + 内嵌 `<list>` 是图库子字段 activeFields 与数据加载的唯一来源（`fieldDependencies`
+  无法携带 one2many 子字段，arch 未声明时只会注入无子字段的空 one2many 依赖）。产品与变体
+  两个视图 arch 各自声明自己的图库 One2many，两场景均正常、互不加载对方数据。
+
+### i18n 注意事项（本轮踩过的同步点）
+
+- 约束 `msgid` 变更（名称唯一文案改为「同一产品 / 同一产品变体内」、归属二选一新增两条）后，
+  `zh_CN.po` 里旧的 `#: code:...product_image.py` 条目必须同步为**新 msgid**，旧条目要删除，
+  否则成为孤儿条目。
+- 新增字段（`product_id`、`variant_image_gallery_ids`）的 field_description / help、视图新增列，
+  全部补 `model:ir.model.fields,...` 引用条目；同名英文词（如 "Product"）不能与其它词合并，各按
+  msgid 独立。
+
+### 待目标环境验证
+
+见 [`CHANGELOG.md`](CHANGELOG.md) `19.0.2.6.0` → 待验证与 `README.md` → 验证清单 / 执行流程。
+
+---
+
+## 会话修改总结与风险提示（2026-09-08，`19.0.2.5.0` → `19.0.2.6.0`）
+
+> 供后续 AI / 开发者**快速查阅与规避已知问题**。逐条含：问题 / 事实 → 涉及文件 → 处理方式 → 风险提示。
+
+| # | 问题 / 事实 | 涉及文件 | 当前处理方式 | 风险提示 |
+|---|-------------|----------|--------------|----------|
+| 1 | `product.product` 经 `_inherits` **自动共享模板图库**，复用 `image_gallery_ids` 无法做到变体独立图集 | `models/product_product.py`（新） | 变体专属图挂新 One2many `variant_image_gallery_ids`（反查 `product_id`），与模板图库独立 | **禁止**把变体图写进 `product_tmpl_id`（会污染模板共享图库）；两维行的归属二选一由 `_check_single_owner` 兜底 |
+| 2 | widget 所有读写原本硬编码 `image_gallery_ids`，直接用于变体表单会操作模板共享图 | `static/src/js/product_image_gallery.js` | 新增 `galleryField` getter（resModel 分流）+ `galleryList` / 三处 `record.update` 命令键改 `[this.galleryField]` | 后续加新入口模型只改 `galleryField`；**不要**把 `image_gallery_ids` 硬编码回 |
+| 3 | 变体视图若不声明图库 One2many 元数据，widget 新建图库记录会因 activeFields 为空报错 | `views/product_product_views.xml`（新） | 图片字段后声明不可见 `variant_image_gallery_ids` + 内嵌 `<list>`（照模板表单写法） | 图库 One2many 的 children activeFields **只来自 arch 声明**；`fieldDependencies` 已精简为仅 `write_date`，勿把 one2many 加回 dep（dep 带不了 children，只在 arch 缺失时注入空依赖） |
+| 4 | `product.tmpl_id` 约束触发字段不含 `product_id` 时，改变体归属的记录不触发名称唯一校验 | `models/product_image.py` | `@api.constrains("name", "product_tmpl_id", "product_id")`；按 `product_id` / `product_tmpl_id` 分支查重 | 新约束必须包含所有归属字段；旧约束方法名 `_check_name_unique_per_template` 已改名，勿引用旧名 |
+| 5 | 变体主图是计算字段（无变体专属主图回退模板主图）；单活动变体时原生 inverse 把主图写**模板** | 不涉及改动（原生行为） | 选 A：完全跟随原生 `image_1920`（`_set_template_field`），无任何 patch | 若用户日后要求「单变体也强制写变体专属主图」，属偏离原生设计，需单独评审后动 `_set_*` 或新增写入口 |
+| 6 | 约束 / help / 字段文案英文变更后 po 不同步会出现孤儿条目与漏译 | `i18n/zh_CN.po` | 旧 msgid 替换为新、新字段条目补齐（见上文 i18n 注意事项） | 改英文源文本 → 同步 po → 升版本 → `-u` 升级 + 双语言验证（模块 i18n 约束 4） |

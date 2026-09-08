@@ -1,5 +1,38 @@
 # 变更日志
 
+## [19.0.2.6.0] - 2026-09-08
+
+### 变更（功能）
+
+- **产品变体多图（T-010）**：产品变体的「独立编辑」表单（`product_variant_easy_edit_view`，从模板表单 Variants 入口进入产品变体列表后打开）右上角图片区由原生单图改为多图 widget `product_image_gallery`——**每个变体各自维护一组专属补充图**（与模板共享补充图完全独立、互不串扰）。
+  - **数据模型**：`product.image.gallery` 新增 `product_id`（→ `product.product`，`ondelete='cascade'`）。一行图现在归属**产品或产品变体二选一**（新增 Python 校验：无归属 / 双重归属都报可读错误）；`product_tmpl_id` 不再必填（模板共享图填它，变体专属图只填 `product_id`）；名称唯一校验作用域化：同一产品内（共享图）或同一产品变体内（专属图）各自唯一。
+  - **`product.product` 新 One2many `variant_image_gallery_ids`**（→ `product_id`）：变体经 `_inherits = {'product.template': 'product_tmpl_id'}` 自动共享模板字段，若把变体补充图也挂 `product_tmpl_id` 会污染模板共享图库 `image_gallery_ids`，故必须走独立反向字段。
+  - **前端 widget 分流**：新增 `galleryField` getter 按主记录模型取图库字段——`product.template` → `image_gallery_ids`（模板表单行为完全不变）；`product.product` → `variant_image_gallery_ids`。上传 / 删除 / 提升主图 / 拖动排序全部沿用同一套 widget 逻辑，只是图库数据源随模型切换。
+  - **主图语义不变（选 A，跟随原生）**：widget 展示的主图始终是变体原生计算字段 `image_1920`（无变体专属主图时自动回退模板主图）；上传 / 替换 / 删除主图沿用 Odoo 原生 inverse（`_set_image_1920` → `_set_template_field`：多变体写变体专属主图，模板只有一个活动变体时写模板主图），**无任何原生 patch / 覆盖**。
+  - **视图**：新增 `views/product_product_views.xml`（继承 easy edit 视图：`image_1920` 字段 widget 换 `product_image_gallery` + 声明变体图库不可见 One2many 元数据）；图库独立列表 / 搜索 / 表单视图补充 `product_id`（产品变体）列，便于独立管理界面检索变体图。
+
+### 影响
+
+- 产品变体表单（Variant Information）图片区现在具备与产品表单一致的多图能力（悬浮放大 / 点击预览 / 「+」图片管理弹窗 / 上传 / 删除与主图自动提升 / 拖动排序 / 批量删除），且只作用于该变体自身；模板共享补充图仍在模板表单（Products 入口）维护。
+- `product.image.gallery.product_tmpl_id` 由必填变为「产品 / 产品变体二选一」（新增可空字段 `product_id`），无迁移脚本——既有模板数据全部落在产品维度、行为不变。
+- 名称唯一性作用域变化：两张同名图可分别挂在**不同产品**或**不同变体**上；挂在**同一归属**（同一产品共享图 / 同一变体专属图）内仍被阻止。
+
+### 文档
+
+- 同步 `__manifest__.py`（版本 19.0.2.6.0、新增 `views/product_product_views.xml` 数据声明）、`README.md`（功能概述 / 核心设计 / 模型字段 / 视图 / 交互 / 验证清单）、`AGENTS.md`（模块定位 / 文件职责 / L1 新增约束 11 / 会话修改总结）、`i18n/zh_CN.po`（新字段与约束消息中英翻译）。
+
+### 待验证
+
+- 目标环境 `odoo -d <db> -u product_image --stop-after-init` + 强刷浏览器后验证（详见 `README.md` → 验证清单 / 执行流程）：
+- 多属性模板在变体编辑表单上传多张补充图 → 只出现在该变体；另一变体与模板共享补充图不受影响；
+- 变体表单主图为空时显示模板主图（回退）；上传 / 替换 / 删除主图落点与 Odoo 官方变体页面一致（多变体写变体、单活动变体写模板）；
+- 变体图集的上传 / 删除（删主图自动提升）/ 拖动排序 / 批量删除 / 悬浮放大 / 全屏预览可用；
+- 模板表单图片区行为与 19.0.2.5.0 一致（不回归）；
+- 名称唯一：同一变体 / 同一产品内重复名被阻止，不同变体同名可共存，错误提示可读；
+- 中文界面新字段 / help / 报错齐全。
+
+---
+
 ## [19.0.2.5.0] - 2026-09-07（验收通过）
 
 ### 变更（功能）

@@ -37,9 +37,11 @@ const placeholder = "/web/static/img/placeholder.png";
  *   粘贴后不自动关闭弹窗）
  * - 浏览切换为纯前端状态，不写库；管理弹窗内的删除/上传才写库
  *
- * 数据来源：
- * - 主图：props.record（product.template）的 image_1920 字段（this.props.name）
- * - 图库：product.template.image_gallery_ids（One2many → product.image.gallery）
+ * 数据来源（按主记录模型分流，见 galleryField）：
+ * - 主图：props.record 的 image_1920 字段（this.props.name）——product.template 为普通字段；
+ *   product.product 为原生计算字段（无变体专属主图时回退模板主图），写入走原生 inverse
+ * - 图库：product.template → image_gallery_ids；product.product → variant_image_gallery_ids
+ *   （均为 One2many → product.image.gallery，两组数据相互独立）
  */
 export class ProductImageGallery extends Component {
     static template = "product_image.ProductImageGallery";
@@ -119,8 +121,21 @@ export class ProductImageGallery extends Component {
     // 图库数据访问
     // ------------------------------------------------------------------
 
+    /**
+     * 图库 One2many 字段名（按主记录模型分流）：
+     * - product.template → image_gallery_ids（模板共享补充图，模板表单维护）
+     * - product.product  → variant_image_gallery_ids（变体专属补充图，在变体编辑表单维护，
+     *   与模板共享补充图完全独立；该字段在变体视图 arch 中以不可见 One2many 声明以提供
+     *   activeFields 元数据，供本 widget 读取与新建图库记录）
+     */
+    get galleryField() {
+        return this.props.record.resModel === "product.product"
+            ? "variant_image_gallery_ids"
+            : "image_gallery_ids";
+    }
+
     get galleryList() {
-        return this.props.record.data.image_gallery_ids;
+        return this.props.record.data[this.galleryField];
     }
 
     /**
@@ -589,7 +604,7 @@ export class ProductImageGallery extends Component {
             : x2ManyCommands.delete(newMainRec.resId);
         await this.props.record.update({
             [this.props.name]: newMainData,
-            image_gallery_ids: [command],
+            [this.galleryField]: [command],
         });
         // 拖动后的新图库顺序：去掉已提升为主图的首位，'main' 处换成新建的原主图记录
         const galleryKeys = [];
@@ -736,7 +751,7 @@ export class ProductImageGallery extends Component {
                     : x2ManyCommands.delete(first.resId);
                 await this.props.record.update({
                     [this.props.name]: imgData,
-                    image_gallery_ids: [command],
+                    [this.galleryField]: [command],
                 });
             } else {
                 // 取不到图数据，降级为清空主图
@@ -840,7 +855,7 @@ export class ProductImageGallery extends Component {
             ? x2ManyCommands.unlink(rec.id) // (3, id) 移除关联
             : x2ManyCommands.delete(rec.resId); // (2, id) 删除已保存记录
         await this.props.record.update({
-            image_gallery_ids: [command],
+            [this.galleryField]: [command],
         });
         this._clampIndex();
         requestAnimationFrame(() => this._updateThumbOverflow());
@@ -925,10 +940,11 @@ export const productImageGalleryField = {
         { label: _t("Preview image"), name: "preview_image", type: "field", availableTypes: ["binary"] },
     ],
     supportedTypes: ["binary"],
-    fieldDependencies: [
-        { name: "write_date", type: "datetime" },
-        { name: "image_gallery_ids", type: "one2many" },
-    ],
+    // 图库 One2many（image_gallery_ids / variant_image_gallery_ids）由产品 / 变体视图 arch 里
+    // 声明的 invisible One2many + 内嵌 <list> 提供子字段 activeFields 并加载记录；
+    // fieldDependencies 无法携带 one2many 的子字段，因此不在此声明图库字段（避免在
+    // product.product 上产生无子字段的冗余依赖），只保留 write_date。
+    fieldDependencies: [{ name: "write_date", type: "datetime" }],
     isEmpty: () => false,
     extractProps: ({ attrs, options }) => ({
         alt: attrs.alt,

@@ -54,34 +54,81 @@ class ProductImageGallery(models.Model):
         string="Product",
         comodel_name="product.template",
         ondelete="cascade",
-        required=True,
         index=True,
-        help="Product template this image belongs to; images are removed together with the product.",
+        help="Product template (shared gallery) this image belongs to. Either this field or "
+             "'Product Variant' must be set: template images are shared by all the variants "
+             "and are removed together with the product.",
+    )
+    product_id = fields.Many2one(
+        string="Product Variant",
+        comodel_name="product.product",
+        ondelete="cascade",
+        index=True,
+        help="Product variant this image belongs to (variant gallery, independent from the "
+             "shared template gallery). Either this field or 'Product' must be set; the "
+             "image is removed together with the variant.",
     )
 
     # ------------------------------------------------------------------
-    # 约束：同一产品内图片名称不可重复（便于识别）
+    # 约束：图片必须归属产品或变体（二选一）；同一归属内图片名称不可重复
     # ------------------------------------------------------------------
 
-    @api.constrains("name", "product_tmpl_id")
-    def _check_name_unique_per_template(self):
-        """Raise a readable error when the image name is duplicated within a product.
+    @api.constrains("product_tmpl_id", "product_id")
+    def _check_single_owner(self):
+        """Each gallery image belongs either to a product or to a product variant.
 
-        The name is optional, but once filled it must be unique inside the same
-        product so images stay identifiable in the gallery.
+        Variant images are stored independently (only ``product_id``) so that the
+        shared template gallery ``product_tmpl_id`` is never polluted; template
+        images only set ``product_tmpl_id``. An image without owner or with both
+        owners is rejected with a readable error.
         """
         for record in self:
-            if not record.name or not record.product_tmpl_id:
+            if not record.product_tmpl_id and not record.product_id:
+                raise ValidationError(_(
+                    "An image must belong either to a product (shared gallery) or to a "
+                    "product variant (variant gallery)."
+                ))
+            if record.product_tmpl_id and record.product_id:
+                raise ValidationError(_(
+                    "An image cannot belong to both a product and a product variant: "
+                    "choose either the shared product gallery or the variant gallery."
+                ))
+
+    @api.constrains("name", "product_tmpl_id", "product_id")
+    def _check_name_unique_per_owner(self):
+        """Raise a readable error when the image name is duplicated within its owner.
+
+        The name is optional, but once filled it must be unique inside the same
+        product (shared gallery) or the same product variant so images stay
+        identifiable in the gallery.
+        """
+        for record in self:
+            if not record.name:
                 continue
-            duplicate = self.sudo().search([
-                ("product_tmpl_id", "=", record.product_tmpl_id.id),
-                ("name", "=", record.name),
-                ("id", "!=", record.id),
-            ], limit=1)
+            if record.product_id:
+                # 变体专属图：在所属变体内去重
+                domain = [
+                    ("product_id", "=", record.product_id.id),
+                    ("name", "=", record.name),
+                    ("id", "!=", record.id),
+                ]
+                owner = record.product_id.display_name
+            elif record.product_tmpl_id:
+                # 模板共享图：在所属产品内去重（原逻辑）
+                domain = [
+                    ("product_tmpl_id", "=", record.product_tmpl_id.id),
+                    ("name", "=", record.name),
+                    ("id", "!=", record.id),
+                ]
+                owner = record.product_tmpl_id.display_name
+            else:
+                # 归属校验由 _check_single_owner 负责，此处避免重复报错
+                continue
+            duplicate = self.sudo().search(domain, limit=1)
             if duplicate:
                 raise ValidationError(_(
-                    'The image name "%(name)s" already exists for product "%(product)s". '
-                    "Image names must be unique within the same product.",
+                    'The image name "%(name)s" already exists for "%(owner)s". '
+                    "Image names must be unique within the same product or product variant.",
                     name=record.name,
-                    product=record.product_tmpl_id.display_name,
+                    owner=owner,
                 ))
