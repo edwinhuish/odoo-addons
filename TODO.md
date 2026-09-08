@@ -30,22 +30,11 @@
 
 ## 进行中
 
-- [ ] T-010 ｜ product_image ｜ P1 ｜ 产品变体多图：图库增加变体维度（变体各自维护独立图集），变体独立编辑表单 `product_variant_easy_edit_view` 右上角图片区以多图 widget 替换原生单图，模板表单图片扩展保持不变
-
-    需求来源：2026-09-08 会话（确保 product_image 扩展同样应用到 Product Variants 的产品图片）。
-    设计约束：
-    - `product.image.gallery` 需加变体维度（Many2one `product.product`），否则 `product.template` 上字段经 `_inherits` 对所有变体共享、无法做到「变体各自独立图集」；
-    - `product.product` 因 `_inherits = {'product.template': 'product_tmpl_id'}`，图库 One2many 定义在 template 上会共享，变体独立图库需在 `product.product` 上新增独立 One2many（新反向 FK），避免与模板共享补充图 `image_gallery_ids` 混淆；
-    - 模板表单（Products 默认入口）图片扩展保持不变；既有 `image_gallery_ids` 语义与模板表单行为不得回归；
-    - 主图在变体上为原生计算字段 `image_1920`（无变体图时回退模板图），写主图/删除/提升沿用原生 inverse 落库逻辑；
-    - 图库名称唯一约束需按「模板级图 / 变体级图」各自作用域生效；
-    - 版本递增与模块 i18n/README/AGENTS/CHANGELOG 同步、交付附「待验证清单」。
-    验收标准：
-    1. 多属性模板的每个变体可各自上传/浏览/删除/重排一组专属补充图，互不串扰；
-    2. `product_variant_easy_edit_view` 图片区用多图 widget，上传、删除主图自动提升、拖动重排等对变体图集生效；
-    3. 模板表单图片区仍走既有模板共享补充图，行为不变；
-    4. 名称唯一约束按变体维度校验正确、错误提示可读；
-    5. 中英文界面文案齐全；模块文档与版本同步。
+> T-010（product_image 产品变体多图）已于 2026-09-08 完成并移除，落地版本 `19.0.2.6.1`
+> （功能 `19.0.2.6.0` + 回归修复 `19.0.2.6.1`）；
+> 完成信息（任务目标 / 实现过程 / 关键代码说明 / 测试结果 / 后续优化建议）见
+> [`product_image/CHANGELOG.md`](product_image/CHANGELOG.md) →「交付记录（T-010）」，
+> 坑点与解法见 [`product_image/AGENTS.md`](product_image/AGENTS.md) →「开发复盘与关键经验（T-010）」。
 
 > T-005（product_image 图片管理弹窗增强）已于 2026-09-06 完成并移除，落地版本 `19.0.2.4.2`；
 > 完成信息（日期 / 落地版本 / 验收记录 / 异常与后续维护）见

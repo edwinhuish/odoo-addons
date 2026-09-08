@@ -1,6 +1,74 @@
 # 变更日志
 
-## [19.0.2.6.1] - 2026-09-08
+## 交付记录（T-010，2026-09-08）
+
+- **完成日期 / 落地版本**：2026-09-08，`19.0.2.6.1`（功能 `19.0.2.6.0` + 回归修复 `19.0.2.6.1`）。
+- **任务目标**：把产品多图能力扩展到**产品变体**——多属性产品的每个变体在「独立编辑」表单
+  （`product_variant_easy_edit_view`）各自维护一组**专属补充图**（变体之间、与模板共享补充图
+  互不串扰）；模板表单（Products 入口）图片区行为不回归；变体主图语义完全跟随 Odoo 原生
+  （无变体专属主图时回退模板主图，写主图落点不变）。
+- **实现过程**（按依赖顺序）：
+  1. 数据层加变体维度：`product.image.gallery` 新增 `product_id`（→ `product.product`，
+     `index=True` + `ondelete='cascade'`）；一行图归属改为「产品（`product_tmpl_id`）/ 产品变体
+     （`product_id`）二选一」，`_check_single_owner` 拒绝无归属与双重归属；`product_tmpl_id`
+     由必填改为非必填（数据库列本就可空，无迁移脚本、既有模板数据行为不变）；
+  2. `product.product` 新增独立 One2many `variant_image_gallery_ids`（反查 `product_id`，
+     `copy=False`）——变体经 `_inherits = {'product.template': 'product_tmpl_id'}` 自动共享模板
+     字段，变体图若写 `product_tmpl_id` 会污染模板共享图库 `image_gallery_ids`，故必须走独立反向字段；
+  3. 名称唯一校验作用域化：`_check_name_unique_per_owner` 按 `product_id` / `product_tmpl_id`
+     分支查重——同一产品内（共享图）或同一变体内（专属图）各自唯一，跨产品 / 跨变体可同名；
+  4. 视图：新增 `views/product_product_views.xml` 继承 easy edit 视图——`image_1920` 字段 widget
+     换 `product_image_gallery`，并在其后声明**不可见** One2many `variant_image_gallery_ids` +
+     内嵌 `<list>`（提供子字段 activeFields 元数据，新建图库记录所需）；
+  5. 前端 widget 模型分流：新增 `galleryField` getter（按主记录 `resModel`），图库读取与上传 /
+     删除 / 排序等 `record.update` 写回命令键全部改 `[this.galleryField]`——模板走
+     `image_gallery_ids`，变体走 `variant_image_gallery_ids`；
+  6. 主图沿用变体原生计算字段 `image_1920`（无变体专属主图自动回退模板主图），上传 / 替换 /
+     删除走原生 inverse（`_set_image_1920` → `_set_template_field`），**无任何原生 patch**；
+  7. i18n 同步新增字段 / 约束消息 / 视图文案（`zh_CN.po` 旧条目换新、孤儿条目清除）；
+  8. 目标环境复测发现并修复 19.0.2.6.0 图库图片占位回归（→ 19.0.2.6.1，见下）。
+- **关键代码说明**：
+  - `models/product_image.py`：`product_id` 字段（`index` + `cascade`）；`_check_single_owner`
+    （归属二选一，双归属 / 无归属均报可读错误）；`_check_name_unique_per_owner` 约束触发字段含
+    `product_id`，按归属分支查重、错误带出具体归属名；
+  - `models/product_product.py`：`variant_image_gallery_ids`（反查 `product_id` 的独立图库，杜绝
+    变体图写入模板共享图）；
+  - `static/src/js/product_image_gallery.js`：`galleryField` getter——`product.template` →
+    `image_gallery_ids`，`product.product` → `variant_image_gallery_ids`（后续新增入口模型只改
+    这一处）；`fieldDependencies` 为函数，按 `image_1920` 视图节点 `options.gallery_field` 分流，
+    使 invisible One2many 的子字段随主记录一并加载（缺省模板字段，机制不可精简）；
+  - `views/product_template_views.xml` / `views/product_product_views.xml`：`image_1920` 节点覆盖
+    `widget` 与 `options`（追加 `gallery_field` 键、保留原生 `zoom` / `convert_to_webp` /
+    `preview_image`），`position="after"` 声明不可见图库 One2many + 内嵌 `<list>`。
+- **测试结果**：
+  - 开发期自检：Python `py_compile`、视图 XML 解析、JS `node --check`、`i18n/zh_CN.po` 重复
+    msgid / 残留中文界面文本检查全部通过；
+  - 目标环境验收（2026-09-08）：按验收标准 1~5 逐项通过——① 多属性模板的每个变体可各自上传 /
+    浏览 / 删除 / 重排一组专属补充图，互不串扰；② 变体「独立编辑」表单图片区为多图 widget，
+    上传 / 删除（删主图自动提升图库首张）/ 拖动排序 / 批量删除 / 悬浮放大 / 全屏预览可用且只
+    作用于该变体；③ 模板表单图片区行为与 19.0.2.5.0 一致（不回归）；④ 名称唯一约束按变体作用域
+    校验正确、跨变体同名可共存、提示可读；⑤ 中英文界面文案齐全。主图回退（无变体专属主图显示
+    模板主图）与写主图落点（多变体写变体专属、单活动变体写模板）与官方一致；
+  - 异常与回归修复：19.0.2.6.0 升级复测发现「产品 / 变体表单图库图片全部显示占位符」——根因是
+    widget `fieldDependencies` 被精简（表单主加载 spec 对 arch 中 `invisible="1"` 的 One2many 不
+    生成子字段 spec，图库子记录的 `image_1920` 等不随主记录读取）；19.0.2.6.1 恢复该机制并改为
+    按视图 `options.gallery_field` 分流后复验通过，产品 / 变体表单图库图片全部正常显示。
+- **后续优化建议**：
+  - 图库图片较多时可在列表 / 看板增加「图库 / 变体图集」缩略预览入口（当前仅在独立管理界面可检索）；
+  - 单活动变体时原生 inverse 会把主图写**模板**（官方行为）；若业务要求「单变体也写变体专属主图」，
+    需单独评审后扩展 `_set_*` 逻辑，勿直接 patch 原生；
+  - `variant_image_gallery_ids` 为 `copy=False`（复制变体不带原图）；如后续需要随变体复制图片，
+    需评估存储成本与复制策略；
+  - 若新增第三种图库入口模型，需同步声明不可见 One2many 元数据并为 `image_1920` 配
+    `options.gallery_field`（见 `AGENTS.md` 风险表 row3）。
+- **异常与后续维护**：invisible x2many 需要子数据时 arch `<list>` 声明与 widget `fieldDependencies`
+  **缺一不可**；前端改动后必须 `-u` 升级 + 强刷浏览器（资源 bundle 与前端术语均有缓存）。
+- **遗留**：无。`product_id` 为新增可空字段、`product_tmpl_id` 非必填化（数据库列本就可空），
+  无需迁移脚本；19.0.2.6.1 为代码 / 视图 / options 改动，无数据结构变更。
+
+---
+
+## [19.0.2.6.1] - 2026-09-08（验收通过）
 
 ### 变更（修复）
 
@@ -27,8 +95,9 @@
 - 同步 `__manifest__.py`（版本 19.0.2.6.1）、`AGENTS.md`（L1 Odoo 19 机制补充 / T-010 复盘更正与
   回归小节 / 风险表 row3 更正）、`README.md`（历史说明与执行流程补充）。
 
-### 待验证
+### 验收记录
 
+✅ 2026-09-08 目标环境复验通过（T-010 交付，落地 `19.0.2.6.1`）：产品表单（Products 入口）主图与图库图片全部正常显示（图库图片占位回归已修复），变体「独立编辑」表单图库正常显示与维护。验收操作点：
 - 目标环境 `odoo -d <db> -u product_image --stop-after-init` + 强刷浏览器后验证：
 - 产品表单（Products 入口）已有多张补充图的产品：主图与图库图片全部正常显示（此前为占位符）；
 - 变体「独立编辑」表单图库正常显示与维护；
@@ -36,7 +105,7 @@
 
 ---
 
-## [19.0.2.6.0] - 2026-09-08
+## [19.0.2.6.0] - 2026-09-08（验收通过）
 
 ### 变更（功能）
 
@@ -57,8 +126,9 @@
 
 - 同步 `__manifest__.py`（版本 19.0.2.6.0、新增 `views/product_product_views.xml` 数据声明）、`README.md`（功能概述 / 核心设计 / 模型字段 / 视图 / 交互 / 验证清单）、`AGENTS.md`（模块定位 / 文件职责 / L1 新增约束 11 / 会话修改总结）、`i18n/zh_CN.po`（新字段与约束消息中英翻译）。
 
-### 待验证
+### 验收记录（T-010）
 
+✅ 2026-09-08 目标环境验收通过（随 `19.0.2.6.1` 一并复验，含图库图片占位回归修复）；逐项结论见文首「交付记录（T-010）」，以下是验收时逐项确认的操作点：
 - 目标环境 `odoo -d <db> -u product_image --stop-after-init` + 强刷浏览器后验证（详见 `README.md` → 验证清单 / 执行流程）：
 - 多属性模板在变体编辑表单上传多张补充图 → 只出现在该变体；另一变体与模板共享补充图不受影响；
 - 变体表单主图为空时显示模板主图（回退）；上传 / 替换 / 删除主图落点与 Odoo 官方变体页面一致（多变体写变体、单活动变体写模板）；
