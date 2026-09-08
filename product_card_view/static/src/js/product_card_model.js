@@ -23,6 +23,7 @@ export class ProductCardModel extends RelationalModel {
             .map((record) => record.resId)
             .filter((id) => id != null);
         const resIdMap = new Map();
+        let payloadKeys = 0;
         if (templateIds.length) {
             const payload = await rpc("/product_card/payload", { template_ids: templateIds });
             for (const resId of templateIds) {
@@ -30,8 +31,14 @@ export class ProductCardModel extends RelationalModel {
                     resIdMap.set(resId, payload[resId]);
                 }
             }
+            payloadKeys = payload ? Object.keys(payload).length : 0;
         }
         payloadByModel.set(this, resIdMap);
+        console.warn(
+            "[PCV DEBUG] load set: this=%o resIdMap.size=%s templateIds.length=%s payloadKeys=%s firstIds=%s firstType=%s",
+            this, resIdMap.size, templateIds.length, payloadKeys,
+            templateIds.slice(0, 3), typeof templateIds[0],
+        );
     }
 
     /**
@@ -51,5 +58,31 @@ export class ProductCardModel extends RelationalModel {
 
 /** 卡片组件按 (model, resId) 取 payload（非 reactive，不触发 Owl effect）。 */
 export function getProductCardPayload(model, resId) {
-    return (resId != null && payloadByModel.get(model)?.get(resId)) || null;
+    if (resId == null) {
+        return null;
+    }
+    const outer = payloadByModel.get(model);
+    if (!outer) {
+        if (!getProductCardPayload._loggedOuter) {
+            getProductCardPayload._loggedOuter = true;
+            console.warn(
+                "[PCV DEBUG] getProductCardPayload: WeakMap OUTER MISS model=%o resId=%s type=%s",
+                model, resId, typeof resId,
+            );
+        }
+        return null;
+    }
+    const result = outer.get(resId);
+    if (!result) {
+        if (!getProductCardPayload._loggedInner) {
+            getProductCardPayload._loggedInner = true;
+            console.warn(
+                "[PCV DEBUG] getProductCardPayload: INNER MISS outer.size=%s outer.has(resId)=%s resId=%s type=%s outerKeysSample=%o",
+                outer.size, outer.has(resId), resId, typeof resId,
+                [...outer.keys()].slice(0, 5),
+            );
+        }
+        return null;
+    }
+    return result;
 }
