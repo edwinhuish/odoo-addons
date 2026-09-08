@@ -1,0 +1,234 @@
+// ==========================================================================
+// Product Card View（瀑布流产品卡片）
+// 说明：仅作用于 arch 上声明 js_class="product_cards" 的 kanban 视图；
+// 通过根容器追加的 o_product_card_view 类限定，不影响官方默认 kanban。
+// ==========================================================================
+
+// ---------------------------------------------------------------------------
+// 瀑布流布局：非分组（默认）时把 kanban 的 flex 换行切换为 CSS 多列，
+// 不同高度的卡片逐列自然堆叠；column-width 保证小屏自适应列数。
+// ---------------------------------------------------------------------------
+.o_product_card_view.o_kanban_ungrouped {
+    display: block;
+    column-count: auto;
+    column-width: 15rem;
+    column-gap: 0.75rem;
+    padding: 0.75rem;
+
+    // 分组后的 kanban 列内记录走原生布局，不命中本规则
+    > .o_kanban_record {
+        width: auto;
+        max-width: none;
+        min-width: 0;
+        margin: 0 0 0.75rem;
+        break-inside: avoid;
+        // 空位占位块在多列布局里没有意义，直接隐藏
+        &.o_kanban_ghost {
+            display: none;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 卡片本体
+// ---------------------------------------------------------------------------
+.o_product_card_view .o_kanban_record.o_product_card {
+    --o-product-card-accent: #017e84;
+    padding: 0;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: box-shadow 0.15s ease-in-out, transform 0.15s ease-in-out;
+    cursor: pointer;
+
+    &:hover {
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+        transform: translateY(-1px);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 顶部图片轮播区
+// ---------------------------------------------------------------------------
+.o_product_card__imgbox {
+    aspect-ratio: 4 / 3;
+    background: #f7f7f9;
+    overflow: hidden;
+    touch-action: pan-y;
+}
+
+.o_product_card__track {
+    height: 100%;
+    transition: transform 0.25s ease;
+    will-change: transform;
+}
+
+.o_product_card__slide {
+    width: 100%;
+    height: 100%;
+}
+
+.o_product_card__img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #fff;
+    // 避免点击图片文本被选中等影响点击打开产品
+    -webkit-user-drag: none;
+}
+
+.o_product_card__arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.85);
+    color: #495057;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    opacity: 0.85;
+    transition: opacity 0.15s ease, color 0.15s ease;
+
+    &:hover {
+        opacity: 1;
+        color: var(--o-product-card-accent);
+    }
+
+    &.o_product_card__arrow_left {
+        left: 0.4rem;
+    }
+
+    &.o_product_card__arrow_right {
+        right: 0.4rem;
+    }
+}
+
+.o_product_card__counter {
+    position: absolute;
+    right: 0.4rem;
+    bottom: 0.4rem;
+    z-index: 2;
+    padding: 0.05rem 0.45rem;
+    border-radius: 0.75rem;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+
+// ---------------------------------------------------------------------------
+// 主体信息
+// ---------------------------------------------------------------------------
+.o_product_card__body {
+    padding: 0.5rem 0.65rem 0.65rem;
+    gap: 0.15rem;
+}
+
+.o_product_card__title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #212529;
+}
+
+.o_product_card__selection {
+    font-size: 0.78rem;
+    color: #6c757d;
+}
+
+.o_product_card__meta {
+    margin-top: 0.25rem;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.o_product_card__reference {
+    font-size: 0.78rem;
+    color: #6c757d;
+    min-width: 0;
+}
+
+.o_product_card__stock {
+    flex-shrink: 0;
+    padding: 0.12rem 0.45rem;
+    border-radius: 0.75rem;
+    background: #e9ecef;
+    color: #495057;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+// ---------------------------------------------------------------------------
+// 变体按钮区（一属性一行，底部通栏）
+// ---------------------------------------------------------------------------
+.o_product_card__variants {
+    padding: 0.5rem 0.65rem;
+    border-top: 1px solid #eef0f2;
+    background: #fbfbfc;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    cursor: default;
+}
+
+.o_product_card__row {
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.o_product_card__attr {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    line-height: 1.75rem;
+    color: #868e96;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    min-width: 2.2rem;
+    max-width: 4.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.o_product_card__values {
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.o_product_card__value {
+    padding: 0 0.55rem;
+    height: 1.7rem;
+    line-height: 1.5rem;
+    border: 1px solid #dee2e6;
+    border-radius: 1rem;
+    background: #fff;
+    color: #343a40;
+    font-size: 0.78rem;
+    font-weight: 400;
+
+    &:hover:not(.disabled):not(:disabled) {
+        border-color: var(--o-product-card-accent);
+        color: var(--o-product-card-accent);
+    }
+
+    &.active {
+        border-color: var(--o-product-card-accent);
+        background: var(--o-product-card-accent);
+        color: #fff;
+    }
+
+    &.disabled,
+    &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        background: #f8f9fa;
+    }
+}
