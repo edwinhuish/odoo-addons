@@ -93,15 +93,6 @@
                             <span class="o_product_card__attr text-nowrap" t-att-title="row.attr_name">
                                 <t t-esc="row.attr_name" />
                             </span>
-                            <div class="o_product_card__values d-flex flex-wrap">
-                                <t t-foreach="row.values" t-as="value" t-key="value.id">
-                                    <button type="button"
-                                        class="o_product_card__value btn btn-sm"
-                                        t-on-click.stop="selectValue(row.attr_id, value.id)">
-                                        <t t-esc="value.name" />
-                                    </button>
-                                </t>
-                            </div>
                         </div>
                     </t>
                 </div>
