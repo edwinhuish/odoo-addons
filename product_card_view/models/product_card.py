@@ -55,11 +55,14 @@ class ProductTemplate(models.Model):
             tpl_id = variant.product_tmpl_id.id
             variants_by_tpl[tpl_id].append(variant)
             attr_map = {}
-            for value in variant.attribute_value_ids:
-                attr_id = value.attribute_id.id
-                attr_map[attr_id] = value.id
+            # Odoo 19: 变体属性经 product.template.attribute.value（PTAV）关联，
+            # PTAV.attribute_id 指向属性，PTAV.product_attribute_value_id 指向属性值。
+            for ptav in variant.product_template_attribute_value_ids:
+                attr_id = ptav.attribute_id.id
+                value_id = ptav.product_attribute_value_id.id
+                attr_map[attr_id] = value_id
                 all_attr_ids.add(attr_id)
-                all_value_ids.add(value.id)
+                all_value_ids.add(value_id)
                 # 由变体映射反推每个模板的 {attr_id: [value_id]}，顺序可控且去重
                 value_list = tpl_attr_values[tpl_id].setdefault(attr_id, [])
                 if value_id not in value_list:

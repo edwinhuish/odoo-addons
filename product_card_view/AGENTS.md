@@ -34,7 +34,9 @@
    - 违反后果：卡片图库语义与 `product_image` 不一致，变体图片混入共享图
 
 4. **变体按钮行必须真实反映可组合变体**
-   - 行值来源于 active 变体的 `attribute_value_ids` 并集；
+   - 行值来源于 active 变体的 `product_template_attribute_value_ids`（PTAV）并集
+     （属性经 `PTAV.attribute_id`、值经 `PTAV.product_attribute_value_id`，不是
+     `product.attribute.value` 直接关联）；
    - 已选其他属性下不存在组合的值必须禁用，避免选中不存在的组合
    - 违反后果：点选后无对应变体，信息无法切换
 

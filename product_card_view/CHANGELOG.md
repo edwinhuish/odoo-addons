@@ -20,6 +20,12 @@
   - `product_card_model.js`：为 `withCache = false` 补注释说明原因。
   - 控制器 `/product_card/payload` 路由 `type="json"` → `type="jsonrpc"`（Odoo 19 起
     `type="json"` 为废弃别名，安装会出 `DeprecationWarning`）。
+  - **修复** `_get_product_card_view_payload`：`product.product` 在 Odoo 19 经
+    `product.template.attribute.value`（PTAV）关联属性与值，原代码误用已不存在的
+    `attribute_value_ids`（且循环内引用未定义的 `value_id`），导致请求 500
+    `AttributeError: 'product.product' object has no attribute 'attribute_value_ids'`。
+    改用 `product_template_attribute_value_ids` + `attribute_id` /
+    `product_attribute_value_id`。
 
 ### 影响
 
