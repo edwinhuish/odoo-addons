@@ -10,7 +10,7 @@ class ProductCardController(http.Controller):
 
     @http.route(
         "/product_card/payload",
-        type="json",
+        type="jsonrpc",
         auth="user",
         methods=["POST"],
         csrf=False,

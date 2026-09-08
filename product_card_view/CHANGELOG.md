@@ -18,6 +18,8 @@
     - 卡片补 `t-on-keydown`：聚焦时左右方向键翻图，提升键盘可访问性。
   - `__init__.py`：调整为 `models` 在前、`controllers` 在后（Odoo 惯例，无依赖影响）。
   - `product_card_model.js`：为 `withCache = false` 补注释说明原因。
+  - 控制器 `/product_card/payload` 路由 `type="json"` → `type="jsonrpc"`（Odoo 19 起
+    `type="json"` 为废弃别名，安装会出 `DeprecationWarning`）。
 
 ### 影响
 
