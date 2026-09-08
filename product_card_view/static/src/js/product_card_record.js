@@ -128,29 +128,36 @@ export class ProductCardRecord extends KanbanRecord {
      * 图片序列：
      * - 模板层：模板主图 + 模板共享图库；
      * - 变体层：变体主图（无则原生回退模板主图）+ 变体专属图库（两套互不叠加）。
+     *
+     * 缓存到 this._images，按 (variant || templateId) 作 key：每次渲染返回稳定引用，
+     * 避免 Owl t-foreach 因数组引用变化反复 re-render。
      */
     get images() {
         const data = this.payload;
         if (!data) {
-            return [];
+            return this._emptyImages || (this._emptyImages = []);
         }
         const variant = this.currentVariant;
-        if (variant) {
-            return [
-                { model: "product.product", id: variant.id },
-                ...(data.variant_images[variant.id] || []).map((id) => ({
-                    model: "product.image.gallery",
-                    id,
-                })),
-            ];
+        const key = variant ? `v${variant.id}` : `t${this.templateId}`;
+        if (this._imagesKey !== key) {
+            this._imagesKey = key;
+            this._images = variant
+                ? [
+                      { model: "product.product", id: variant.id },
+                      ...(data.variant_images[variant.id] || []).map((id) => ({
+                          model: "product.image.gallery",
+                          id,
+                      })),
+                  ]
+                : [
+                      { model: "product.template", id: this.templateId },
+                      ...(data.template_images || []).map((id) => ({
+                          model: "product.image.gallery",
+                          id,
+                      })),
+                  ];
         }
-        return [
-            { model: "product.template", id: this.templateId },
-            ...(data.template_images || []).map((id) => ({
-                model: "product.image.gallery",
-                id,
-            })),
-        ];
+        return this._images;
     }
 
     get imageCount() {
