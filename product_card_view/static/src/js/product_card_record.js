@@ -5,13 +5,15 @@ import { imageUrl } from "@web/core/utils/urls";
 import { useState } from "@odoo/owl";
 import { KanbanRecord } from "@web/views/kanban/kanban_record";
 
+import { getProductCardPayload } from "./product_card_model";
+
 const IMAGE_FIELD = "image_512";
 
 /**
  * 单张产品卡片：顶部主图轮播（左右箭头 / 滑动），主体 title / reference /
  * on hand，多变体产品底部按属性分行渲染变体按钮。
  *
- * 数据均来自 model 批量装载并挂到 record.productCardData（见 product_card_model.js），
+ * 数据均来自 model 在 load 后填充的 WeakMap（按 resId 索引，见 product_card_model.js），
  * 切换变体仅改前端 state，不发请求。
  */
 export class ProductCardRecord extends KanbanRecord {
@@ -32,8 +34,8 @@ export class ProductCardRecord extends KanbanRecord {
     // ---------------------------------------------------------------------
 
     get payload() {
-        // model 在 load 后按 resId 挂到 record.productCardData（见 product_card_model.js）
-        return this.props.record.productCardData || null;
+        // model 在 load 后按 resId 填入非 reactive WeakMap（见 product_card_model.js）
+        return getProductCardPayload(this.props.record.model, this.props.record.resId);
     }
 
     get templateId() {

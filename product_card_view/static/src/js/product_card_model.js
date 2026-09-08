@@ -3,21 +3,17 @@
 import { rpc } from "@web/core/network/rpc";
 import { RelationalModel } from "@web/model/relational_model/relational_model";
 
-/**
- * 视图加载（root 就绪）后批量请求一次卡片 payload，按 resId 挂到各 Record
- * 实例的 productCardData；卡片组件从 record.productCardData 读取
- * （变体 / 图库 / 在手等）。
- *
- * 必须重写 load 而非 _loadData：
- * - _loadData 在 root 创建前执行，挂到 result.records 的属性会被 _createRoot
- *   重建 Record 实例时丢弃；
- * - 在 _loadData 里给 reactive model 赋值会触发 reload 循环（keepLast 竞争 +
- *   第二次空响应 + 页面卡死）。
- * ViewController await load，故渲染时 payload 已就绪，无闪烁。
- */
+// 非模块实例级的 payload 缓存：model 实例（WeakMap）→ resId → payload。
+// 故意用普通 Map / WeakMap（非 Owl reactive）：给 reactive model / record 实例加
+// 自定义属性会触发 Owl DataModel 内部 effect（dirty / onUpdate 检测）→ reload 循环
+// → 页面卡死。ViewController await load，渲染时已填充；reload 重建 root 会触发
+// KanbanRenderer 重新渲染，卡片重新查（已填充），无需 record 级 reactivity
+// （变体切换走卡片内 useState）。
+const payloadByModel = new WeakMap();
+
 export class ProductCardModel extends RelationalModel {
-    // 关闭缓存：productCardData 是在 load 后挂到 Record 实例的自定义属性，
-    // 缓存命中的请求不会重新执行该挂载，会导致卡片数据陈旧。
+    // 关闭缓存：payload 在 load 后填充 WeakMap，缓存命中的请求不会重新填充，
+    // 会导致卡片数据陈旧。
     static withCache = false;
 
     async load(params = {}) {
@@ -26,13 +22,16 @@ export class ProductCardModel extends RelationalModel {
         const templateIds = records
             .map((record) => record.resId)
             .filter((id) => id != null);
-        if (!templateIds.length) {
-            return;
+        const resIdMap = new Map();
+        if (templateIds.length) {
+            const payload = await rpc("/product_card/payload", { template_ids: templateIds });
+            for (const resId of templateIds) {
+                if (payload && payload[resId]) {
+                    resIdMap.set(resId, payload[resId]);
+                }
+            }
         }
-        const payload = await rpc("/product_card/payload", { template_ids: templateIds });
-        for (const record of records) {
-            record.productCardData = (payload && payload[record.resId]) || null;
-        }
+        payloadByModel.set(this, resIdMap);
     }
 
     /**
@@ -48,4 +47,9 @@ export class ProductCardModel extends RelationalModel {
         }
         return root.records || [];
     }
+}
+
+/** 卡片组件按 (model, resId) 取 payload（非 reactive，不触发 Owl effect）。 */
+export function getProductCardPayload(model, resId) {
+    return (resId != null && payloadByModel.get(model)?.get(resId)) || null;
 }

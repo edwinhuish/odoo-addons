@@ -30,16 +30,18 @@
     `_t`：OWL 模板编译上下文无全局 `_t`，运行时报
     `TypeError: ctx._t is not a function`。改为组件 getter `referenceLabel` /
     `onHandLabel` 返回 `_t(...)`，po 入口（`code:addons/.../product_card_record.js:0`）不变。
-  - **修复** 卡片空白 + 加载卡死（核心 bug，两版迭代）：
+  - **修复** 卡片空白 + 加载卡死（核心 bug，三版迭代）：
     ① 第一版在 `_loadData` 里把 payload 挂到 `super._loadData` 返回的 `result.records`
        原始对象上，但 `_createRoot` 随后用它们重建 Record 实例时丢弃自定义属性，
-       导致 KanbanRecord 的 `record.productCardData` 始终为 null，卡片只显示空骨架
-       + 底部「—」；
+       导致卡片空白（空骨架 + 底部「—」）；
     ② 第二版改把 payload 存到 reactive model 实例 `productCardPayload`，触发了
        reload 循环（keepLast 竞争 + 第二次空响应 + 页面一直加载中）；
-    ③ 最终改为重写 `load`：`super.load` 后 root 已就绪，按 resId 挂到
-       `record.productCardData`，ViewController await load 故渲染时已就绪，且不在
-       `_loadData` 里给 reactive model 赋值，无循环。
+    ③ 第三版重写 `load`，按 resId 挂到 reactive `record.productCardData`，给 reactive
+       Record 实例加属性触发 Owl DataModel 内部 effect（dirty/onUpdate）→ 前端卡死；
+    ④ 最终改用 module-level **非 reactive WeakMap**（key=model 实例 → resId → payload），
+       `load` 中填充，卡片通过 `getProductCardPayload(record.model, record.resId)` 取。
+       完全避开给 reactive 对象加属性，无循环；ViewController await load 故渲染时已填充，
+       reload 重建 root 触发重新渲染，无需 record 级 reactivity（变体切换走卡片内 useState）。
     同时修正 `templateId` 用 `record.resId`（原用 `record.id` 是 datapoint 内部编号，
     会导致图片 URL 404）。
 

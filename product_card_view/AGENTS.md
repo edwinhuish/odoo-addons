@@ -46,12 +46,14 @@
    - 违反后果：卡片信息口径混乱
 
 6. **每页只发一次数据请求**
-   - Model 重写 `load`（`super.load` 后），批量请求 `/product_card/payload`，按 resId 挂到
-     `record.productCardData`；卡片从 `record.productCardData` 取
-   - 必须重写 `load` 而非 `_loadData`：`_loadData` 在 root 创建前执行，挂到 `result.records`
-     的属性会被 `_createRoot` 重建 Record 时丢弃；且在 `_loadData` 里给 reactive model
-     赋值会触发 reload 循环（keepLast 竞争 + 第二次空响应 + 页面卡死）
-   - 违反后果：页面卡顿，后端压力大；payload 关联错误会导致卡片空白
+   - Model 重写 `load`（`super.load` 后），批量请求 `/product_card/payload`，按 resId 填入
+     **非 reactive 的 module-level WeakMap**（key=model 实例 → resId → payload）；卡片通过
+     `getProductCardPayload(record.model, record.resId)` 取
+   - 必须用非 reactive 存储（普通 Map/WeakMap）：
+     ① 挂到 `result.records` 会被 `_createRoot` 重建 Record 时丢弃；
+     ② 给 reactive model 实例赋值会触发 reload 循环（keepLast 竞争 + 空响应 + 卡死）；
+     ③ 给 reactive Record 实例加属性会触发 Owl DataModel 内部 effect（dirty/onUpdate）→ 循环卡死
+   - 违反后果：页面卡顿，后端压力大；payload 关联错误会导致卡片空白或前端卡死
 
 7. **所有用户可见文本源语言为英文（`en_US`）**
    - Python / XML / JS / QWeb 不写中文界面文案；中文只在 `i18n/zh_CN.po` 的 `msgstr`
@@ -79,7 +81,7 @@
 | `controllers/product_card_controller.py` | `/product_card/payload` JSON 接口 |
 | `views/product_card_views.xml` | kanban 视图（`js_class="product_cards"`）+ 独立动作 + 库存菜单 |
 | `static/src/js/product_card_view.js` | 注册 `views.product_cards`（kanbanView 派生） |
-| `static/src/js/product_card_model.js` | RelationalModel 子类，`load` 后批量请求 payload 挂到各 `record.productCardData`（按 resId 关联） |
+| `static/src/js/product_card_model.js` | RelationalModel 子类，`load` 后批量请求 payload 填入非 reactive WeakMap（按 resId 索引，导出 `getProductCardPayload`） |
 | `static/src/js/product_card_renderer.js` | KanbanRenderer 子类，替换记录卡片组件并加根类 |
 | `static/src/js/product_card_record.js` | 卡片组件：轮播 / 变体选择 / 信息同步 / 打开产品 |
 | `static/src/xml/product_card_templates.xml` | 渲染器 primary 继承模板 + 卡片 QWeb |
