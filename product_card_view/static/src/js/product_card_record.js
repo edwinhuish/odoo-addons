@@ -40,13 +40,17 @@ export class ProductCardRecord extends KanbanRecord {
     // ---------------------------------------------------------------------
 
     get payload() {
-        // model 在 load 后按 resId 填入全局非 reactive Map（见 product_card_model.js）
-        return getProductCardPayload(this.props.record.resId);
+        // 用 KanbanRecord 父类已格式化的 dataState.record.id.value（resId），
+        // 不直接访问 this.props.record（DataPoint）——KanbanRecord 的 useRecordObserver
+        // effect 监听 props.record 并写 dataState.record（触发 re-render），若 getter
+        // 再访问 props.record 会与该 effect 冲突 → render 循环卡死。
+        const resId = this.dataState?.record?.id?.value;
+        return getProductCardPayload(resId);
     }
 
     get templateId() {
-        // 用数据库 resId 拼 image URL（record.id 是 datapoint 内部编号，非数据库 id）
-        return this.props.record.resId;
+        // 同 payload：用 KanbanRecord 已格式化的 resId，避开 DataPoint 访问冲突
+        return this.dataState?.record?.id?.value;
     }
 
     get title() {
