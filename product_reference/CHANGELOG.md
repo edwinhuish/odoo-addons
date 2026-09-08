@@ -1,5 +1,38 @@
 # 变更日志
 
+## [19.0.2.5.0] - 2026-09-08（待验证）
+
+### 变更（产品列表可按变体参考号搜索）
+
+- **产品级搜索并入变体参考号**：`product.template._search_display_name` 在
+  `reference_code_index` 之外并入 `product_variant_ids.variant_reference_code_index`
+  （`any` 条件），产品列表 / Many2one 下拉 / 快速搜索输入任一变体的参考号都能找到该产品。
+- **搜索视图同步**：顶部搜索框与独立「参考号」搜索项的 `filter_domain` 均加入变体参考号路径
+  `('product_variant_ids.variant_reference_code_index', 'ilike', self)`。
+- **命中提示覆盖变体参考号**：`_extract_reference_code_search_terms` 支持
+  `('product_variant_ids', 'any', [...])` 子域与 `Domain` 对象递归；`web_search_read`
+  命中判断同时比对产品拼串与其变体拼串（新增 `_variant_reference_indexes_by_template()`
+  一次取回，避免逐记录查询）。
+- 变体参考号仍**不**写回 `reference_code_index`（多变体产品参考号不共用），只是在搜索时纳入。
+
+### 影响
+
+- 在变体里新增的参考号，现在能在 Products 列表 / 选产品时按该参考号命中，
+  命中时 `name` 同样附加「（命中参考号：xxx）」。
+- 变体级搜索不变（本变体参考号 + 所属产品的共享参考号）。
+- 仅需 `-u` 升级（无数据结构变更），升级后强刷浏览器。
+
+### 待验证清单（目标环境）
+
+1. `odoo -d <db> -u product_reference --stop-after-init` 升级不报错
+2. 在多变体产品的某个变体里加 `ABC-123` → Products 搜索框输入 `ABC-123` 能搜到该产品
+3. 搜索结果 `name` 附加「（命中参考号：ABC-123）」（中英各验一遍）
+4. 独立「参考号」搜索项同样能命中变体参考号
+5. 选产品（Many2one 指向 `product.template`）输入变体参考号能命中
+6. 回归：产品共享参考号 / 名称 / barcode 搜索不受影响；否定条件（`not ilike`）不误伤
+
+---
+
 ## [19.0.2.4.0] - 2026-09-08（待验证）
 
 ### 变更（多变体产品的参考号不共用）

@@ -83,7 +83,14 @@ class ProductTemplate(models.Model):
         domain = super()._search_display_name(operator, value)
         if not (isinstance(value, str) and value):
             return domain
-        extra = Domain("reference_code_index", operator, value)
+        # 产品级共享参考号 + 各变体的参考号（多变体产品的参考号不共用，
+        # 但在产品列表 / Many2one 里按任一变体的参考号都应能找到这个产品）
+        extra = Domain.OR([
+            Domain("reference_code_index", operator, value),
+            Domain("product_variant_ids", "any", [
+                ("variant_reference_code_index", operator, value),
+            ]),
+        ])
         if operator in Domain.NEGATIVE_OPERATORS:
             return Domain.AND([domain, extra])
         return Domain.OR([domain, extra])
@@ -98,7 +105,9 @@ class ProductTemplate(models.Model):
                        order=None, count_limit=None):
         """列表视图返回的记录中，若搜索域命中了参考号，则在 name 后附加命中参考号提示。
 
-        仅当请求了 name 字段、且搜索域含 ``reference_code_index`` 条件时才做一次轻量查询。
+        命中来源包括产品级共享参考号（``reference_code_index``）与各变体的参考号
+        （``product_variant_ids.variant_reference_code_index``）。
+        仅当请求了 name 字段、且搜索域含对应条件时才做一次轻量查询。
         """
         result = super().web_search_read(
             domain, specification, offset=offset, limit=limit,
@@ -107,8 +116,11 @@ class ProductTemplate(models.Model):
         if "name" not in (specification or {}):
             return result
 
-        # 提取搜索域中针对 reference_code_index 的字面量
-        search_terms = self._extract_reference_code_search_terms(domain)
+        # 提取搜索域中针对参考号冗余字段的字面量（含变体路径）
+        search_terms = self._extract_reference_code_search_terms(
+            domain,
+            ("reference_code_index", "product_variant_ids.variant_reference_code_index"),
+        )
         if not search_terms:
             return result
 
@@ -116,13 +128,14 @@ class ProductTemplate(models.Model):
         if not record_ids:
             return result
 
-        # 一次查回所有相关产品的参考号拼串，避免逐记录查询
+        # 一次查回所有相关产品的参考号拼串与其变体参考号拼串，避免逐记录查询
         templates = self.sudo().search_fetch(
             [("id", "in", record_ids)], ["reference_code_index"],
         )
+        variant_indexes = self._variant_reference_indexes_by_template(record_ids)
         for tmpl in templates:
-            index = tmpl.reference_code_index or ""
-            hits = [t for t in search_terms if t and t in index]
+            indexes = [tmpl.reference_code_index or "", *variant_indexes.get(tmpl.id, [])]
+            hits = [t for t in search_terms if t and any(t in idx for idx in indexes)]
             if not hits:
                 continue
             for rec in result["records"]:
@@ -137,9 +150,14 @@ class ProductTemplate(models.Model):
     @api.model
     def _extract_reference_code_search_terms(self, domain,
                                              field_names=("reference_code_index",)):
-        """从搜索域中抽取针对参考号冗余字段（默认 ``reference_code_index``）的字面量。
+        """从搜索域中抽取参考号冗余字段（默认 ``reference_code_index``）上的字面量。
 
         ``field_names`` 供变体侧复用（``variant_reference_code_index`` 等）。
+        支持三种写法：
+        - 顶层三元组 ``('reference_code_index', 'ilike', 'ABC')``
+        - 变体路径 ``('product_variant_ids', 'any', [('variant_reference_code_index', ...)])``
+        - ``Domain`` 对象（递归其 ``children``）
+
         仅识别正向 ``ilike`` / ``like`` / ``=`` / ``in`` 中的字符串值，
         否定操作符和复杂表达式不参与提示拼接（仍参与搜索本身）。
         """
@@ -149,19 +167,44 @@ class ProductTemplate(models.Model):
         # 支持 Domain 对象与原生 list 两种形式
         items = domain
         if hasattr(domain, "children"):
-            items = [domain]
+            items = domain.children
         for item in items:
             if isinstance(item, str):
                 # Domain 对象的 logical connector ('&', '|', '!') 等
                 continue
+            if hasattr(item, "children"):
+                terms.extend(self._extract_reference_code_search_terms(item, field_names))
+                continue
             if not (isinstance(item, (list, tuple)) and len(item) == 3):
                 continue
             field_name, op, val = item
-            if field_name not in field_names:
-                continue
-            if op in ("ilike", "like", "=", "in"):
+            if field_name in field_names and op in ("ilike", "like", "=", "in"):
                 if isinstance(val, str):
                     terms.append(val)
                 elif isinstance(val, (list, tuple)):
                     terms.extend(v for v in val if isinstance(v, str))
+            # 变体路径：('product_variant_ids', 'any', [('variant_reference_code_index', ...)])
+            if op == "any" and isinstance(val, (list, tuple)):
+                terms.extend(self._extract_reference_code_search_terms(list(val), field_names))
         return terms
+
+    @api.model
+    def _variant_reference_indexes_by_template(self, tmpl_ids):
+        """返回 ``{产品模板 id: [变体参考号索引, ...]}``，供命中提示判断使用。
+
+        变体参考号不写回产品的 ``reference_code_index``（多变体产品参考号不共用），
+        因此命中提示需要单独把变体拼串取回来比对。
+        """
+        indexes = {}
+        if not tmpl_ids:
+            return indexes
+        variants = self.env["product.product"].sudo().search_fetch(
+            [("product_tmpl_id", "in", list(tmpl_ids))],
+            ["variant_reference_code_index", "product_tmpl_id"],
+        )
+        for variant in variants:
+            if variant.variant_reference_code_index:
+                indexes.setdefault(variant.product_tmpl_id.id, []).append(
+                    variant.variant_reference_code_index
+                )
+        return indexes

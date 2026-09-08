@@ -89,22 +89,30 @@
         <field name="inherit_id" ref="product.product_template_search_view"/>
         <field name="arch" type="xml">
 
-            <!-- 顶部搜索框：在原生 default_code/变体/barcode 之外并入 reference_code_index -->
+            <!-- 顶部搜索框：在原生 default_code/变体/barcode 之外并入参考号。
+                 变体参考号不写回 reference_code_index（多变体不共用），
+                 因此额外并入 product_variant_ids.variant_reference_code_index，
+                 保证在变体里加的参考号也能在产品列表搜到 -->
             <xpath expr="//field[@name='name']" position="attributes">
                 <attribute name="filter_domain">[
-                    '|', '|', '|', '|',
+                    '|', '|', '|', '|', '|',
                     ('default_code', 'ilike', self),
                     ('product_variant_ids.default_code', 'ilike', self),
                     ('name', 'ilike', self),
                     ('barcode', 'ilike', self),
-                    ('reference_code_index', 'ilike', self)
+                    ('reference_code_index', 'ilike', self),
+                    ('product_variant_ids.variant_reference_code_index', 'ilike', self)
                 ]</attribute>
             </xpath>
 
-            <!-- 独立的「参考号」搜索项，便于精确过滤 -->
+            <!-- 独立的「参考号」搜索项，便于精确过滤（同样含变体参考号） -->
             <xpath expr="//field[@name='name']" position="after">
                 <field name="reference_code_index" string="Reference"
-                       filter_domain="[('reference_code_index', 'ilike', self)]"/>
+                       filter_domain="[
+                           '|',
+                           ('reference_code_index', 'ilike', self),
+                           ('product_variant_ids.variant_reference_code_index', 'ilike', self)
+                       ]"/>
             </xpath>
 
         </field>

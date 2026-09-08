@@ -40,8 +40,14 @@
      `UNIQUE(product_id, reference_code)`
 
 2. **搜索在数据库层实现，禁止 Python 侧全表过滤**
-   - 冗余可存储字段 `reference_code_index`（`Text` + trigram 索引）拼接所有参考号
-   - `_search_display_name` 扩展让该字段参与 Many2one 下拉 / 搜索建议 / 快速搜索
+   - 冗余可存储字段（均 `Text` + trigram 索引）：产品级 `reference_code_index`、
+     变体级 `product.product.variant_reference_code_index`
+   - `_search_display_name` 扩展让这些字段参与 Many2one 下拉 / 搜索建议 / 快速搜索：
+     - `product.template`：共享参考号 **+** 各变体参考号
+       （`('product_variant_ids', 'any', [('variant_reference_code_index', ...)])`）
+     - `product.product`：本变体参考号 **+** 所属产品的共享参考号
+   - 搜索视图的 `filter_domain` 必须同步并入变体参考号，否则「变体里加的参考号在
+     Products 搜不到」（`19.0.2.5.0` 修的就是这个）
    - 禁止 `search([])` 后在 Python 里过滤参考号
 
 3. **`reference_code_index` 由参考号行自动同步，勿手工编辑**
@@ -161,6 +167,9 @@ env['product.product'].search([])._sync_variant_reference_index()
 - 搜索不命中参考号时，检查 `reference_code_index` 是否已同步（用产品名下方「+」弹窗改一条参考号并保存产品后看列表列）
 - 标题区编辑器 / 徽标不出现：检查模块前端资源是否已升级并强刷浏览器；`product_reference_editor` widget 是否挂到了 `default_code` 节点
 - 徽标数量一直为 0：多半是 One2many 没随主记录加载（`fieldDependencies` 或 arch 里不可见的 `reference_code_line_ids` 声明缺失）
+- 在变体里加的参考号在 Products 搜不到：检查该变体的 `variant_reference_code_index` 是否已同步
+  （shell 执行 `env['product.product'].search([])._sync_variant_reference_index()`），
+  以及产品搜索视图的 `filter_domain` 是否含 `product_variant_ids.variant_reference_code_index`
 - Many2one 下拉不命中时，确认目标字段指向 `product.template` 而非 `product.product`
 - 同产品重复参考号报错时，检查是否已有历史数据违反 `UNIQUE`，可在 DB 层先清理
 - 列表 `name` 未附加命中提示时，检查搜索域是否含 `reference_code_index` 条件、`specification` 是否请求了 `name`

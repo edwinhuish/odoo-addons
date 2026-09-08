@@ -1,6 +1,6 @@
 {
     "name": "Product References",
-    "version": "19.0.2.4.0",
+    "version": "19.0.2.5.0",
     "summary": "Attach several references to one product and find the product from any of its references; the standard Odoo Reference is edited right under the product name and the extra references are managed from the + button inside it (a product with several variants keeps one set of references per variant)",
     "description": """
         Product reference management module for foreign trade SOHO scenarios.
@@ -27,8 +27,11 @@
           product.template; they are never squeezed into a comma separated Char
         - A reference cannot be repeated inside the same product; different
           products may share the same reference
-        - Search happens in the database: the stored redundant field
-          reference_code_index is backed by a trigram index
+        - Search happens in the database: the stored redundant fields
+          reference_code_index (product references) and
+          variant_reference_code_index (variant references) are backed by trigram
+          indexes; searching a product by the reference of one of its variants
+          also finds the product
         - Many2one dropdowns, search suggestions, quick search and the list
           search box all find a product by any of its references
         - When a reference is hit, the result shows
