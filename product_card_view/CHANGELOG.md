@@ -30,6 +30,14 @@
     `_t`：OWL 模板编译上下文无全局 `_t`，运行时报
     `TypeError: ctx._t is not a function`。改为组件 getter `referenceLabel` /
     `onHandLabel` 返回 `_t(...)`，po 入口（`code:addons/.../product_card_record.js:0`）不变。
+  - **修复** 卡片空白（核心 bug）：原实现把 payload 挂到 `super._loadData` 返回的
+    `result.records` 原始对象上，但 `_createRoot` 随后用它们重建 Record 实例时丢弃
+    自定义属性，导致 KanbanRecord 的 `record.productCardData` 始终为 null，卡片只
+    显示空骨架 + 底部「—」。改为把 payload 存到 model 实例 `productCardPayload`
+    （按 resId 索引），卡片通过 `record.model.productCardPayload[record.resId]` 取。
+    同时修正 `templateId` 用 `record.resId`（原用 `record.id` 是 datapoint 内部编号，
+    会导致图片 URL 404）；分组模式收集 resId 统一用 `resId ?? id`（group.records 是
+    Record 实例，`.id` 非 resId）。
 
 ### 影响
 

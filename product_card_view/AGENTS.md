@@ -46,8 +46,11 @@
    - 违反后果：卡片信息口径混乱
 
 6. **每页只发一次数据请求**
-   - Model 在 `_loadData` 后批量请求 `/product_card/payload` 并挂到 record，禁止每卡片单发请求
-   - 违反后果：页面卡顿，后端压力大
+   - Model 在 `_loadData` 后批量请求 `/product_card/payload`，存到 `model.productCardPayload`
+     （按 resId 索引）；卡片通过 `record.model.productCardPayload[record.resId]` 取
+   - 不能挂到 record 实例：`super._loadData` 返回的 `result.records` 是原始数据对象，
+     `_createRoot` 重建 Record 实例时丢弃自定义属性，会导致卡片空白
+   - 违反后果：页面卡顿，后端压力大；payload 关联错误会导致卡片空白骨架
 
 7. **所有用户可见文本源语言为英文（`en_US`）**
    - Python / XML / JS / QWeb 不写中文界面文案；中文只在 `i18n/zh_CN.po` 的 `msgstr`
@@ -75,7 +78,7 @@
 | `controllers/product_card_controller.py` | `/product_card/payload` JSON 接口 |
 | `views/product_card_views.xml` | kanban 视图（`js_class="product_cards"`）+ 独立动作 + 库存菜单 |
 | `static/src/js/product_card_view.js` | 注册 `views.product_cards`（kanbanView 派生） |
-| `static/src/js/product_card_model.js` | RelationalModel 子类，页面加载后批量装载 payload 到 record |
+| `static/src/js/product_card_model.js` | RelationalModel 子类，页面加载后批量请求 payload 存到 `model.productCardPayload`（按 resId 索引） |
 | `static/src/js/product_card_renderer.js` | KanbanRenderer 子类，替换记录卡片组件并加根类 |
 | `static/src/js/product_card_record.js` | 卡片组件：轮播 / 变体选择 / 信息同步 / 打开产品 |
 | `static/src/xml/product_card_templates.xml` | 渲染器 primary 继承模板 + 卡片 QWeb |

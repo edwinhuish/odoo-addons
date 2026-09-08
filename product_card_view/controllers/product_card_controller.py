@@ -26,15 +26,4 @@ class ProductCardController(http.Controller):
             .sudo()
             .browse([int(tid) for tid in (template_ids or [])])
         )
-        import logging
-        _log = logging.getLogger(__name__)
-        _log.warning(
-            "product_card_view payload: received template_ids count=%s first3=%s",
-            len(template_ids or []), list((template_ids or [])[:3]),
-        )
-        result = templates._get_product_card_view_payload()
-        _log.warning(
-            "product_card_view payload: templates=%s payload_keys=%s",
-            len(templates), len(result or {}),
-        )
-        return result
+        return templates._get_product_card_view_payload()
