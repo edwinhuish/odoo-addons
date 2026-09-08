@@ -14,7 +14,7 @@
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义图片管理弹窗：`ProductImageManageDialog`（点击「+」打开：上半部分大图（仅预览、无删除按钮；选中主图时名称行留空）+ 平铺缩略图（每张缩略图含主图右上角 ×——先确认后删除，删图库图删记录，删主图自动提升图库首张；缩略图可拖动排序、主图固定首位；点击缩略图只切弹窗大图；布局：大图列固定尺寸、缩略图占满剩余宽高并超高滚动），下半部分上传 dropzone（点击/拖放/Ctrl+V，上传中缩略图 + 动画，粘贴不自动关闭，上传不改变页面大图）；header「批量删除」勾选模式 + 批量确认（含缩略图清单）；走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `web_image_paste`）
-- 当前版本：`19.0.2.6.1`（19.0.2.6.1：修复 19.0.2.6.0 回归——产品 / 变体表单图库图片显示占位符，恢复 widget `fieldDependencies` 机制并改为按 `image_1920` options `gallery_field` 分流，详见文末回归小节；`19.0.2.6.0` T-010 产品变体多图：`product.image.gallery` 新增 `product_id`，图片归属产品 / 产品变体二选一；`product.product` 新增 `variant_image_gallery_ids` 变体专属补充图；变体「独立编辑」表单（`product_variant_easy_edit_view`）图片区同样启用 `product_image_gallery` widget，各变体图集互相独立、与模板共享补充图互不串扰——改动细节与风险见文末会话修改总结；此前 `19.0.2.5.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；此前的 `19.0.2.4.3` 含管理弹窗拖动排序（含主图，首位即主图）/ 删除确认 / 批量删除；`19.0.2.4.1` 调整确认框按钮顺序（取消置右），`19.0.2.4.2` 关闭按钮贴齐最右侧（去掉 `pe-1`），`19.0.2.4.3` 修复缩略图列「+」占位符被 flex 压成 18px（`flex: 0 0 auto` + 56×56 兜底）；`19.0.2.3.1` 修复拖动跟手与 XML `&nbsp;` 实体崩溃，`19.0.2.3.2` 修复拖拽布局（`position-relative !important` 覆盖），`19.0.2.4.0` 修复勾选模式无操作按钮（`<template t-if>` → `<t t-if>`）；`19.0.2.2.10~2.2.15` 布局与弹窗改动已验证）
+- 当前版本：`19.0.2.6.2`（19.0.2.6.2：修复变体上传补充图报「双归属」Validation Error——变体编辑 action context 的 `default_product_tmpl_id` 经 default_get 落进图库子行、与 O2M inverse 回填的 `product_id` 冲突；`product.product` 的 create / write 对 `variant_image_gallery_ids` 的 `(0,0)` 子命令强制置空 `product_tmpl_id`，详见文末回归小节；19.0.2.6.1：修复 19.0.2.6.0 回归——产品 / 变体表单图库图片显示占位符，恢复 widget `fieldDependencies` 机制并改为按 `image_1920` options `gallery_field` 分流，详见文末回归小节；`19.0.2.6.0` T-010 产品变体多图：`product.image.gallery` 新增 `product_id`，图片归属产品 / 产品变体二选一；`product.product` 新增 `variant_image_gallery_ids` 变体专属补充图；变体「独立编辑」表单（`product_variant_easy_edit_view`）图片区同样启用 `product_image_gallery` widget，各变体图集互相独立、与模板共享补充图互不串扰——改动细节与风险见文末会话修改总结；此前 `19.0.2.5.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；此前的 `19.0.2.4.3` 含管理弹窗拖动排序（含主图，首位即主图）/ 删除确认 / 批量删除；`19.0.2.4.1` 调整确认框按钮顺序（取消置右），`19.0.2.4.2` 关闭按钮贴齐最右侧（去掉 `pe-1`），`19.0.2.4.3` 修复缩略图列「+」占位符被 flex 压成 18px（`flex: 0 0 auto` + 56×56 兜底）；`19.0.2.3.1` 修复拖动跟手与 XML `&nbsp;` 实体崩溃，`19.0.2.3.2` 修复拖拽布局（`position-relative !important` 覆盖），`19.0.2.4.0` 修复勾选模式无操作按钮（`<template t-if>` → `<t t-if>`）；`19.0.2.2.10~2.2.15` 布局与弹窗改动已验证）
 
 ---
 
@@ -491,11 +491,28 @@
   **缺一不可**；`fieldDependencies` 支持函数并接收 fieldNode（含解析后的 `options`），需要按视图
   属性分流时优先走该扩展点，不要整个删掉。
 
+### 回归修复（19.0.2.6.2，目标环境反馈）
+
+- **现象**：变体「独立编辑」表单上传补充图后保存报 Validation Error——"An image cannot belong to
+  both a product and a product variant: choose either the shared product gallery or the variant
+  gallery."（`_check_single_owner` 双归属约束）。
+- **根因**：从模板表单「变体」入口进入变体列表的官方 act_window，其 context 携带
+  `default_product_tmpl_id`（`product_views.xml` 变体列表 action）。图库子行经 `(0, 0, …)` 命令创建
+  时，子模型 `create` 的 `_prepare_create_values` 会从该 context 默认值把 `product_tmpl_id` 填进图库
+  行；同一行随后又被 One2many inverse 回填 `product_id` → 一张图同时归属模板与变体。模板表单入口
+  无 `default_product_tmpl_id`，故只有变体入口复现。
+- **修复**：`models/product_product.py`——`create` / `write` 入口对 `variant_image_gallery_ids` 的
+  `(0, 0)` 创建命令子行**无条件置 `product_tmpl_id=False`**（变体专属图只挂 `product_id`），从源头
+  杜绝 context 默认注入；模板共享图走 `product.template.image_gallery_ids`，完全不受影响。
+- **教训**：action context 的 `default_*` 会作用于 x2many 子记录创建（default_get）。任何「子行模型
+  有同名字段、且该行语义以 inverse 归属为准」的场景都要在父模型命令层显式钳制，不能依赖前端数据。
+
 ### 验收与后续维护
 
-- 2026-09-08 目标环境验收通过：验收记录 / 异常与回归 / 后续优化建议见
-  [`CHANGELOG.md`](CHANGELOG.md) →「交付记录（T-010，2026-09-08）」及 `19.0.2.6.0 / 19.0.2.6.1`
-  → 验收记录；操作清单见 `README.md` → 验证清单 / 执行流程。
+- 2026-09-08 目标环境验收通过（T-010，`19.0.2.6.1`）；`19.0.2.6.2`（双归属修复）待目标环境复验。
+  验收记录 / 异常与回归 / 后续优化建议见
+  [`CHANGELOG.md`](CHANGELOG.md) →「交付记录（T-010，2026-09-08）」及 `19.0.2.6.0 / 19.0.2.6.1 /
+  19.0.2.6.2` → 验收记录；操作清单见 `README.md` → 验证清单 / 执行流程。
 
 ---
 

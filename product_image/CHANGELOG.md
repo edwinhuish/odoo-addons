@@ -1,5 +1,38 @@
 # 变更日志
 
+## [19.0.2.6.2] - 2026-09-08
+
+### 变更（修复）
+
+- 修复变体「独立编辑」表单上传补充图后保存报 Validation Error——"An image cannot belong to both a
+  product and a product variant: choose either the shared product gallery or the variant gallery."
+  （`_check_single_owner` 双归属约束）。
+- 根因：从模板表单「变体」入口进入变体列表的官方 act_window，其 context 携带
+  `default_product_tmpl_id`（`product_views.xml` 变体列表 action）；图库子行经 `(0, 0, …)` 命令创建时，
+  子模型 `create` 的 default_get 会把该默认值填进 `product_tmpl_id`，同一行又被 One2many inverse
+  回填 `product_id` → 一张图同时归属模板与变体。模板表单入口无该默认，故只有变体入口复现。
+- `models/product_product.py`：`create` / `write` 入口对 `variant_image_gallery_ids` 的 `(0, 0)`
+  创建命令子行**无条件置 `product_tmpl_id=False`**（变体专属图只挂 `product_id`），从源头杜绝
+  action context 默认注入；模板共享图走 `product.template.image_gallery_ids`，不受影响。
+
+### 影响
+
+- 变体表单新增 / 追加补充图可正常保存，不再弹「双归属」报错；变体图仍只属于该变体。
+- 本修复为命令层预防，不改数据结构；历史遗留的双归属脏行（如有）不在本修复清理范围。
+
+### 文档
+
+- `models/product_product.py` 注释、模块 `AGENTS.md`（回归修复小节）、`README.md`。
+
+### 待验证
+
+- 目标环境 `odoo -d <db> -u product_image --stop-after-init` + 强刷浏览器后验证（详见 `README.md`
+  → 验证清单 / 执行流程）：
+- 模板表单 → 顶部「变体」进入变体列表 → 打开某变体 → 上传多张补充图并保存：不再报双归属；
+- 模板共享图上传 / 保存不回归；各变体图集仍相互独立。
+
+---
+
 ## 交付记录（T-010，2026-09-08）
 
 - **完成日期 / 落地版本**：2026-09-08，`19.0.2.6.1`（功能 `19.0.2.6.0` + 回归修复 `19.0.2.6.1`）。

@@ -12,7 +12,8 @@
 原生 inverse（``_set_image_1920`` / ``_set_template_field``），本模块不做任何覆盖。
 """
 
-from odoo import fields, models
+from odoo import api, fields, models
+from odoo.fields import Command
 
 
 class ProductProduct(models.Model):
@@ -28,3 +29,43 @@ class ProductProduct(models.Model):
         "main image when the variant has none) comes first and these images follow in sequence "
         "order.",
     )
+
+    # ------------------------------------------------------------------
+    # 变体图库子记录：创建时必须剥离 context 的 default_product_tmpl_id
+    # ------------------------------------------------------------------
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        """变体图库子记录创建前清除模板默认，避免双归属。
+
+        从模板页进入变体「独立编辑」表单时，其 act_window 的 context 携带
+        ``default_product_tmpl_id``（官方 product 变体列表 action）；图库子记录经
+        ``(0, 0, ...)`` 命令创建时，子模型 create 的 default_get 会把该默认值填进
+        ``product_tmpl_id``，而同一行随后又被 One2many inverse 回填 ``product_id``，
+        触发 ``_check_single_owner`` 的「一张图不能同时归属产品与变体」报错。
+        变体专属图语义上只挂 ``product_id``，故对 create 子行无条件置空模板归属
+        （模板共享图走 product.template 的 ``image_gallery_ids``，不受影响）。
+        """
+        self._strip_variant_gallery_template_default(vals_list)
+        return super().create(vals_list)
+
+    def write(self, vals):
+        """同 create：对 write 携带的 ``(0, 0)`` 图库命令同样剥离模板默认。"""
+        self._strip_variant_gallery_template_default([vals])
+        return super().write(vals)
+
+    def _strip_variant_gallery_template_default(self, vals_list):
+        """把 ``variant_image_gallery_ids`` 的 create 命令子行模板归属强制置空。"""
+        for vals in vals_list:
+            commands = vals.get("variant_image_gallery_ids")
+            if not commands:
+                continue
+            cleaned = []
+            for cmd in commands:
+                if isinstance(cmd, (list, tuple)) and len(cmd) == 3 and cmd[0] == Command.CREATE:
+                    child_vals = dict(cmd[2])
+                    child_vals["product_tmpl_id"] = False
+                    cleaned.append(Command.create(child_vals))
+                else:
+                    cleaned.append(cmd)
+            vals["variant_image_gallery_ids"] = cleaned
