@@ -2,7 +2,8 @@
 <odoo>
 
     <!-- ============================================================ -->
-    <!-- 产品表单视图：在「常规信息」页之后新增「参考号」页           -->
+    <!-- 产品表单视图：移除「参考号」页，改在产品名称下方放置原生     -->
+    <!-- Reference 输入框 + 「+」（额外参考号管理弹窗）+ 数量徽标      -->
     <!-- 继承基础视图 product.product_template_form_view，对其所有     -->
     <!-- primary 子视图（如 product_template_only_form_view）同步生效   -->
     <!-- ============================================================ -->
@@ -12,24 +13,45 @@
         <field name="inherit_id" ref="product.product_template_form_view"/>
         <field name="arch" type="xml">
 
-            <xpath expr="//page[@name='general_information']" position="after">
-                <page string="References" name="reference_codes">
-                    <group>
-                        <field name="default_code" string="Reference"/>
-                    </group>
-                    <field name="reference_code_line_ids" widget="one2many">
-                        <list string="Reference Lines" editable="bottom">
+            <!-- 产品名称下方：Reference 编辑器（原生 default_code + 额外参考号入口） -->
+            <xpath expr="//div[hasclass('oe_title')]/h1" position="after">
+                <div name="product_reference" class="o_product_reference_area mt-1">
+                    <label for="default_code" string="Reference"/>
+                    <field name="default_code"
+                           widget="product_reference_editor"
+                           nolabel="1"
+                           placeholder="e.g. REF-A, SKU-1234"/>
+                    <!-- 额外参考号 One2many（不可见）：为 widget 提供子字段元数据，
+                         新建参考号行时 activeFields 才含 reference_code 等字段 -->
+                    <field name="reference_code_line_ids" invisible="1">
+                        <list editable="bottom">
                             <field name="sequence" widget="handle"/>
-                            <field name="reference_code"
-                                   placeholder="e.g. REF-A, SKU-1234"
-                                   required="1"/>
+                            <field name="reference_code"/>
                             <field name="reference_type"/>
-                            <field name="active" widget="boolean_toggle"/>
-                            <field name="note" placeholder="Optional, e.g. customer / version / effective date"/>
+                            <field name="active"/>
+                            <field name="note"/>
                         </list>
                     </field>
-                    <p class="text-muted small oe_edit_only">Hint: references cannot be repeated inside the same product, but the same reference may be used by other products. Searching a product by any of its references finds this product.</p>
-                </page>
+                </div>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- 原生「常规信息」页的 Reference 已移到标题区，此处隐藏避免重复 -->
+    <!-- （product_template_only_form_view 在 categ_id 后放了原生字段） -->
+    <!-- ============================================================ -->
+    <record id="product_template_only_form_inherit" model="ir.ui.view">
+        <field name="name">product.template.only.form.inherit.reference.code</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_only_form_view"/>
+        <field name="arch" type="xml">
+
+            <!-- 只隐藏「常规信息」页分类栏里的原生字段；标题区的编辑器在 oe_title 内，
+                 用 group 限定避免 xpath 同时命中两处 default_code -->
+            <xpath expr="//group[@name='group_standard_price']/field[@name='default_code']" position="attributes">
+                <attribute name="invisible">1</attribute>
             </xpath>
 
         </field>

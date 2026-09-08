@@ -11,7 +11,7 @@
 - 新建模型：`product.reference.code`（原名 `product.model.code`）
 - 继承模型：`product.template`
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.2.2.0`
+- 当前版本：`19.0.2.3.0`
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用
@@ -58,7 +58,18 @@
    - `_sql_constraints` 已废弃，用 `models.Constraint("UNIQUE(...)", "提示")`
    - `Domain` 从 `odoo.fields` 导入，`Domain.NEGATIVE_OPERATORS` 判断否定操作符
 
-9. **模块 / 模型 / 字段改名必须有迁移与运维步骤**
+9. **额外参考号的管理入口与保存语义（`19.0.2.3.0` 起）**
+   - 产品表单**没有「参考号」页**：入口是产品名下方 Reference 输入框右侧的「+」弹窗；
+     禁止再回到页签里塞 One2many 列表
+   - 弹窗内增删改只作用在产品表单 record 上（`record.update` / 子记录 `update` / x2many 命令），
+     **不即时写库**；点产品「保存」才提交（未保存的新产品也能先录入）
+   - 徽标 / tooltip 只统计**启用中**的参考号；停用的行只在弹窗内可见可恢复
+   - Reference 输入框复用 Odoo 原生 `CharField` 渲染 `default_code`，禁止自己实现一套输入 / 提交逻辑
+   - 变体表单（`product.product`）经 `_inherits` 委托读写**同一组产品级**参考号行，
+     不做「变体级参考号副本」
+   - 原生 Reference 在常规信息页 / Codes 组被隐藏，避免与标题区重复；新增表单入口时必须同步处理
+
+10. **模块 / 模型 / 字段改名必须有迁移与运维步骤**
    - 结构变更一律写 `migrations/<版本>/pre-migration.py`，且脚本必须幂等（可重复执行）
    - 模块改名（`product_model` → `product_reference`）需先手工执行
      `README.md` →「从 product_model 升级」的 SQL，否则 Odoo 会当成新模块安装
@@ -86,8 +97,13 @@
 | `__manifest__.py` | 模块元数据、依赖、数据文件声明（security → views） |
 | `models/product_reference_code.py` | 参考号明细模型：字段、同产品去重约束、冗余索引同步、级联 |
 | `models/product_template.py` | 扩展 `product.template`：One2many、冗余字段、`_search_display_name`、`web_search_read` |
-| `views/product_template_views.xml` | 产品表单参考号页（含原生 `default_code` 字段）、列表参考号列、搜索框并入参考号搜索 |
+| `views/product_template_views.xml` | 产品模板表单标题区 Reference 编辑器（继承 `product.product_template_form_view`）、隐藏常规信息页原生 Reference、列表参考号列、搜索框并入参考号搜索 |
+| `views/product_product_views.xml` | 变体主表单（`product.product.form`）与变体独立编辑表单（`product_variant_easy_edit_view`）的标题区 Reference 编辑器，并隐藏两处重复的原生 Reference |
 | `views/product_reference_code_views.xml` | 参考号独立列表/表单/搜索视图与菜单动作 |
+| `static/src/js/product_reference_editor.js` | 字段 widget `product_reference_editor`：复用原生 `CharField` 渲染 `default_code`，右侧「+」与「+N」徽标（tooltip） |
+| `static/src/js/product_reference_manage.js` | 额外参考号管理弹窗组件 + 顶层 overlay 注册（`main_components`）；行增删改排序都落到产品表单 record |
+| `static/src/xml/*.xml` | 编辑器 / 徽标 tooltip / 管理弹窗的 QWeb 模板 |
+| `static/src/scss/product_reference.scss` | 编辑器行、徽标、tooltip、管理弹窗样式 |
 | `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |
 | `migrations/19.0.2.0.0/pre-migration.py` | `product_model` → `product_reference` 的模块 / 模型 / 字段 / 索引 / 元数据改名（幂等） |
 | `migrations/19.0.2.2.0/pre-migration.py` | 清理 `19.0.2.1.0` 遗留的内部参考行（如未部署则无影响） |
@@ -115,7 +131,9 @@ env['product.template'].search([])._sync_reference_index()
 
 ## 调试建议
 
-- 搜索不命中参考号时，检查 `reference_code_index` 是否已同步（在产品表单「参考号」页改一条参考号后看列表列）
+- 搜索不命中参考号时，检查 `reference_code_index` 是否已同步（用产品名下方「+」弹窗改一条参考号并保存产品后看列表列）
+- 标题区编辑器 / 徽标不出现：检查模块前端资源是否已升级并强刷浏览器；`product_reference_editor` widget 是否挂到了 `default_code` 节点
+- 徽标数量一直为 0：多半是 One2many 没随主记录加载（`fieldDependencies` 或 arch 里不可见的 `reference_code_line_ids` 声明缺失）
 - Many2one 下拉不命中时，确认目标字段指向 `product.template` 而非 `product.product`
 - 同产品重复参考号报错时，检查是否已有历史数据违反 `UNIQUE`，可在 DB 层先清理
 - 列表 `name` 未附加命中提示时，检查搜索域是否含 `reference_code_index` 条件、`specification` 是否请求了 `name`

@@ -1,0 +1,87 @@
+// 产品 Reference 编辑器：产品名称下方的一行（原生输入框 + 「+」按钮 + 数量徽标）
+.o_product_reference_editor {
+    // 标题区内保持左对齐、与产品名同一基线节奏
+    .o_pr_row {
+        min-height: 2rem;
+    }
+
+    .o_pr_code {
+        // 只读态显示原生 Reference 文本
+        white-space: pre-wrap;
+    }
+
+    .o_pr_hint {
+        font-size: 0.875rem;
+    }
+
+    // 「+」管理按钮：小号、正方形感，贴近输入框
+    .o_pr_add {
+        line-height: 1;
+        padding: 0.25rem 0.5rem;
+    }
+
+    // 额外参考号数量徽标（悬停显示参考号清单 tooltip）
+    .o_pr_badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.5rem;
+        height: 1.25rem;
+        padding: 0 0.35rem;
+        border-radius: 0.625rem;
+        background: #e9ecef;
+        color: #495057;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: default;
+        user-select: none;
+    }
+}
+
+// 额外参考号清单 tooltip（Odoo 原生 tooltip 服务渲染，容器为 .o-tooltip）
+.o_pr_tooltip {
+    max-width: 260px;
+
+    .o_pr_tooltip_title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .o_pr_tooltip_list {
+        margin: 0;
+        word-break: break-all;
+    }
+}
+
+// 额外参考号管理弹窗（顶层 overlay，与产品表单渲染树解耦）
+.o_product_reference_manage {
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1080;
+
+    .modal-dialog {
+        max-width: 760px;
+    }
+
+    .o_pr_table {
+        th,
+        td {
+            vertical-align: middle;
+        }
+
+        .o_pr_col_code {
+            width: 30%;
+        }
+
+        .o_pr_col_type {
+            width: 20%;
+        }
+
+        .o_pr_col_active {
+            width: 8%;
+        }
+
+        .o_pr_col_actions {
+            width: 12%;
+        }
+    }
+}

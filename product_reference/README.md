@@ -10,7 +10,9 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 ## 功能概述
 
 - 一个产品可挂多个参考号（客户参考号 / 工厂参考号 / 别名）
-- 原生 Odoo `default_code`（General Information 的 `Reference`）在产品表单的「参考号」页顶部直接显示，可统一编辑
+- 原生 Odoo `default_code`（Reference）输入框直接放在产品名下方（产品模板表单与产品变体表单都有），
+  无需切换页签；右侧「+」按钮以弹窗管理额外参考号
+- 产品存在额外参考号时显示「+N」徽标，悬停徽标弹出参考号清单 tooltip
 - 参考号用独立明细模型 + `One2many` 挂在 `product.template` 上
 - 同一产品内参考号不可重复；不同产品间允许同参考号，重复时命中提示区分
 - 搜索能力在数据库层实现：冗余可存储字段 `reference_code_index` + trigram 索引
@@ -24,7 +26,9 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 | 设计点 | 说明 |
 |--------|------|
-| 原生 Reference 统一编辑 | 在产品「参考号」页顶部直接放置 Odoo 原生 `default_code` 字段，用户无需切回「常规信息」页 |
+| 原生 Reference 就在产品名下方 | 产品模板表单与产品变体表单的标题区（`oe_title`）内、产品名下方直接放置 Odoo 原生 `default_code`（标签 `Reference`），复用原生 `CharField`，无需切页签 |
+| 「+」弹窗管理额外参考号 | 点击输入框右侧「+」打开管理弹窗，列表式增删改排序/停用；改动挂在产品表单 record 上，点产品「保存」才入库 |
+| 徽标 + 原生 tooltip | 存在启用中的额外参考号时显示「+N」徽标，悬停弹出清单（Odoo 原生 `data-tooltip-template` + `data-tooltip-info`）；只读态同样保留 tooltip |
 | 独立明细模型 | 参考号存于 `product.reference.code`，禁止逗号分隔塞进单个 `Char` |
 | 数据库层搜索 | 冗余字段 `reference_code_index`（`Text` + trigram 索引）拼接所有参考号，由参考号行增删改时自动同步 |
 | `_search_display_name` 扩展 | Many2one 下拉、搜索建议、快速搜索按 `reference_code_index` 命中产品 |
@@ -59,7 +63,8 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 ## 视图
 
-- **产品表单**：「常规信息」页之后新增「参考号（References）」页，顶部放置原生 `default_code`（Reference）字段，下方内嵌 One2many 行，可增删改排序其他参考号
+- **产品表单（模板 + 变体）**：产品名称下方直接放置原生 `default_code`（Reference）输入框，
+  右侧「+」打开额外参考号管理弹窗；不再新增任何页签，常规信息页 / Codes 组的原生 Reference 隐藏避免重复
 - **产品列表**：新增「参考号」列（可选显示），展示 `reference_code_index` 拼接结果
 - **产品搜索**：顶部搜索框并入参考号搜索；新增独立的「参考号」搜索项
 - **参考号独立视图**：`产品参考号` 菜单动作，供管理员批量检索与维护
@@ -74,6 +79,9 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 - 术语对照：英文 `reference` ↔ 中文「参考号」。
 - 列表命中参考号的后缀提示由 `product_template.py` 的 `_(" (Matching reference: %(codes)s)")` 生成，中文译文为「（命中参考号：xxx）」。
 - 占位符统一用命名形式 `%(name)s`，禁止按位置 `%s` 拼接。
+- 前端术语（JS `_t`、QWeb 模板文本与 `title` / `aria-label` / `placeholder` 属性）走 `.po` 的
+  `code:addons/product_reference/static/src/js/*.js:0` 与
+  `code:addons/product_reference/static/src/xml/*.xml:0` 条目；升级后需强刷浏览器才生效。
 - 改动流程：改英文源文本 → 在 `i18n/zh_CN.po` 补 `msgid` / `msgstr` → `odoo -d <db> -u product_reference --stop-after-init` 升级 → 刷新页面。
 - 启用中文：设置 → 语言 → 安装「简体中文 (zh_CN)」。
 
@@ -89,9 +97,11 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 1. 将 `product_reference` 目录放入 Odoo 19 的 `addons_path`（**替换**旧的 `product_model` 目录）
 2. 更新应用列表后升级 / 安装模块：`产品多参考号`
-3. 打开任意产品表单，切换到「参考号（References）」页，可直接在页顶编辑 Odoo `Reference`；下方继续添加客户参考号、工厂参考号、别名
-4. 在「常规信息」页编辑 `Reference` 同样有效；两处修改的是同一个原生字段
-5. 在产品列表搜索框输入参考号，或销售订单行选产品时输入参考号，均可命中对应产品
+3. 打开任意产品表单（或产品变体表单），在产品名下方直接编辑 Odoo `Reference`
+4. 点击 Reference 输入框右侧「+」，在弹窗里新增 / 修改 / 停用 / 删除 / 上下移动额外参考号，
+   关闭弹窗后点产品「保存」一次性提交（未保存的新产品也能先录入）
+5. 产品存在额外参考号时，输入框右侧出现「+N」徽标，鼠标悬停徽标即可查看参考号清单
+6. 在产品列表搜索框输入参考号，或销售订单行选产品时输入参考号，均可命中对应产品
 
 ### 从 product_model 升级（已装旧模块的库必做）
 
@@ -117,15 +127,20 @@ odoo -d <db> -u product_reference --stop-after-init
 > 未执行上述 SQL 就直接安装 `product_reference`，会被 Odoo 当成新模块：旧 `product_model`
 > 的数据不会自动接上。此时请回滚到升级前备份再按上面顺序重来。
 
-### 原生 Reference 在参考号页统一编辑
+### 原生 Reference 在产品名下方编辑
 
-- 产品表单的「参考号（References）」页顶部直接放置 Odoo 原生的 `default_code` 字段，标签显示为 `Reference`。
-- 该字段与「常规信息」页的 `Reference` 是同一个字段，修改任意一处都会同步生效。
+- 产品表单与产品变体表单的标题区、产品名下方直接放置 Odoo 原生的 `default_code` 字段，标签 `Reference`。
+- 它就是 Odoo 原生的内部参考字段：产品模板表单改的是模板级 `default_code`（多变体时由各变体维护，
+  模板侧只显示提示），变体表单改的是该变体自己的 `default_code`。
 - 它不属于 `product.reference.code` 明细行，因此不占用参考号行的唯一约束，也不参与参考号行的排序。
+- 常规信息页 / Codes 组里的原生 Reference 已隐藏，避免与标题区重复。
 
-### 批量录入参考号
+### 用「+」弹窗管理额外参考号
 
-在产品表单的「参考号」页 One2many 列表中，可直接逐行新增参考号；列表为 `editable="bottom"`，支持快速连续录入。
+- 参考号 / 类型 / 启用 / 备注直接在弹窗行内改；右侧箭头调整顺序，垃圾桶删除行。
+- 弹窗内的改动都作用在产品表单 record 上，**点产品「保存」才入库**；不保存则不落库，
+  新建产品可以先录参考号再一起保存。
+- 弹窗内不做去重校验，保存时由服务端 `@api.constrains` + `UNIQUE(product_tmpl_id, reference_code)` 兜底。
 
 ---
 
@@ -137,8 +152,8 @@ odoo -d <db> -u product_reference --stop-after-init
 |--------|------|------|
 | 升级后模块名 | 应用列表显示 `产品多参考号`（`product_reference`），无 `product_model` 残留 | 通过 |
 | 历史数据 | 旧型号数据完整出现在产品「参考号」页与 `product_reference_code` 表 | 通过 |
-| 产品表单参考号页 | 页顶可编辑 Odoo `Reference`；下方可增删改排序其他参考号行 | 通过 |
-| Reference 统一编辑 | 在「参考号」页修改页顶 `Reference`，「常规信息」页同步变化，反之亦然 | 通过 |
+| 产品表单参考号页（`19.0.2.2.0` 及更早） | 页顶可编辑 Odoo `Reference`；下方可增删改排序其他参考号行 | 通过 |
+| Reference 统一编辑（`19.0.2.2.0` 及更早） | 在「参考号」页修改页顶 `Reference`，「常规信息」页同步变化，反之亦然 | 通过 |
 | 同产品重复参考号 | 阻止并给中文提示，带出具体值与产品名 | 通过 |
 | 产品列表搜索框输入参考号 | 命中对应产品，`name` 显示「产品名（命中参考号：xxx）」 | 通过 |
 | 销售订单行选产品输入参考号 | 命中对应产品 | 通过 |
@@ -146,6 +161,22 @@ odoo -d <db> -u product_reference --stop-after-init
 | 删除产品 | 参考号行随之级联清理 | 通过 |
 | 中英双语 | 英文界面为 `Reference` 系列文案，中文界面为「参考号」系列文案 | 通过 |
 | 索引 | `product_template__reference_code_index_index`（trigram）与 `product_reference_code_reference_code_unique_per_template` 存在 | 通过 |
+
+### `19.0.2.3.0` 待验证清单（T-011）
+
+> 尚未在目标环境验证，升级后按下表逐项验收（详见 `CHANGELOG.md` → `[19.0.2.3.0]`）。
+
+| 验证项 | 期望 |
+|--------|------|
+| 升级 | `odoo -d <db> -u product_reference --stop-after-init` 不报错 |
+| 产品模板表单 | 产品名下方出现 `Reference` 输入框，可编辑并保存；常规信息页不再重复出现 |
+| 变体主表单 / 变体独立编辑表单 | 同样出现编辑器；常规信息 / Codes 组不再重复出现 Reference |
+| 「+」管理弹窗 | 新增 / 改值 / 改类型 / 停用 / 删除 / 上移下移均正常，关闭后徽标数量正确 |
+| 新建产品 | 先加参考号再保存产品，保存后参考号落库且 `reference_code_index` 已同步 |
+| 徽标 tooltip | 悬停「+N」徽标显示参考号清单（中英双语各验一遍） |
+| 只读态 | 只显示 Reference 文本与徽标 tooltip，无输入框与「+」 |
+| 多变体模板 | 显示「按变体维护」提示，管理入口可用 |
+| 回归 | 按参考号搜索 / Many2one 命中提示 / 同产品去重 / 删除产品级联清理均正常 |
 
 ### 执行流程
 
@@ -168,6 +199,12 @@ odoo -d <db> -u product_reference --stop-after-init
 - 改拼接分隔符只改 `_sync_reference_index`，改后触发一次同步
 - 新增参考号类型只改 `reference_type` 的 `selection`
 - 其他单据 Many2one 指向 `product.template` 即自动支持参考号搜索，无需额外改动
+- 改产品名下方编辑器的交互：改 `static/src/js/product_reference_editor.js` 与
+  `static/src/xml/product_reference_editor.xml`；改管理弹窗：改
+  `static/src/js/product_reference_manage.js` 与 `static/src/xml/product_reference_manage.xml`
+- 视图挂载点：产品模板表单（继承 `product.product_template_form_view`）、
+  变体主表单（`product.product_normal_form_view`）、变体独立编辑表单
+  （`product.product_variant_easy_edit_view`）——新增表单入口时需同步挂 widget 并隐藏重复的原生 Reference
 
 ---
 

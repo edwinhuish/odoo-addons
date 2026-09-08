@@ -1,5 +1,55 @@
 # 变更日志
 
+## [19.0.2.3.0] - 2026-09-08（待验证）
+
+### 变更（界面改造：移除「参考号」页，Reference 上移到产品名称下方）
+
+- **移除产品表单的「参考号（References）」页**：额外参考号不再以页签内 One2many 列表呈现，
+  改为「产品名称下方 Reference 输入框 + 右侧「+」弹窗管理」，更贴近 SOHO「少点几下」的习惯。
+- **原生 Reference 输入框移到产品名称下方**：产品模板表单与产品变体表单（变体主表单
+  `product.product.form` 与变体独立编辑表单 `product_variant_easy_edit_view`）的 `oe_title` 内、
+  产品名下方放置 Odoo 原生 `default_code`（标签 `Reference`）；复用原生 `CharField` 组件渲染，
+  编辑 / dirty / 校验体验与原生一致。
+- **「+」按钮 → 额外参考号管理弹窗**：列表式维护（参考号 / 类型 / 启用 / 备注 / 上移下移 / 删除），
+  改动作用在产品表单 record 上，点产品「保存」才入库（未保存的新产品也能先录入参考号）；
+  弹窗挂顶层 overlay（`main_components`），与表单渲染树解耦，不闪烁。
+- **数量徽标 + tooltip**：产品存在启用中的额外参考号时显示「+N」徽标，悬停徽标弹出参考号清单
+  （Odoo 原生 `data-tooltip-template` + `data-tooltip-info`）。
+- **多变体模板**：模板级 Reference 由各变体维护，输入框位置显示提示文本，管理入口与徽标保留。
+- **隐藏重复的原生 Reference**：常规信息页分类栏（模板 `product_template_only_form_view`、变体主表单
+  `product_normal_form_view`）与变体独立编辑表单 Codes 组的原生 `default_code` 均隐藏。
+- **新增前端资源**：`static/src/js/product_reference_editor.js`（字段 widget）、
+  `static/src/js/product_reference_manage.js`（管理弹窗 + overlay 注册）、
+  `static/src/xml/product_reference_editor.xml`、`static/src/xml/product_reference_manage.xml`、
+  `static/src/scss/product_reference.scss`，走 `web.assets_backend`。
+- **i18n**：新增弹窗 / tooltip / 徽标相关术语与 JS `_t` 文案；移除已删除页面的术语（`References`、
+  `Reference Lines` 页内引用、页面提示段落）；`Product Reference` 合并为一条多引用条目。
+- **文档同步**：`README.md`、`AGENTS.md`、根 `README.md` / `TODO.md`。
+
+### 影响
+
+- 产品表单不再有「参考号」页；历史数据不受影响（参考号行仍在 `product_reference_code` 表）。
+- 额外参考号仍是**产品级**（挂在 `product.template` 上）；变体表单经 `_inherits` 委托读写同一组行，
+  同一产品的多个变体共享同一份额外参考号。
+- 弹窗内改动随产品表单「保存」提交：不保存则不入库；关闭弹窗不会回滚已在 record 上的改动。
+- 只读态只显示 Reference 文本与徽标 tooltip，不再显示输入框与「+」按钮。
+- 升级后必须强刷浏览器（前端资源有缓存）。
+
+### 待验证清单（目标环境）
+
+1. `odoo -d <db> -u product_reference --stop-after-init` 升级不报错
+2. 产品模板表单：产品名下方可见 `Reference` 输入框，可编辑并保存；常规信息页不再重复出现
+3. 「+」打开管理弹窗：新增 / 改值 / 改类型 / 停用 / 删除 / 上移下移均正常，关闭后徽标数量正确
+4. 未保存的新产品：先加参考号再保存产品，保存后参考号落库且 `reference_code_index` 已同步
+5. 变体主表单与变体独立编辑表单：同样出现编辑器；常规信息 / Codes 组不再重复出现 Reference
+6. 徽标悬停显示参考号清单 tooltip（中英双语各验一遍）
+7. 只读态：只显示 Reference 文本与徽标 tooltip
+8. 多变体模板：显示「按变体维护」提示，管理入口可用
+9. 回归：列表搜索框 / Many2one 下拉按参考号仍能命中并显示「（命中参考号：xxx）」；
+   同产品重复参考号仍被阻止；删除产品级联清理
+
+---
+
 ## [19.0.2.2.0] - 2026-09-07（验收通过）
 
 ### 变更（功能回退与简化）

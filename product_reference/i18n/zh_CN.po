@@ -25,35 +25,39 @@ msgstr "创建一条产品参考号"
 #: model_terms:ir.actions.act_window,help:product_reference.action_product_reference_code
 msgid ""
 "A product can carry several references (customer / factory / alias), in "
-"addition to the standard Odoo Reference. They are usually maintained on the "
-"\"References\" page of the product form; this view is meant for bulk search "
-"and maintenance."
+"addition to the standard Odoo Reference. They are usually maintained with the "
+"\"+\" button next to the Reference field of the product form; this view is "
+"meant for bulk search and maintenance."
 msgstr ""
-"一个产品除标准 Odoo Reference 外，还可挂多条参考号（客户参考号 / 工厂参考号 / 别名）。通常在产品表单的「参考号」页内维护，此处用于批量检索与维护。"
+"一个产品除标准 Odoo Reference 外，还可挂多条参考号（客户参考号 / 工厂参考号 / 别名）。通常在产品表单 Reference 字段右侧的「+」按钮中维护，此处用于批量检索与维护。"
 
 #. module: product_reference
 #: model:ir.actions.act_window,name:product_reference.action_product_reference_code
 #: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_list_view
 #: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
-#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
 msgid "Product References"
 msgstr "产品参考号"
 
 #. module: product_reference
 #: model:ir.model,name:product_reference.model_product_reference_code
 #: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_form_view
+#: code:addons/product_reference/static/src/js/product_reference_editor.js:0
 msgid "Product Reference"
 msgstr "产品参考号"
 
 #. module: product_reference
 #: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_form_view
 #: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+#: model_terms:ir.ui.view,arch_db:product_reference.product_variant_easy_form_inherit
+#: model_terms:ir.ui.view,arch_db:product_reference.product_normal_form_view_inherit
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
 msgid "e.g. REF-A, SKU-1234"
 msgstr "如 REF-A、SKU-1234"
 
 #. module: product_reference
 #: model_terms:ir.ui.view,arch_db:product_reference.product_reference_code_search_view
 #: model:ir.model.fields,field_description:product_reference.field_product_reference_code__active
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
 msgid "Active"
 msgstr "启用"
 
@@ -63,28 +67,18 @@ msgid "Archived"
 msgstr "停用"
 
 #. module: product_reference
-#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
-msgid "References"
-msgstr "参考号"
-
-#. module: product_reference
 #: model:ir.model.fields,field_description:product_reference.field_product_template__reference_code_line_ids
-#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
 msgid "Reference Lines"
 msgstr "参考号明细"
 
 #. module: product_reference
-#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
-msgid ""
-"Hint: references cannot be repeated inside the same product, but the same "
-"reference may be used by other products. Searching a product by any of its "
-"references finds this product."
-msgstr "提示：同一产品内参考号不可重复；不同产品间可重复。搜索产品时按任一参考号均可命中本产品。"
-
-#. module: product_reference
 #: model_terms:ir.ui.view,arch_db:product_reference.product_template_list_inherit
 #: model_terms:ir.ui.view,arch_db:product_reference.product_template_search_inherit
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+#: model_terms:ir.ui.view,arch_db:product_reference.product_variant_easy_form_inherit
+#: model_terms:ir.ui.view,arch_db:product_reference.product_normal_form_view_inherit
 #: model:ir.model.fields,field_description:product_reference.field_product_reference_code__reference_code
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
 msgid "Reference"
 msgstr "参考号"
 
@@ -105,16 +99,19 @@ msgstr "参考号类型"
 
 #. module: product_reference
 #: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__customer
+#: code:addons/product_reference/static/src/js/product_reference_manage.js:0
 msgid "Customer Reference"
 msgstr "客户参考号"
 
 #. module: product_reference
 #: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__factory
+#: code:addons/product_reference/static/src/js/product_reference_manage.js:0
 msgid "Factory Reference"
 msgstr "工厂参考号"
 
 #. module: product_reference
 #: model:ir.model.fields.selection,name:product_reference.selection__product_reference_code__reference_type__alias
+#: code:addons/product_reference/static/src/js/product_reference_manage.js:0
 msgid "Alias"
 msgstr "别名"
 
@@ -145,6 +142,7 @@ msgstr "取消勾选可停用某条参考号而不删除，便于保留历史。
 
 #. module: product_reference
 #: model:ir.model.fields,field_description:product_reference.field_product_reference_code__note
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
 msgid "Note"
 msgstr "备注"
 
@@ -206,3 +204,102 @@ msgstr "参考号“%(code)s”在产品“%(product)s”中已存在，同一�
 #: code:addons/product_reference/models/product_template.py:0
 msgid " (Matching reference: %(codes)s)"
 msgstr "（命中参考号：%(codes)s）"
+
+#. module: product_reference
+#. module: product_reference
+#. odoo-javascript
+#: code:addons/product_reference/static/src/js/product_reference_editor.js:0
+msgid "Manage additional references"
+msgstr "管理额外参考号"
+
+#. module: product_reference
+#. odoo-javascript
+#: code:addons/product_reference/static/src/js/product_reference_editor.js:0
+msgid "Managed on each variant"
+msgstr "在各变体上维护"
+
+#. module: product_reference
+#. odoo-javascript
+#: code:addons/product_reference/static/src/js/product_reference_manage.js:0
+msgid "The reference could not be added."
+msgstr "参考号新增失败。"
+
+#. module: product_reference
+#. odoo-javascript
+#: code:addons/product_reference/static/src/js/product_reference_manage.js:0
+msgid "The reference could not be updated."
+msgstr "参考号修改失败。"
+
+#. module: product_reference
+#. odoo-javascript
+#: code:addons/product_reference/static/src/js/product_reference_manage.js:0
+msgid "The reference could not be deleted."
+msgstr "参考号删除失败。"
+
+#. module: product_reference
+#. odoo-javascript
+#: code:addons/product_reference/static/src/js/product_reference_manage.js:0
+msgid "The references could not be reordered."
+msgstr "参考号排序失败。"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_editor.xml:0
+msgid "Additional references"
+msgstr "额外参考号"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Additional References"
+msgstr "额外参考号"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid ""
+"These references are saved together with the product; searching a product by "
+"any of them finds this product."
+msgstr "这些参考号随产品一起保存；按其中任一参考号搜索均可命中本产品。"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Type"
+msgstr "类型"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Add a reference"
+msgstr "新增一条参考号"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "No additional reference yet."
+msgstr "还没有额外参考号。"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Optional, e.g. customer / version / effective date"
+msgstr "选填，如对应客户 / 版本 / 生效日期等"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Move up"
+msgstr "上移"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Move down"
+msgstr "下移"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Delete"
+msgstr "删除"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Done"
+msgstr "完成"
+
+#. module: product_reference
+#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Close"
+msgstr "关闭"

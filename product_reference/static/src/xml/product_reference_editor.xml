@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+    <!--
+        产品 Reference 编辑器（放在产品名称下方）：
+        - 编辑态：原生 Reference 输入框（复用 Odoo 原生 CharField）+ 右侧「+」按钮
+          （打开额外参考号管理弹窗）+ 额外参考号数量徽标（悬停出清单 tooltip）
+        - 只读态：只显示 Reference 文本与徽标 tooltip，不提供写入口
+        - 多变体模板：模板级 Reference 由各变体维护，输入框位置换成提示文本，
+          管理入口与徽标保留
+    -->
+    <t t-name="product_reference.ProductReferenceEditor">
+        <div class="o_product_reference_editor">
+            <t t-if="props.readonly">
+                <span class="o_pr_code" t-esc="codeValue"/>
+                <span t-if="count"
+                      class="o_pr_badge"
+                      data-tooltip-template="product_reference.ReferenceTooltip"
+                      data-tooltip-position="top"
+                      data-tooltip-delay="200"
+                      t-att-data-tooltip-info="tooltipInfo"
+                      t-esc="badgeLabel"/>
+            </t>
+            <t t-else="">
+                <div class="o_pr_row d-flex align-items-center flex-wrap gap-1">
+                    <span t-if="isMultiVariant"
+                          class="o_pr_hint text-muted"
+                          t-esc="multiVariantHint"/>
+                    <CharField t-else=""
+                               record="props.record"
+                               name="props.name"
+                               readonly="props.readonly"
+                               id="props.id"
+                               placeholder="props.placeholder"/>
+                    <button type="button"
+                            class="btn btn-sm btn-secondary o_pr_add"
+                            t-att-title="manageLabel"
+                            t-att-aria-label="manageLabel"
+                            t-on-click="openManage">
+                        <i class="fa fa-plus"/>
+                    </button>
+                    <span t-if="count"
+                          class="o_pr_badge"
+                          data-tooltip-template="product_reference.ReferenceTooltip"
+                          data-tooltip-position="top"
+                          data-tooltip-delay="200"
+                          t-att-data-tooltip-info="tooltipInfo"
+                          t-esc="badgeLabel"/>
+                </div>
+            </t>
+        </div>
+    </t>
+
+    <!--
+        额外参考号清单 tooltip：由 Odoo 原生 tooltip 服务渲染
+        （data-tooltip-template + data-tooltip-info，info 里的 codes 为参考号数组）。
+        只列启用中的参考号，停用行在管理弹窗内维护。
+    -->
+    <t t-name="product_reference.ReferenceTooltip">
+        <div class="o_pr_tooltip">
+            <div class="o_pr_tooltip_title">Additional references</div>
+            <ul class="o_pr_tooltip_list mb-0 ps-3">
+                <t t-foreach="codes" t-as="code" t-key="code">
+                    <li t-esc="code"/>
+                </t>
+            </ul>
+        </div>
+    </t>
+
+</templates>

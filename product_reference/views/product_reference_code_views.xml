@@ -73,7 +73,7 @@
             <p class="o_view_nocontent_smiling_face">
                 Create a product reference
             </p>
-            <p>A product can carry several references (customer / factory / alias), in addition to the standard Odoo Reference. They are usually maintained on the "References" page of the product form; this view is meant for bulk search and maintenance.</p>
+            <p>A product can carry several references (customer / factory / alias), in addition to the standard Odoo Reference. They are usually maintained with the "+" button next to the Reference field of the product form; this view is meant for bulk search and maintenance.</p>
         </field>
     </record>
 
