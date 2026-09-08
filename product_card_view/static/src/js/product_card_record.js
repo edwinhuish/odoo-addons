@@ -2,7 +2,7 @@
 
 import { _t } from "@web/core/l10n/translation";
 import { imageUrl } from "@web/core/utils/urls";
-import { useState } from "@odoo/owl";
+import { onWillUpdateProps, useState } from "@odoo/owl";
 import { KanbanRecord } from "@web/views/kanban/kanban_record";
 
 import { getProductCardPayload } from "./product_card_model";
@@ -33,6 +33,13 @@ export class ProductCardRecord extends KanbanRecord {
         });
         this._swipeSuppressUntil = 0;
         this._pointerX = null;
+        // 缓存 resId 到非 reactive 实例属性：payload getter 用它取全局 Map，
+        // 不访问任何 reactive state（dataState.record / props.record 都会触发
+        // KanbanRecord 的 useRecordObserver effect 链 → render 循环卡死）。
+        this._resId = this.props.record?.resId;
+        onWillUpdateProps((nextProps) => {
+            this._resId = nextProps.record?.resId;
+        });
     }
 
     // ---------------------------------------------------------------------
@@ -40,17 +47,14 @@ export class ProductCardRecord extends KanbanRecord {
     // ---------------------------------------------------------------------
 
     get payload() {
-        // 用 KanbanRecord 父类已格式化的 dataState.record.id.value（resId），
-        // 不直接访问 this.props.record（DataPoint）——KanbanRecord 的 useRecordObserver
-        // effect 监听 props.record 并写 dataState.record（触发 re-render），若 getter
-        // 再访问 props.record 会与该 effect 冲突 → render 循环卡死。
-        const resId = this.dataState?.record?.id?.value;
-        return getProductCardPayload(resId);
+        // 用 setup 缓存的 _resId（非 reactive），不访问 dataState.record / props.record，
+        // 避开 KanbanRecord useRecordObserver effect 链导致的 render 循环。
+        return getProductCardPayload(this._resId);
     }
 
     get templateId() {
-        // 同 payload：用 KanbanRecord 已格式化的 resId，避开 DataPoint 访问冲突
-        return this.dataState?.record?.id?.value;
+        // 用缓存的 _resId 拼 image URL（非 reactive，避开 effect 链）
+        return this._resId;
     }
 
     get title() {
