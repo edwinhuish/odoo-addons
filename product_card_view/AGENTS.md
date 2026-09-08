@@ -47,8 +47,10 @@
 
 6. **每页只发一次数据请求**
    - Model 重写 `load`（`super.load` 后），批量请求 `/product_card/payload`，按 resId 填入
-     **非 reactive 的 module-level WeakMap**（key=model 实例 → resId → payload）；卡片通过
-     `getProductCardPayload(record.model, record.resId)` 取
+     **非 reactive 的 module-level WeakMap**（key=model 的 **raw** 实例 → resId → payload）；
+     卡片通过 `getProductCardPayload(record.model, record.resId)` 取
+   - WeakMap key 两端必须用 `toRaw()` 统一为 raw：load 里 `this` 是 raw，而 `record.model`
+     是 reactive proxy（Owl reactive proxy 调方法时 this 绑定到 raw），identity 不等会 MISS
    - 必须用非 reactive 存储（普通 Map/WeakMap）：
      ① 挂到 `result.records` 会被 `_createRoot` 重建 Record 时丢弃；
      ② 给 reactive model 实例赋值会触发 reload 循环（keepLast 竞争 + 空响应 + 卡死）；

@@ -1,14 +1,19 @@
 /** @odoo-module **/
 
+import { toRaw } from "@odoo/owl";
 import { rpc } from "@web/core/network/rpc";
 import { RelationalModel } from "@web/model/relational_model/relational_model";
 
-// 非模块实例级的 payload 缓存：model 实例（WeakMap）→ resId → payload。
+// 非模块实例级的 payload 缓存：model 的 raw 实例（WeakMap）→ resId → payload。
 // 故意用普通 Map / WeakMap（非 Owl reactive）：给 reactive model / record 实例加
 // 自定义属性会触发 Owl DataModel 内部 effect（dirty / onUpdate 检测）→ reload 循环
 // → 页面卡死。ViewController await load，渲染时已填充；reload 重建 root 会触发
 // KanbanRenderer 重新渲染，卡片重新查（已填充），无需 record 级 reactivity
 // （变体切换走卡片内 useState）。
+//
+// WeakMap key 必须用 raw（toRaw）：load 里 this 是 raw 对象，而 record.model 是
+// reactive proxy（Owl reactive proxy 调方法时 this 绑定到 raw，避免 reactivity 递归）。
+// 用对象 identity 比较，raw ≠ proxy 会 MISS，故两端都 toRaw 统一。
 const payloadByModel = new WeakMap();
 
 export class ProductCardModel extends RelationalModel {
@@ -23,7 +28,6 @@ export class ProductCardModel extends RelationalModel {
             .map((record) => record.resId)
             .filter((id) => id != null);
         const resIdMap = new Map();
-        let payloadKeys = 0;
         if (templateIds.length) {
             const payload = await rpc("/product_card/payload", { template_ids: templateIds });
             for (const resId of templateIds) {
@@ -31,14 +35,8 @@ export class ProductCardModel extends RelationalModel {
                     resIdMap.set(resId, payload[resId]);
                 }
             }
-            payloadKeys = payload ? Object.keys(payload).length : 0;
         }
-        payloadByModel.set(this, resIdMap);
-        console.warn(
-            "[PCV DEBUG] load set: this=%o resIdMap.size=%s templateIds.length=%s payloadKeys=%s firstIds=%s firstType=%s",
-            this, resIdMap.size, templateIds.length, payloadKeys,
-            templateIds.slice(0, 3), typeof templateIds[0],
-        );
+        payloadByModel.set(toRaw(this), resIdMap);
     }
 
     /**
@@ -61,28 +59,6 @@ export function getProductCardPayload(model, resId) {
     if (resId == null) {
         return null;
     }
-    const outer = payloadByModel.get(model);
-    if (!outer) {
-        if (!getProductCardPayload._loggedOuter) {
-            getProductCardPayload._loggedOuter = true;
-            console.warn(
-                "[PCV DEBUG] getProductCardPayload: WeakMap OUTER MISS model=%o resId=%s type=%s",
-                model, resId, typeof resId,
-            );
-        }
-        return null;
-    }
-    const result = outer.get(resId);
-    if (!result) {
-        if (!getProductCardPayload._loggedInner) {
-            getProductCardPayload._loggedInner = true;
-            console.warn(
-                "[PCV DEBUG] getProductCardPayload: INNER MISS outer.size=%s outer.has(resId)=%s resId=%s type=%s outerKeysSample=%o",
-                outer.size, outer.has(resId), resId, typeof resId,
-                [...outer.keys()].slice(0, 5),
-            );
-        }
-        return null;
-    }
-    return result;
+    const outer = payloadByModel.get(toRaw(model));
+    return (outer && outer.get(resId)) || null;
 }
