@@ -34,8 +34,8 @@ export class ProductCardRecord extends KanbanRecord {
     // ---------------------------------------------------------------------
 
     get payload() {
-        // model 在 load 后按 resId 填入非 reactive WeakMap（见 product_card_model.js）
-        return getProductCardPayload(this.props.record.model, this.props.record.resId);
+        // model 在 load 后按 resId 填入全局非 reactive Map（见 product_card_model.js）
+        return getProductCardPayload(this.props.record.resId);
     }
 
     get templateId() {
