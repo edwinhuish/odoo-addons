@@ -13,6 +13,8 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 - 原生 Odoo `default_code`（Reference）输入框直接放在产品名下方（产品模板表单与产品变体表单都有），
   标签为 `Ref.`（中英界面一致）；输入框内右端「+」按钮以弹窗管理额外参考号
 - 产品存在额外参考号时显示「+N」徽标，悬停徽标弹出参考号清单 tooltip
+- **多变体产品的参考号不共用**：产品表单在 `product_variant_count > 1` 时整块隐藏该区域，
+  每个变体各自维护一份参考号（变体专属行，与产品级共享行相互独立）
 - 参考号用独立明细模型 + `One2many` 挂在 `product.template` 上
 - 同一产品内参考号不可重复；不同产品间允许同参考号，重复时命中提示区分
 - 搜索能力在数据库层实现：冗余可存储字段 `reference_code_index` + trigram 索引
@@ -29,6 +31,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 | 原生 Reference 就在产品名下方 | 产品模板表单与产品变体表单的标题区（`oe_title`）内、产品名下方直接放置 Odoo 原生 `default_code`；标签固定 `Ref.`（中英界面一致，不做本地化翻译），复用原生 `CharField`，无需切页签 |
 | 输入框内「+」管理额外参考号 | 「+」内置在输入框右端，点击打开管理弹窗，列表式增删改排序/停用；改动挂在产品表单 record 上，点产品「保存」才入库 |
 | 徽标 + 原生 tooltip | 存在启用中的额外参考号时显示「+N」徽标，悬停弹出清单（Odoo 原生 `data-tooltip-template` + `data-tooltip-info`）；只读态同样保留 tooltip |
+| 多变体不共用 | 参考号行有两种归属（二选一）：产品级共享（`product_tmpl_id`，产品表单维护）、变体级（`product_id`，变体表单维护）；多变体产品的产品表单整块隐藏该区域 |
 | 独立明细模型 | 参考号存于 `product.reference.code`，禁止逗号分隔塞进单个 `Char` |
 | 数据库层搜索 | 冗余字段 `reference_code_index`（`Text` + trigram 索引）拼接所有参考号，由参考号行增删改时自动同步 |
 | `_search_display_name` 扩展 | Many2one 下拉、搜索建议、快速搜索按 `reference_code_index` 命中产品 |
@@ -48,23 +51,34 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 | `reference_code_count` | `Integer`（compute） | 参考号数量 |
 | `reference_code_index` | `Text`（store + trigram 索引） | 所有参考号拼接的搜索索引，自动维护，勿手工编辑 |
 
+### `product.product`（扩展，变体）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `variant_reference_code_line_ids` | `One2many` → `product.reference.code` | 本变体专属的参考号明细（与产品级共享行独立） |
+| `variant_reference_code_index` | `Text`（store + trigram 索引） | 本变体参考号拼接的搜索索引，自动维护，勿手工编辑 |
+
 ### `product.reference.code`（新建）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `reference_code` | `Char`（required, index） | 参考号，同产品内不可重复 |
+| `reference_code` | `Char`（required, index） | 参考号，同一主人（产品 / 变体）内不可重复 |
 | `reference_type` | `Selection` | 客户参考号 / 工厂参考号 / 别名 |
 | `sequence` | `Integer` | 排序，数值小的在前 |
 | `active` | `Boolean` | 启用状态，可停用而不删除 |
 | `note` | `Char` | 备注（对应客户、版本、生效日期等） |
-| `product_tmpl_id` | `Many2one` → `product.template`（required, index, cascade） | 所属产品 |
+| `product_tmpl_id` | `Many2one` → `product.template`（index, cascade） | 所属产品（共享参考号），与 `product_id` 二选一 |
+| `product_id` | `Many2one` → `product.product`（index, cascade） | 所属产品变体（变体专属参考号），与 `product_tmpl_id` 二选一 |
 
 ---
 
 ## 视图
 
 - **产品表单（模板 + 变体）**：产品名称下方直接放置原生 `default_code`（Reference）输入框，
-  右侧「+」打开额外参考号管理弹窗；不再新增任何页签，常规信息页 / Codes 组的原生 Reference 隐藏避免重复
+  输入框内右端「+」打开额外参考号管理弹窗；不再新增任何页签，常规信息页 / Codes 组的原生
+  Reference 隐藏避免重复；**多变体产品（`product_variant_count > 1`）整块隐藏**
+- **变体表单维护变体专属行**：`options="{'lines_field': 'variant_reference_code_line_ids'}"`
+  指定本表单维护的是变体自己的参考号，与产品表单的共享行互不干扰
 - **产品列表**：新增「参考号」列（可选显示），展示 `reference_code_index` 拼接结果
 - **产品搜索**：顶部搜索框并入参考号搜索；新增独立的「参考号」搜索项
 - **参考号独立视图**：`产品参考号` 菜单动作，供管理员批量检索与维护
@@ -102,6 +116,8 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
    关闭弹窗后点产品「保存」一次性提交（未保存的新产品也能先录入）
 5. 产品存在额外参考号时，输入框右侧出现「+N」徽标，鼠标悬停徽标即可查看参考号清单
 6. 在产品列表搜索框输入参考号，或销售订单行选产品时输入参考号，均可命中对应产品
+7. **多变体产品**：产品表单不再显示该区域；打开具体变体（产品变体列表，或模板上的「变体」按钮），
+   在该变体的产品名下方维护它自己的参考号——变体之间的参考号互不共用
 
 ### 从 product_model 升级（已装旧模块的库必做）
 
@@ -131,8 +147,9 @@ odoo -d <db> -u product_reference --stop-after-init
 
 - 产品表单与产品变体表单的标题区、产品名下方直接放置 Odoo 原生的 `default_code` 字段，标签 `Ref.`。
 - 标签 `Ref.` 中英界面一致（`i18n/zh_CN.po` 中该条 `msgstr` 同样为 `Ref.`），不随语言变化。
-- 它就是 Odoo 原生的内部参考字段：产品模板表单改的是模板级 `default_code`（多变体时由各变体维护，
-  模板侧只显示提示），变体表单改的是该变体自己的 `default_code`。
+- 它就是 Odoo 原生的内部参考字段：产品模板表单改的是模板级 `default_code`，变体表单改的是该变体
+  自己的 `default_code`；多变体产品的产品表单不显示这一块（`product_variant_count > 1` 时隐藏），
+  参考号在各变体上分别维护。
 - 它不属于 `product.reference.code` 明细行，因此不占用参考号行的唯一约束，也不参与参考号行的排序。
 - 常规信息页 / Codes 组里的原生 Reference 已隐藏，避免与标题区重复。
 
@@ -165,7 +182,7 @@ odoo -d <db> -u product_reference --stop-after-init
 
 ### `19.0.2.3.0` 待验证清单（T-011）
 
-> 尚未在目标环境验证，升级后按下表逐项验收（详见 `CHANGELOG.md` → `[19.0.2.3.0]`）。
+> 尚未在目标环境验证，升级后按下表逐项验收（详见 `CHANGELOG.md` → `[19.0.2.3.0]` / `[19.0.2.4.0]`）。
 
 | 验证项 | 期望 |
 |--------|------|
@@ -174,6 +191,9 @@ odoo -d <db> -u product_reference --stop-after-init
 | 变体主表单 / 变体独立编辑表单 | 同样出现编辑器；常规信息 / Codes 组不再重复出现 Reference |
 | 输入框内「+」管理弹窗 | 新增 / 改值 / 改类型 / 停用 / 删除 / 上移下移均正常，关闭后徽标数量正确 |
 | 标签 | 中英界面输入框前都显示 `Ref.`（不随语言变化） |
+| 多变体不共用（`19.0.2.4.0`） | 多变体产品的产品表单整块隐藏；变体 A 加的参考号不出现在变体 B |
+| 变体新增行（`19.0.2.4.0`） | 变体表单新增参考号行不报「不能同时归属产品与变体」 |
+| 变体搜索（`19.0.2.4.0`） | 订单行选产品输入变体参考号 / 产品共享参考号都能命中；变体列表命中时 name 附加「（命中参考号：xxx）」 |
 | 新建产品 | 先加参考号再保存产品，保存后参考号落库且 `reference_code_index` 已同步 |
 | 徽标 tooltip | 悬停「+N」徽标显示参考号清单（中英双语各验一遍） |
 | 只读态 | 只显示 Reference 文本与徽标 tooltip，无输入框与「+」 |

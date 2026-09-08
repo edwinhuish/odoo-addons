@@ -1,5 +1,50 @@
 # 变更日志
 
+## [19.0.2.4.0] - 2026-09-08（待验证）
+
+### 变更（多变体产品的参考号不共用）
+
+- **参考号行新增变体归属**：`product.reference.code` 增加 `product_id`（产品变体），
+  `product_tmpl_id` 改为非必填；新增 `_check_single_owner`（产品 / 变体二选一，不可双归属）
+  与 `UNIQUE(product_id, reference_code)`；`_check_reference_code_unique_per_template`
+  改为按主人去重的 `_check_reference_code_unique_per_owner`。
+- **新增 `product.product` 扩展**（`models/product_product.py`）：`variant_reference_code_line_ids`
+  （变体专属行）、`variant_reference_code_index`（trigram 索引）、`_sync_variant_reference_index()`；
+  `_search_display_name` 并入变体参考号与其产品的共享参考号；`web_search_read` 命中变体参考号时
+  同样在 `name` 后附加「（命中参考号：xxx）」。
+- **widget 按主人分流**：产品模板表单 → `reference_code_line_ids`（共享行），
+  变体表单 → `variant_reference_code_line_ids`（变体专属行，arch 用
+  `options="{'lines_field': ...}"` 显式指定）。
+- **多变体产品的模板表单整块隐藏**：Reference 区域 `invisible="product_variant_count > 1"`，
+  参考号只在各变体上维护。
+- **子行创建剥离模板默认**：`product.product.create/write` 对变体参考号行的 `(0, 0, ...)` 命令
+  强制 `product_tmpl_id=False`，避免变体 action context 的 `default_product_tmpl_id`
+  造成「同时归属产品与变体」报错（与 product_image 变体图库同一坑）。
+- **i18n / 文档同步**。
+
+### 影响
+
+- 历史数据不受影响：已有的参考号行都只有 `product_tmpl_id`（产品级共享），`product_id` 为空，
+  无需迁移脚本（新增列 + trigram 索引 + 唯一约束由 ORM 自动创建）。
+- 多变体产品：产品表单不再显示 Reference 区域；每个变体各自维护一组参考号，互不共用。
+- 单变体 / 无变体产品：产品表单维护共享行（原行为不变）；变体表单可另外维护变体专属行。
+- 搜索：变体（Many2one 指向 `product.product`、变体列表）可按本变体参考号或其所属产品的共享
+  参考号命中；产品级搜索仍只走 `reference_code_index`（不含变体专属参考号）。
+- 升级后必须强刷浏览器。
+
+### 待验证清单（目标环境）
+
+1. `odoo -d <db> -u product_reference --stop-after-init` 升级不报错（新增列 / 索引 / 唯一约束自动创建）
+2. 多变体产品：产品表单不显示 Reference 区域；打开某变体可维护自己的参考号
+3. 变体 A 新增的参考号不会出现在变体 B（两套独立）
+4. 单变体 / 无变体产品：产品表单维护共享行正常；变体表单维护变体行正常
+5. 变体表单新增参考号行不报「不能同时归属产品与变体」
+6. 搜索：订单行选产品（Many2one 指向变体）输入变体参考号 / 产品共享参考号都能命中
+7. 变体列表按参考号搜索命中时 `name` 附加「（命中参考号：xxx）」
+8. 删除变体 / 产品：对应参考号行级联清理，索引按剩余行重算
+
+---
+
 ## [19.0.2.3.0] - 2026-09-08（待验证）
 
 ### 变更（界面改造：移除「参考号」页，Reference 上移到产品名称下方）

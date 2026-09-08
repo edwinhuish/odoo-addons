@@ -157,9 +157,12 @@ msgstr "产品"
 #. module: product_reference
 #: model:ir.model.fields,help:product_reference.field_product_reference_code__product_tmpl_id
 msgid ""
-"Product template this reference belongs to; references are removed together "
-"with the product."
-msgstr "该参考号所属的产品模板；删除产品时参考号行随之级联清理。"
+"Product (shared references) this reference belongs to. Either this field or "
+"'Product Variant' must be set: shared references are maintained on the "
+"product form and are removed together with the product."
+msgstr ""
+"该参考号所属的产品（共享参考号）。本字段与「产品变体」二选一：共享参考号在产品表单维护，"
+"删除产品时参考号行随之级联清理。"
 
 #. module: product_reference
 #: model:ir.model.fields,help:product_reference.field_product_template__reference_code_line_ids
@@ -210,12 +213,6 @@ msgstr "（命中参考号：%(codes)s）"
 #: model_terms:ir.ui.view,arch_db:product_reference.product_normal_form_view_inherit
 msgid "Ref."
 msgstr "Ref."
-
-#. module: product_reference
-#. odoo-javascript
-#: code:addons/product_reference/static/src/js/product_reference_editor.js:0
-msgid "Managed on each variant"
-msgstr "在各变体上维护"
 
 #. module: product_reference
 #. odoo-javascript
@@ -303,3 +300,68 @@ msgstr "完成"
 #: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
 msgid "Close"
 msgstr "关闭"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_reference_code__product_id
+msgid "Product Variant"
+msgstr "产品变体"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_reference_code__product_id
+msgid ""
+"Product variant this reference belongs to (variant references, independent "
+"from the shared product references). Either this field or 'Product' must be "
+"set; the reference is removed together with the variant."
+msgstr ""
+"该参考号所属的产品变体（变体参考号，与产品共享参考号相互独立）。本字段与「产品」二选一；"
+"删除变体时参考号行随之级联清理。"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_product__variant_reference_code_line_ids
+msgid "Variant Reference Lines"
+msgstr "变体参考号明细"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_product__variant_reference_code_line_ids
+msgid ""
+"References specific to this variant (customer / factory / alias). They are "
+"independent from the shared product references maintained on the product "
+"form: a product with several variants does not share its references between "
+"variants."
+msgstr ""
+"本变体专属的参考号（客户参考号 / 工厂参考号 / 别名），与产品表单维护的共享参考号相互独立："
+"有多个变体的产品，参考号不在变体之间共用。"
+
+#. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_product__variant_reference_code_index
+msgid "Variant Reference Search Index"
+msgstr "变体参考号搜索索引"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_product__variant_reference_code_index
+msgid ""
+"Search index built by concatenating the references of this variant. It is "
+"maintained automatically when variant reference lines change; do not edit it "
+"manually."
+msgstr "本变体所有参考号拼接后的搜索索引，由变体参考号行增删改时自动维护，请勿手工编辑。"
+
+#. module: product_reference
+#: model:ir.model.constraint,message:product_reference.constraint_reference_code_unique_per_variant
+msgid "Reference codes must be unique within the same product variant."
+msgstr "同一产品变体内参考号不可重复。"
+
+#. module: product_reference
+#. odoo-python
+#: code:addons/product_reference/models/product_reference_code.py:0
+msgid ""
+"A reference must belong either to a product (shared references) or to a "
+"product variant (variant references)."
+msgstr "一条参考号必须归属产品（共享参考号）或产品变体（变体参考号）之一。"
+
+#. module: product_reference
+#. odoo-python
+#: code:addons/product_reference/models/product_reference_code.py:0
+msgid ""
+"A reference cannot belong to both a product and a product variant: choose "
+"either the shared product references or the variant references."
+msgstr "一条参考号不能同时归属产品与产品变体：请选择共享参考号或变体参考号之一。"

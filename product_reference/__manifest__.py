@@ -1,7 +1,7 @@
 {
     "name": "Product References",
-    "version": "19.0.2.3.0",
-    "summary": "Attach several references to one product and find the product from any of its references; the standard Odoo Reference is edited right under the product name and the extra references are managed from the + button next to it",
+    "version": "19.0.2.4.0",
+    "summary": "Attach several references to one product and find the product from any of its references; the standard Odoo Reference is edited right under the product name and the extra references are managed from the + button inside it (a product with several variants keeps one set of references per variant)",
     "description": """
         Product reference management module for foreign trade SOHO scenarios.
 
@@ -12,10 +12,15 @@
         - The standard Odoo Reference (default_code) is edited directly under the
           product name, on both the product form and the product variant form;
           no extra tab is added to the product form
-        - The "+" button next to the Reference field opens a dialog listing the
-          extra references of the product: add, edit, reorder, disable and delete
-          lines; changes are kept on the product form and are written when the
-          product is saved (a brand new product can get references right away)
+        - The "+" button inside the Reference field opens a dialog listing the
+          extra references of the product (or of the variant on a variant form):
+          add, edit, reorder, disable and delete lines; changes are kept on the
+          form record and are written when the record is saved (a brand new
+          product can get references right away)
+        - A product with several variants does not share its references: the
+          Reference block is hidden on the product form and every variant keeps
+          its own set of references (variant references are independent from the
+          shared product references, like the variant image gallery)
         - When a product carries extra references, a "+N" badge appears next to
           the button and hovering it shows the list of references in a tooltip
         - References live in a dedicated line model exposed as a One2many on

@@ -11,7 +11,7 @@
 - 新建模型：`product.reference.code`（原名 `product.model.code`）
 - 继承模型：`product.template`
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.2.3.0`
+- 当前版本：`19.0.2.4.0`
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用
@@ -24,8 +24,20 @@
 每次修改代码必须保证以下行为不变。
 
 1. **参考号用独立明细模型，禁止逗号分隔塞进单个 Char**
-   - `product.reference.code` + `One2many` 挂在 `product.template` 上
+   - `product.reference.code` + `One2many`：产品级共享行挂在 `product.template`
+     （`reference_code_line_ids`），变体专属行挂在 `product.product`
+     （`variant_reference_code_line_ids`）
    - 禁止为图省事把多个参考号拼到一个 `Char` 字段里
+
+1.1. **参考号归属二选一，多变体产品不共用**（`19.0.2.4.0`）
+   - 每一行要么属于产品（`product_tmpl_id`），要么属于变体（`product_id`），
+     `_check_single_owner` 兜底；禁止放宽成「两者都为空 / 两者都有」
+   - 多变体产品的产品表单整块隐藏 Reference 区域（`invisible="product_variant_count > 1"`），
+     参考号只在各变体上维护
+   - 变体参考号子行创建时必须剥离 context 的 `default_product_tmpl_id`
+     （`product.product.create/write` 里强制 `product_tmpl_id=False`），否则双归属报错
+   - 去重约束按主人分别成立：`UNIQUE(product_tmpl_id, reference_code)` 与
+     `UNIQUE(product_id, reference_code)`
 
 2. **搜索在数据库层实现，禁止 Python 侧全表过滤**
    - 冗余可存储字段 `reference_code_index`（`Text` + trigram 索引）拼接所有参考号
@@ -69,8 +81,9 @@
      禁止改回 `Reference` 或给它加中文译文
    - 「+」按钮**内置在输入框右端**（外层容器带 `o_input`，嵌套 input 由原生 `.o_input .o_input`
      规则自动去边框 / 去内边距），不要移到输入框外面，也不要改成文字按钮
-   - 变体表单（`product.product`）经 `_inherits` 委托读写**同一组产品级**参考号行，
-     不做「变体级参考号副本」
+   - 变体表单（`product.product`）维护**变体专属行** `variant_reference_code_line_ids`，
+     与产品级共享行完全独立；widget 通过 `options.lines_field` / `resModel` 分流，
+     不要把变体表单接到 `reference_code_line_ids` 上（那会变成变体之间共用）
    - 原生 Reference 在常规信息页 / Codes 组被隐藏，避免与标题区重复；新增表单入口时必须同步处理
 
 10. **模块 / 模型 / 字段改名必须有迁移与运维步骤**
@@ -99,8 +112,9 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 模块元数据、依赖、数据文件声明（security → views） |
-| `models/product_reference_code.py` | 参考号明细模型：字段、同产品去重约束、冗余索引同步、级联 |
-| `models/product_template.py` | 扩展 `product.template`：One2many、冗余字段、`_search_display_name`、`web_search_read` |
+| `models/product_reference_code.py` | 参考号明细模型：字段、归属二选一约束、按主人去重、冗余索引同步、级联 |
+| `models/product_template.py` | 扩展 `product.template`：共享参考号 One2many、冗余字段 `reference_code_index`、`_search_display_name`、`web_search_read`、搜索词提取（供变体侧复用） |
+| `models/product_product.py` | 扩展 `product.product`：变体专属 One2many `variant_reference_code_line_ids`、冗余字段 `variant_reference_code_index`、变体搜索与命中提示、子行剥离模板默认 |
 | `views/product_template_views.xml` | 产品模板表单标题区 Reference 编辑器（继承 `product.product_template_form_view`）、隐藏常规信息页原生 Reference、列表参考号列、搜索框并入参考号搜索 |
 | `views/product_product_views.xml` | 变体主表单（`product.product.form`）与变体独立编辑表单（`product_variant_easy_edit_view`）的标题区 Reference 编辑器，并隐藏两处重复的原生 Reference |
 | `views/product_reference_code_views.xml` | 参考号独立列表/表单/搜索视图与菜单动作 |
@@ -122,9 +136,18 @@
 
 ### 改变参考号拼接分隔符
 
-只改 `product_template.py` 的 `_sync_reference_index`（当前用 `\n`）。改后对历史数据需触发一次同步，可在 shell 执行：
+只改 `product_template.py` 的 `_sync_reference_index` 与 `product_product.py` 的
+`_sync_variant_reference_index`（当前都用 `\n`）。改后对历史数据需触发一次同步，可在 shell 执行：
 ```python
 env['product.template'].search([])._sync_reference_index()
+env['product.product'].search([])._sync_variant_reference_index()
+```
+
+### 变体参考号索引与行不一致
+
+在 shell 执行：
+```python
+env['product.product'].search([])._sync_variant_reference_index()
 ```
 
 ### 让参考号出现在其他单据的 Many2one 下拉

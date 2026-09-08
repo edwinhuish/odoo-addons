@@ -9,9 +9,12 @@ import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { Component } from "@odoo/owl";
 import { useProductReferenceManage } from "./product_reference_manage";
 
-// 额外参考号的 One2many（挂在 product.template 上；product.product 通过
-// _inherits 委托读取同一组行，因此两种表单共用同一个字段名）
+// 额外参考号的 One2many，按主人分流（多变体产品的参考号不共用）：
+// - 产品模板表单 → reference_code_line_ids（产品级共享行，反向到 product_tmpl_id）
+// - 产品变体表单 → variant_reference_code_line_ids（变体专属行，反向到 product_id）
+// 视图 arch 可用 options="{'lines_field': '...'}" 显式指定（默认按 resModel 分流）。
 const LINES_FIELD = "reference_code_line_ids";
+const VARIANT_LINES_FIELD = "variant_reference_code_line_ids";
 
 /**
  * 产品 Reference 编辑器 widget（放在产品名称下方）。
@@ -25,8 +28,8 @@ const LINES_FIELD = "reference_code_line_ids";
  *
  * 只读态：只显示 Reference 文本与徽标 tooltip，不渲染输入框与「+」按钮。
  *
- * 多变体产品（仅 product.template）：模板级 Reference 由各变体各自维护，
- *   此时输入框换成「按变体维护」的提示文本，管理入口保留。
+ * 多变体产品：模板表单整块由 arch 的 `invisible="product_variant_count > 1"` 隐藏，
+ *   参考号只在各变体表单维护（变体专属行），不共用。
  */
 export class ProductReferenceEditor extends Component {
     static template = "product_reference.ProductReferenceEditor";
@@ -46,7 +49,12 @@ export class ProductReferenceEditor extends Component {
     // ------------------------------------------------------------------
 
     get linesField() {
-        return this.props.linesField || LINES_FIELD;
+        if (this.props.linesField) {
+            return this.props.linesField;
+        }
+        return this.props.record.resModel === "product.product"
+            ? VARIANT_LINES_FIELD
+            : LINES_FIELD;
     }
 
     get list() {
@@ -97,19 +105,6 @@ export class ProductReferenceEditor extends Component {
         return formatChar(this.props.record.data[this.props.name], {}) || "";
     }
 
-    /** 多变体模板：Reference 由各变体维护，模板侧不提供输入。 */
-    get isMultiVariant() {
-        const record = this.props.record;
-        if (record.resModel !== "product.template") {
-            return false;
-        }
-        return (record.data.product_variant_count || 0) > 1;
-    }
-
-    get multiVariantHint() {
-        return _t("Managed on each variant");
-    }
-
     get addLabel() {
         return _t("Add a reference");
     }
@@ -145,7 +140,8 @@ export const productReferenceEditorField = {
     isEmpty: () => false,
     extractProps: ({ options, placeholder }) => ({
         placeholder,
-        linesField: (options && options.lines_field) || LINES_FIELD,
+        // 未显式指定时由组件按 resModel 分流（产品 → 共享行，变体 → 变体专属行）
+        linesField: (options && options.lines_field) || "",
     }),
 };
 

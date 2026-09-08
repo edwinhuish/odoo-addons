@@ -18,12 +18,15 @@
                 <div name="product_reference" class="o_product_reference_area mt-1">
                     <!-- 标签固定为 Ref.（中文界面同样显示 Ref.，不做本地化翻译） -->
                     <label for="default_code" string="Ref."/>
+                    <!-- lines_field：变体表单维护的是「变体专属」参考号行，
+                         与产品模板表单的共享行相互独立（多变体产品参考号不共用） -->
                     <field name="default_code"
                            widget="product_reference_editor"
                            nolabel="1"
-                           placeholder="e.g. REF-A, SKU-1234"/>
-                    <!-- 额外参考号 One2many（不可见）：提供新建行所需的子字段元数据 -->
-                    <field name="reference_code_line_ids" invisible="1">
+                           placeholder="e.g. REF-A, SKU-1234"
+                           options="{'lines_field': 'variant_reference_code_line_ids'}"/>
+                    <!-- 变体参考号 One2many（不可见）：提供新建行所需的子字段元数据 -->
+                    <field name="variant_reference_code_line_ids" invisible="1">
                         <list editable="bottom">
                             <field name="sequence" widget="handle"/>
                             <field name="reference_code"/>

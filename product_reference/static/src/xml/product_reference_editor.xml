@@ -23,14 +23,10 @@
             </t>
             <t t-else="">
                 <div class="o_pr_row d-flex align-items-center flex-wrap gap-1">
-                    <span t-if="isMultiVariant"
-                          class="o_pr_hint text-muted"
-                          t-esc="multiVariantHint"/>
                     <!-- 输入框：原生 CharField + 内置在输入框右端的「+」（新增参考号）。
                          外层带 o_input：原生样式里嵌套的 .o_input 自动去边框去内边距，
                          视觉上「+」就在输入框里面 -->
-                    <div t-else=""
-                         class="o_pr_input o_input d-flex align-items-center">
+                    <div class="o_pr_input o_input d-flex align-items-center">
                         <CharField record="props.record"
                                    name="props.name"
                                    readonly="props.readonly"

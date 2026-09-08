@@ -135,9 +135,11 @@ class ProductTemplate(models.Model):
         return result
 
     @api.model
-    def _extract_reference_code_search_terms(self, domain):
-        """从搜索域中抽取针对 ``reference_code_index`` 的字面量。
+    def _extract_reference_code_search_terms(self, domain,
+                                             field_names=("reference_code_index",)):
+        """从搜索域中抽取针对参考号冗余字段（默认 ``reference_code_index``）的字面量。
 
+        ``field_names`` 供变体侧复用（``variant_reference_code_index`` 等）。
         仅识别正向 ``ilike`` / ``like`` / ``=`` / ``in`` 中的字符串值，
         否定操作符和复杂表达式不参与提示拼接（仍参与搜索本身）。
         """
@@ -155,7 +157,7 @@ class ProductTemplate(models.Model):
             if not (isinstance(item, (list, tuple)) and len(item) == 3):
                 continue
             field_name, op, val = item
-            if field_name != "reference_code_index":
+            if field_name not in field_names:
                 continue
             if op in ("ilike", "like", "=", "in"):
                 if isinstance(val, str):
