@@ -9,33 +9,30 @@ import { getProductCardPayload } from "./product_card_model";
 
 const IMAGE_FIELD = "image_512";
 
-let _setupCount = 0;
-
 /**
  * 单张产品卡片：顶部主图轮播（左右箭头 / 滑动），主体 title / reference /
  * on hand，多变体产品底部按属性分行渲染变体按钮。
  *
- * 数据均来自 model 在 load 后填充的 WeakMap（按 resId 索引，见 product_card_model.js），
- * 切换变体仅改前端 state，不发请求。
+ * 数据均来自 model 渲染器（fillProductCardPayload）填充的全局 Map（按 resId 索引，
+ * 见 product_card_model.js），切换变体仅改前端 state，不发请求。
+ *
+ * 关键：payload getter 用 setup 缓存的 _resId（非 reactive），不访问
+ * dataState.record / props.record——KanbanRecord 父类的 useRecordObserver effect
+ * 监听 props.record 并写 dataState.record，若 getter 再访问这些 reactive state
+ * 会与 effect 冲突触发 render 循环卡死。
  */
 export class ProductCardRecord extends KanbanRecord {
     static template = "product_card_view.Card";
 
     setup() {
         super.setup();
-        _setupCount++;
-        if (_setupCount <= 10) {
-            console.warn("[PCV DEBUG] setup #" + _setupCount);
-        }
         this.cardState = useState({
             selected: {}, // {attribute_id: value_id}
             imgIndex: 0,
         });
         this._swipeSuppressUntil = 0;
         this._pointerX = null;
-        // 缓存 resId 到非 reactive 实例属性：payload getter 用它取全局 Map，
-        // 不访问任何 reactive state（dataState.record / props.record 都会触发
-        // KanbanRecord 的 useRecordObserver effect 链 → render 循环卡死）。
+        // 缓存 resId 到非 reactive 实例属性
         this._resId = this.props.record?.resId;
         onWillUpdateProps((nextProps) => {
             this._resId = nextProps.record?.resId;
@@ -47,13 +44,10 @@ export class ProductCardRecord extends KanbanRecord {
     // ---------------------------------------------------------------------
 
     get payload() {
-        // 用 setup 缓存的 _resId（非 reactive），不访问 dataState.record / props.record，
-        // 避开 KanbanRecord useRecordObserver effect 链导致的 render 循环。
         return getProductCardPayload(this._resId);
     }
 
     get templateId() {
-        // 用缓存的 _resId 拼 image URL（非 reactive，避开 effect 链）
         return this._resId;
     }
 
@@ -180,7 +174,6 @@ export class ProductCardRecord extends KanbanRecord {
         return _t("Product image");
     }
 
-    // 标签文案走方法返回，不在模板里直接调 _t（OWL 模板 ctx 无全局 _t）
     get referenceLabel() {
         return _t("Reference");
     }

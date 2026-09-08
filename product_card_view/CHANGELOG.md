@@ -41,11 +41,19 @@
     ④ 第四版改用 module-level WeakMap by model（key=`toRaw(model)` → resId → payload），
        重写 `load` 在 `super.load` 后填充。toRaw 解决了 raw vs proxy 的 identity MISS，
        但又触发 `super.load` 的 `notify` → `onUpdate` → 再调 `load` → 无限循环卡死；
-    ⑤ 最终回到 `_loadData`（在 root 创建前执行，不访问 root，super.load 用 result 创建
-       root 后才 notify，不触发 onUpdate→load 循环）+ 全局 Map by resId（不挂对象 → 不被
-       `_createRoot` 丢弃；不触发 reactive；不依赖 model identity → 无 toRaw 问题）。
-       卡片通过 `getProductCardPayload(record.resId)` 取；`_loadData` 在 root 创建前完成
-       填充，root 创建后 KanbanCard 渲染即有数据。
+    ⑤ Renderer 方案：完全不重写 model 的 `_loadData` / `load`（前几版都触发 reactive 循环），
+       改由 ProductCardRenderer 的 `onWillStart` / `onWillUpdateProps` 生命周期钩子拉取
+       payload 填入**非 reactive 的 module-level 全局 Map**（按 resId 索引）。生命周期
+       钩子不在 reactive effect 内，不触发 Owl DataModel 的 onUpdate / reload 循环。
+       `ProductCardModel` 只保留 `withCache = false`，不重写任何方法。卡片通过
+       `getProductCardPayload(resId)` 取；Renderer 钩子等 `await rpc` resolve 才渲染。
+    ⑥ _resId 缓存切断 useRecordObserver 循环：KanbanRecord 父类 setup 注册了
+       `useRecordObserver`（effect 监听 `props.record` 并写 `dataState.record` 触发
+       re-render）；卡片 `payload` getter 若访问 `this.props.record.resId` 或
+       `this.dataState.record?.id?.value`（reactive），会与该 effect 冲突 → render
+       循环卡死。修复：setup 时把 `resId` 缓存到**非 reactive**实例属性 `_resId`
+       （`onWillUpdateProps` 同步更新），payload / templateId getter 用 `_resId` 取，
+       不访问任何 reactive state。
     同时修正 `templateId` 用 `record.resId`（原用 `record.id` 是 datapoint 内部编号，
     会导致图片 URL 404）。
 

@@ -14,14 +14,54 @@
     </t>
 
     <!--
-      产品卡片本体（最小诊断版：暂时只渲染 title / reference / on hand，
-      删掉图片轮播与变体按钮，用于定位渲染循环源）。
+      产品卡片本体：
+      布局：顶部图片轮播（箭头 + 计数 + 滑动），主体 title / reference / on hand，
+      多变体产品底部按属性分行渲染变体按钮。交互区统一加 o_product_card__stop 防止误打开产品。
     -->
     <t t-name="product_card_view.Card">
         <article class="o_kanban_record o_product_card d-flex flex-column overflow-hidden"
             t-att-tabindex="0"
             t-on-click="onCardClick"
+            t-on-keydown="onCardKeyDown"
             t-att-title="title">
+            <!-- 顶部图片轮播 -->
+            <div class="o_product_card__imgbox position-relative"
+                t-on-pointerdown="onImagePointerDown"
+                t-on-pointerup="onImagePointerUp"
+                t-on-pointerleave="onImagePointerCancel"
+                t-on-pointercancel="onImagePointerCancel">
+                <div class="o_product_card__track d-flex"
+                    t-att-style="`transform: translateX(${-100 * activeImageIndex}%)`">
+                    <t t-foreach="images" t-as="image" t-key="`${image.model}-${image.id}`">
+                        <div class="o_product_card__slide flex-shrink-0">
+                            <img class="o_product_card__img"
+                                t-att-src="imageSrc(image)"
+                                t-att-alt="imageAlt()"
+                                loading="lazy"
+                                draggable="false" />
+                        </div>
+                    </t>
+                </div>
+                <t t-if="imageCount > 1">
+                    <button type="button"
+                        class="btn btn-link o_product_card__arrow o_product_card__arrow_left o_product_card__stop"
+                        t-att-aria-label="arrowTitle('previous')"
+                        t-on-click.stop="previousImage">
+                        <i class="fa fa-chevron-left" aria-hidden="true" />
+                    </button>
+                    <button type="button"
+                        class="btn btn-link o_product_card__arrow o_product_card__arrow_right o_product_card__stop"
+                        t-att-aria-label="arrowTitle('next')"
+                        t-on-click.stop="nextImage">
+                        <i class="fa fa-chevron-right" aria-hidden="true" />
+                    </button>
+                    <span class="o_product_card__counter o_product_card__stop">
+                        <t t-esc="activeImageIndex + 1" /> / <t t-esc="imageCount" />
+                    </span>
+                </t>
+            </div>
+
+            <!-- 主体信息 -->
             <div class="o_product_card__body d-flex flex-column flex-grow-1">
                 <div class="o_product_card__title text-truncate" t-att-title="title">
                     <t t-esc="title" />
@@ -41,6 +81,34 @@
                     </span>
                 </div>
             </div>
+
+            <!-- 变体按钮行（一属性一行） -->
+            <t t-if="rows.length">
+                <div class="o_product_card__variants o_product_card__stop">
+                    <t t-foreach="rows" t-as="row" t-key="row.attr_id">
+                        <div class="o_product_card__row d-flex align-items-start">
+                            <span class="o_product_card__attr text-nowrap" t-att-title="row.attr_name">
+                                <t t-esc="row.attr_name" />
+                            </span>
+                            <div class="o_product_card__values d-flex flex-wrap">
+                                <t t-foreach="row.values" t-as="value" t-key="value.id">
+                                    <button type="button"
+                                        class="o_product_card__value btn btn-sm"
+                                        t-att-class="{
+                                            active: isValueSelected(row.attr_id, value.id),
+                                            disabled: !isValueAllowed(row.attr_id, value.id),
+                                        }"
+                                        t-on-click.stop="selectValue(row.attr_id, value.id)"
+                                        t-att-disabled="!isValueAllowed(row.attr_id, value.id)"
+                                        t-att-title="value.name">
+                                        <t t-esc="value.name" />
+                                    </button>
+                                </t>
+                            </div>
+                        </div>
+                    </t>
+                </div>
+            </t>
         </article>
     </t>
 

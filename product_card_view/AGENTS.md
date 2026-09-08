@@ -46,17 +46,16 @@
    - 违反后果：卡片信息口径混乱
 
 6. **每页只发一次数据请求**
-   - Model 重写 `_loadData`（不是 `load`），在 `super._loadData` 返回 `result` 后、
-     `_createRoot` 用 result 重建 Record 前，批量请求 `/product_card/payload`，按 resId 填入
-     **非 reactive 的 module-level 全局 Map**（key=resId → payload）；卡片通过
-     `getProductCardPayload(record.resId)` 取
-   - 必须在 `_loadData` 而非 `load` 填充：`_loadData` 在 root 创建前执行，不访问 root；
-     重写 `load` 会触发 `super.load` 的 `notify` → `onUpdate` → 再调 `load` → 无限循环卡死
-   - 必须用非 reactive 全局存储（普通 Map by resId）：
-     ① 挂到 `result.records` 会被 `_createRoot` 重建 Record 时丢弃；
-     ② 给 reactive model 实例赋值会触发 reload 循环（keepLast 竞争 + 空响应 + 卡死）；
-     ③ 给 reactive Record 实例加属性会触发 Owl DataModel 内部 effect（dirty/onUpdate）→ 循环卡死；
-     ④ by-model WeakMap 需 `toRaw`（load 里 this 是 raw、record.model 是 proxy，identity 不等）
+   - 由 ProductCardRenderer 的生命周期钩子 `onWillStart` / `onWillUpdateProps` 拉取
+     `/product_card/payload`，填入**非 reactive 的 module-level 全局 Map**（key=resId → payload）；
+     卡片通过 `getProductCardPayload(resId)` 取。`ProductCardModel` 只保留 `withCache = false`。
+   - 必须在 Renderer 钩子拉取（不在 model 的 `_loadData` / `load`）：钩子不在 reactive
+     effect 内，不触发 Owl DataModel 的 onUpdate / reload 循环；重写 model 方法会触发循环卡死
+   - 卡片 getter **必须用非 reactive 的 `resId`**（setup 缓存到 `this._resId`，
+     `onWillUpdateProps` 更新）：KanbanRecord 父类 setup 注册了 `useRecordObserver`
+     （effect 监听 `props.record` 并写 `dataState.record` 触发 re-render）；若 payload
+     getter 访问 `props.record.resId` 或 `dataState.record?.id?.value`（reactive），
+     会与该 effect 冲突 → render 循环卡死
    - 违反后果：页面卡顿，后端压力大；payload 关联错误会导致卡片空白或前端卡死
 
 7. **所有用户可见文本源语言为英文（`en_US`）**
