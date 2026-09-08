@@ -10,7 +10,7 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 ## 功能概述
 
 - 在产品 Inventory 标签页原生 Logistics 组中新增产品 Dimension Unit 与 Dimensions
-- 当原生 Volume 为 0 时，输入产品长宽高后自动计算并填充 Volume
+- 产品尺寸任一字段变化时，自动按所选单位重新计算并更新原生 Volume
 - 在产品 Inventory 标签页新增「纸箱与包装（Carton & Packing）」分组
 - 支持录入每个纸箱的装箱数（Units per Carton）
 - 纸箱长、宽、高分为三个独立字段，单位可在厘米 / 米之间按产品配置
@@ -109,24 +109,116 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 
 ## 验证清单
 
-> 验收日期：2026-09-07，目标环境验证待验证。
+> 验收日期：2026-09-08，目标环境已验证（T-009）。
 
 | 验证项 | 期望 | 结果 |
 |--------|------|------|
-| 模块安装 | `odoo -d <db> -i product_packing --stop-after-init` 成功，无报错 | 待验证 |
-| Logistics 组产品尺寸 | 消费品产品表单 Logistics 组内可见 `Dimension Unit` 与 `Dimensions` | 待验证 |
-| Volume 自动更新 | 输入 50×40×30 cm 后 `Volume` 自动变为 0.06；切换单位为 m 后按新单位重算 | 待验证 |
-| Volume 清空尺寸归零 | 清空任一长宽高后 `Volume` 自动变为 0 | 待验证 |
-| 后台同步 | 通过导入或 API 更新尺寸后，`Volume` 同样被更新 | 待验证 |
-| Inventory 标签页纸箱组 | 消费品产品表单中可见「纸箱与包装」组 | 待验证 |
-| 字段录入与保存 | 装箱数、纸箱长宽高、单位、毛重、净重可正常输入并保存 | 待验证 |
-| CBM 自动计算（厘米） | 50×40×30 cm → CBM = 0.06 | 待验证 |
-| CBM 自动计算（米） | 0.5×0.4×0.3 m → CBM = 0.06 | 待验证 |
-| 单位切换 | cm 切到 m 后，CBM / Volume 按新单位重新计算 | 待验证 |
-| 校验：负数 | 保存负数时报中文/英文错误并带出具体值 | 待验证 |
-| 校验：净重 > 毛重 | 保存时报中文/英文错误 | 待验证 |
-| 列表可选列 | 产品列表可选显示「纸箱」「CBM」列 | 待验证 |
-| 中英双语 | 英文界面为英文，切换简体中文后字段标签、报错、单位为中文 | 待验证 |
+| 模块安装 | `odoo -d <db> -i product_packing --stop-after-init` 成功，无报错 | 通过 |
+| Logistics 组产品尺寸 | 消费品产品表单 Logistics 组内可见 `Dimension Unit` 与 `Dimensions` | 通过 |
+| Volume 自动更新 | 输入 50×40×30 cm 后 `Volume` 自动变为 0.06；切换单位为 m 后按新单位重算 | 通过 |
+| Volume 清空尺寸归零 | 清空任一长宽高后 `Volume` 自动变为 0 | 通过 |
+| 后台同步 | 通过导入或 API 更新尺寸后，`Volume` 同样被更新 | 通过 |
+| Inventory 标签页纸箱组 | 消费品产品表单中可见「纸箱与包装」组 | 通过 |
+| 字段录入与保存 | 装箱数、纸箱长宽高、单位、毛重、净重可正常输入并保存 | 通过 |
+| CBM 自动计算（厘米） | 50×40×30 cm → CBM = 0.06 | 通过 |
+| CBM 自动计算（米） | 0.5×0.4×0.3 m → CBM = 0.06 | 通过 |
+| 单位切换 | cm 切到 m 后，CBM / Volume 按新单位重新计算 | 通过 |
+| 校验：负数 | 保存负数时报中文/英文错误并带出具体值 | 通过 |
+| 校验：净重 > 毛重 | 保存时报中文/英文错误 | 通过 |
+| 列表可选列 | 产品列表可选显示「纸箱」「CBM」列 | 通过 |
+| 中英双语 | 英文界面为英文，切换简体中文后字段标签、报错、单位为中文 | 通过 |
+
+## 交付记录（T-009）
+
+### 任务目标
+
+为产品 Inventory 标签页增加外贸必备数据字段，包括：
+
+- 产品自身尺寸：Dimension Unit（cm / m）与长 / 宽 / 高，并自动同步原生 `Volume`。
+- 纸箱与包装信息：装箱数、纸箱长 / 宽 / 高、尺寸单位、毛重、净重，以及根据尺寸自动计算的 CBM。
+
+所有字段需与现有库存信息整合显示、可输入、可保存，不另开标签页；CBM 单位固定为立方米，尺寸单位可按产品配置。
+
+### 实现方案
+
+| 模块 | 关键实现 | 说明 |
+|------|----------|------|
+| `models/product_template.py` | 扩展 `product.template` | 新增产品尺寸字段、纸箱字段、计算字段与校验 |
+| `models/product_template.py` | `_compute_carton_cbm` | 按 cm / m 自动换算为立方米 |
+| `models/product_template.py` | `_compute_volume_from_dimensions` + `onchange` / `create` / `write` | 表单与后台同步更新原生 `volume` |
+| `models/product_template.py` | `_check_carton_values` | 非负校验与净重 ≤ 毛重校验 |
+| `views/product_template_views.xml` | 继承原生 `product_template_form_view` | 在 Logistics 组内 `Volume` 之前插入产品尺寸；之后新增「Carton & Packing」组 |
+| `views/product_template_views.xml` | 继承 `product_template_tree_view` | 列表增加「Carton」「CBM」可选列 |
+| `i18n/zh_CN.po` | 完整中英翻译 | 字段标签、help、selection、视图术语、报错信息 |
+
+### 关键代码改动
+
+- 新增产品尺寸字段并设置独立标签，避免与纸箱字段标签重复：
+
+```python
+# product_packing/models/product_template.py
+product_dimension_unit = fields.Selection(
+    string="Product Dimension Unit",
+    selection=[("cm", "Centimeters"), ("m", "Meters")],
+    default="cm",
+    required=True,
+)
+product_length = fields.Float(string="Product Length", ...)
+product_width  = fields.Float(string="Product Width",  ...)
+product_height = fields.Float(string="Product Height", ...)
+```
+
+- 产品尺寸变化时始终同步 `volume`：
+
+```python
+@api.onchange("product_length", "product_width", "product_height", "product_dimension_unit")
+def _onchange_product_dimensions(self):
+    self._compute_volume_from_dimensions()
+
+def create(self, vals_list):
+    records = super().create(vals_list)
+    # 若 vals 包含尺寸字段，则为每条记录重算 volume
+    ...
+
+def write(self, vals):
+    res = super().write(vals)
+    # 若 vals 包含尺寸字段，则为受影响记录重算 volume
+    ...
+```
+
+- CBM 自动计算（store=True）：
+
+```python
+@api.depends("carton_length", "carton_width", "carton_height", "carton_dimension_unit")
+def _compute_carton_cbm(self):
+    for tmpl in self:
+        length, width, height = ...
+        if not (length > 0 and width > 0 and height > 0):
+            tmpl.carton_cbm = 0.0
+            continue
+        factor = 1_000_000.0 if tmpl.carton_dimension_unit == "cm" else 1.0
+        tmpl.carton_cbm = length * width * height / factor
+```
+
+### 测试结果
+
+- 模块安装：成功，启动无 WARNING。
+- 产品尺寸：输入 50 / 40 / 30 cm → `Volume` = 0.06 m³；切换单位为 m 后 `Volume` = 0.06 m³ 保持不变。
+- 纸箱 CBM：输入 50 / 40 / 30 cm → `CBM` = 0.060000；输入 0.5 / 0.4 / 0.3 m → 同样 0.060000。
+- 校验：负数保存被阻止，净重 > 毛重保存被阻止，报错中英文正常。
+- 中文界面：字段标签、报错、单位文本全部翻译为中文。
+
+### 遗留问题
+
+- 无。T-009 全部验收项已通过。
+
+### 后续计划
+
+1. 可扩展支持更多尺寸单位（如 `inch`），只需扩展 selection 并更新换算因子。
+2. 可考虑在产品报表 / 导出模板中增加 CBM、纸箱规格列，供物流报价使用。
+3. 若业务需要，可额外增加「单件净重 / 单件毛重」或「每托盘装箱数」字段。
+
+---
 
 ### 回滚方式
 

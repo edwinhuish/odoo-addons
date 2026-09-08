@@ -105,6 +105,53 @@
 
 ---
 
+## T-009 开发复盘与关键经验
+
+### 需求回顾
+
+为产品 Inventory 标签页增加外贸常用包装信息，包括：
+
+- 产品自身尺寸与原生 `Volume` 自动联动。
+- 纸箱与包装信息：装箱数、长宽高、单位、毛重、净重、自动 CBM。
+
+### 关键决策
+
+1. **纯 `product.template` 继承**
+   - 不新建模型，最小化依赖与权限复杂度。
+   - 所有数据随产品表单一起保存，无需额外入口。
+2. **独立长宽高字段**
+   - 比单一「规格」字符串更利于后续报表、导出、接口读取。
+3. **`store=True` 计算字段**
+   - `carton_cbm` 与 `carton_dimension_spec` 直接存储，列表视图无需逐行计算。
+4. **Volume 联动同时覆盖 `onchange` / `create` / `write`**
+   - 保证表单实时预览与后台批量更新（导入 / API）结果一致。
+5. **字段标签去重**
+   - 产品尺寸字段使用 `Product Dimension Unit` / `Product Length` / `Product Width` / `Product Height`，避免与纸箱字段产生 `ir.model` WARNING。
+   - 视图 `<label>` 仍显示「Dimension Unit / Dimensions」，保持界面简洁。
+
+### 踩坑记录
+
+1. **字段标签重复 WARNING**
+   - 现象：升级后 Odoo 日志提示 `Two fields (...) of product.template() have the same label: Dimension Unit`。
+   - 原因：产品尺寸与纸箱尺寸字段共用 `Dimension Unit` / `Length` / `Width` / `Height` 字段标签。
+   - 解法：为产品尺寸字段加 `Product` 前缀，纸箱字段保持原标签。
+2. **视图术语未翻译**
+   - 现象：中文环境下产品表单的「Dimension Unit」标签仍显示英文。
+   - 原因：该标签来自 `<label string="Dimension Unit"/>`，不是字段标签；`i18n/zh_CN.po` 缺少 `model_terms:ir.ui.view` 对应条目。
+   - 解法：补充 `model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton` 的翻译条目。
+3. **Volume 仅在表单端联动**
+   - 现象：通过导入更新尺寸后 `Volume` 未更新。
+   - 原因：仅靠 `@api.onchange` 只在表单端生效。
+   - 解法：覆盖 `create` / `write`，在包含尺寸字段的 vals 时调用 `_compute_volume_from_dimensions()`。
+
+### 可复用经验
+
+- 同一模型上多组同义字段（如「产品尺寸」与「纸箱尺寸」）必须给每组字段独立 `string`，否则 Odoo 启动时会抛 WARNING。
+- 视图中的 `<label>` / `<group string="..."/>` 等静态文本需在 `i18n/zh_CN.po` 中使用 `model_terms:ir.ui.view` 翻译。
+- 计算字段若要在列表 / 导出中高性能使用，优先设置 `store=True`，并通过 `@api.depends` 保证自动更新。
+
+---
+
 ## 变更记录规范
 
 每次功能修改后必须更新：
