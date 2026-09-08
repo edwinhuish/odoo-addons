@@ -38,12 +38,14 @@
        reload 循环（keepLast 竞争 + 第二次空响应 + 页面一直加载中）；
     ③ 第三版重写 `load`，按 resId 挂到 reactive `record.productCardData`，给 reactive
        Record 实例加属性触发 Owl DataModel 内部 effect（dirty/onUpdate）→ 前端卡死；
-    ④ 最终改用 module-level **非 reactive WeakMap**（key=model 的 **raw** 实例 → resId → payload），
-       `load` 中填充，卡片通过 `getProductCardPayload(record.model, record.resId)` 取。
-       完全避开给 reactive 对象加属性，无循环；ViewController await load 故渲染时已填充，
-       reload 重建 root 触发重新渲染，无需 record 级 reactivity（变体切换走卡片内 useState）。
-       WeakMap key 两端都用 `toRaw()` 统一为 raw：load 里 `this` 是 raw，而 `record.model`
-       是 reactive proxy（Owl reactive proxy 调方法时 this 绑定到 raw），identity 不等会 MISS。
+    ④ 第四版改用 module-level WeakMap by model（key=`toRaw(model)` → resId → payload），
+       重写 `load` 在 `super.load` 后填充。toRaw 解决了 raw vs proxy 的 identity MISS，
+       但又触发 `super.load` 的 `notify` → `onUpdate` → 再调 `load` → 无限循环卡死；
+    ⑤ 最终回到 `_loadData`（在 root 创建前执行，不访问 root，super.load 用 result 创建
+       root 后才 notify，不触发 onUpdate→load 循环）+ 全局 Map by resId（不挂对象 → 不被
+       `_createRoot` 丢弃；不触发 reactive；不依赖 model identity → 无 toRaw 问题）。
+       卡片通过 `getProductCardPayload(record.resId)` 取；`_loadData` 在 root 创建前完成
+       填充，root 创建后 KanbanCard 渲染即有数据。
     同时修正 `templateId` 用 `record.resId`（原用 `record.id` 是 datapoint 内部编号，
     会导致图片 URL 404）。
 

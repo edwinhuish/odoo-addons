@@ -46,15 +46,17 @@
    - 违反后果：卡片信息口径混乱
 
 6. **每页只发一次数据请求**
-   - Model 重写 `load`（`super.load` 后），批量请求 `/product_card/payload`，按 resId 填入
-     **非 reactive 的 module-level WeakMap**（key=model 的 **raw** 实例 → resId → payload）；
-     卡片通过 `getProductCardPayload(record.model, record.resId)` 取
-   - WeakMap key 两端必须用 `toRaw()` 统一为 raw：load 里 `this` 是 raw，而 `record.model`
-     是 reactive proxy（Owl reactive proxy 调方法时 this 绑定到 raw），identity 不等会 MISS
-   - 必须用非 reactive 存储（普通 Map/WeakMap）：
+   - Model 重写 `_loadData`（不是 `load`），在 `super._loadData` 返回 `result` 后、
+     `_createRoot` 用 result 重建 Record 前，批量请求 `/product_card/payload`，按 resId 填入
+     **非 reactive 的 module-level 全局 Map**（key=resId → payload）；卡片通过
+     `getProductCardPayload(record.resId)` 取
+   - 必须在 `_loadData` 而非 `load` 填充：`_loadData` 在 root 创建前执行，不访问 root；
+     重写 `load` 会触发 `super.load` 的 `notify` → `onUpdate` → 再调 `load` → 无限循环卡死
+   - 必须用非 reactive 全局存储（普通 Map by resId）：
      ① 挂到 `result.records` 会被 `_createRoot` 重建 Record 时丢弃；
      ② 给 reactive model 实例赋值会触发 reload 循环（keepLast 竞争 + 空响应 + 卡死）；
-     ③ 给 reactive Record 实例加属性会触发 Owl DataModel 内部 effect（dirty/onUpdate）→ 循环卡死
+     ③ 给 reactive Record 实例加属性会触发 Owl DataModel 内部 effect（dirty/onUpdate）→ 循环卡死；
+     ④ by-model WeakMap 需 `toRaw`（load 里 this 是 raw、record.model 是 proxy，identity 不等）
    - 违反后果：页面卡顿，后端压力大；payload 关联错误会导致卡片空白或前端卡死
 
 7. **所有用户可见文本源语言为英文（`en_US`）**
@@ -83,7 +85,7 @@
 | `controllers/product_card_controller.py` | `/product_card/payload` JSON 接口 |
 | `views/product_card_views.xml` | kanban 视图（`js_class="product_cards"`）+ 独立动作 + 库存菜单 |
 | `static/src/js/product_card_view.js` | 注册 `views.product_cards`（kanbanView 派生） |
-| `static/src/js/product_card_model.js` | RelationalModel 子类，`load` 后批量请求 payload 填入非 reactive WeakMap（按 resId 索引，导出 `getProductCardPayload`） |
+| `static/src/js/product_card_model.js` | RelationalModel 子类，`_loadData` 中批量请求 payload 填入非 reactive 全局 Map（按 resId 索引，导出 `getProductCardPayload`） |
 | `static/src/js/product_card_renderer.js` | KanbanRenderer 子类，替换记录卡片组件并加根类 |
 | `static/src/js/product_card_record.js` | 卡片组件：轮播 / 变体选择 / 信息同步 / 打开产品 |
 | `static/src/xml/product_card_templates.xml` | 渲染器 primary 继承模板 + 卡片 QWeb |
