@@ -111,7 +111,7 @@ odoo -d <db> -u sale_order_no --stop-after-init     # 代码改动后升级
 |------|------|------|
 | [`README.md`](README.md) |所有人 | 项目说明、目录结构、安装与使用、开发约定摘要 |
 | [`AGENTS.md`](AGENTS.md) | AI 助手 / 开发者 | 业务背景、模块与代码规范、Odoo 19 API 事实、验证流程 |
-| [`TODO.md`](TODO.md) | 需求管理 | 待办池 / 进行中 / 已完成 / 搁置，含验收标准与待验证清单 |
+| [`TODO.md`](TODO.md) | 需求管理 | 待办池 / 进行中 / 搁置（已完成需求不在此留存，完成信息与验收记录见模块一览表与各模块 `CHANGELOG.md`） |
 | [`DOCS_TEMPLATE.md`](DOCS_TEMPLATE.md) | 维护者 | 模块 `README.md` / `CHANGELOG.md` / `AGENTS.md` 三类文档统一骨架与命名约定 |
 | `<module>/README.md` | 使用者 | 单个模块的功能、字段、安装与操作步骤 |
 | `<module>/AGENTS.md` | 维护者 | 该模块不可破坏的核心约束 |

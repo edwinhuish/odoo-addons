@@ -30,23 +30,12 @@
 
 ## 进行中
 
-> T-010（product_image 产品变体多图）已于 2026-09-08 完成并移除，落地版本 `19.0.2.6.1`
-> （功能 `19.0.2.6.0` + 回归修复 `19.0.2.6.1`）；
-> 完成信息（任务目标 / 实现过程 / 关键代码说明 / 测试结果 / 后续优化建议）见
-> [`product_image/CHANGELOG.md`](product_image/CHANGELOG.md) →「交付记录（T-010）」，
-> 坑点与解法见 [`product_image/AGENTS.md`](product_image/AGENTS.md) →「开发复盘与关键经验（T-010）」。
+（空）
 
-> T-005（product_image 图片管理弹窗增强）已于 2026-09-06 完成并移除，落地版本 `19.0.2.4.2`；
-> 完成信息（日期 / 落地版本 / 验收记录 / 异常与后续维护）见
-> [`product_image/CHANGELOG.md`](product_image/CHANGELOG.md) →「交付记录（T-005）」，
-> 坑点与解法见 [`product_image/AGENTS.md`](product_image/AGENTS.md) →「开发复盘与关键经验（T-005）」。
->
-> T-009（product_packing 产品包装信息）已于 2026-09-08 完成并移除，落地版本 `19.0.1.1.2`；
-> 完成信息见 [`product_packing/CHANGELOG.md`](product_packing/CHANGELOG.md) →「交付记录（T-009）」。
+> 已归档任务（T-001 ~ T-010）均已完成并移除，不在本文件留存；
+> 完成信息 / 验收记录见各模块 `CHANGELOG.md` →「交付记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
 
 ---
-
-
 
 ## 待办池
 
