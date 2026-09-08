@@ -14,10 +14,31 @@
         font-size: 0.875rem;
     }
 
-    // 「+」管理按钮：小号、正方形感，贴近输入框
+    // 输入框容器：外层套原生 .o_input（下划线边框），嵌套的 input 由原生样式
+    // （.o_input .o_input）自动去掉边框与内边距，视觉上「+」就在输入框里面
+    .o_pr_input {
+        flex: 1 1 12rem;
+        max-width: 24rem;
+        gap: 0.25rem;
+
+        input.o_input {
+            flex: 1 1 auto;
+            min-width: 0;
+            background: transparent;
+        }
+    }
+
+    // 输入框内右端的「+」按钮：小号图标按钮，不抢输入框视觉
     .o_pr_add {
         line-height: 1;
-        padding: 0.25rem 0.5rem;
+        padding: 0 0.35rem;
+        color: #6c757d;
+        text-decoration: none;
+
+        &:hover,
+        &:focus-visible {
+            color: #0d6efd;
+        }
     }
 
     // 额外参考号数量徽标（悬停显示参考号清单 tooltip）

@@ -19,7 +19,7 @@ const LINES_FIELD = "reference_code_line_ids";
  * 组成（见 static/src/xml/product_reference_editor.xml）：
  * - 原生 Reference 输入框：直接复用 Odoo 原生 `CharField` 组件渲染 `default_code`，
  *   保持原生编辑体验（即时 dirty / 提交 / 校验一致），不自己实现一套输入逻辑
- * - 右侧「+」按钮：打开额外参考号管理弹窗（见 product_reference_manage.js）
+ * - 输入框内右端「+」按钮：打开额外参考号管理弹窗（见 product_reference_manage.js）
  * - 计数徽标：存在额外参考号时显示「+N」，悬停徽标弹出参考号清单 tooltip
  *   （tooltip 走 Odoo 原生 `data-tooltip-template` + `data-tooltip-info`）
  *
@@ -110,8 +110,8 @@ export class ProductReferenceEditor extends Component {
         return _t("Managed on each variant");
     }
 
-    get manageLabel() {
-        return _t("Manage additional references");
+    get addLabel() {
+        return _t("Add a reference");
     }
 
     // ------------------------------------------------------------------

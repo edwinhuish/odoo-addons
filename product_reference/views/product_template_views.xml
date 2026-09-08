@@ -16,7 +16,8 @@
             <!-- 产品名称下方：Reference 编辑器（原生 default_code + 额外参考号入口） -->
             <xpath expr="//div[hasclass('oe_title')]/h1" position="after">
                 <div name="product_reference" class="o_product_reference_area mt-1">
-                    <label for="default_code" string="Reference"/>
+                    <!-- 标签固定为 Ref.（中文界面同样显示 Ref.，不做本地化翻译） -->
+                    <label for="default_code" string="Ref."/>
                     <field name="default_code"
                            widget="product_reference_editor"
                            nolabel="1"

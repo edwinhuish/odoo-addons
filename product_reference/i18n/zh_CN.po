@@ -74,9 +74,6 @@ msgstr "参考号明细"
 #. module: product_reference
 #: model_terms:ir.ui.view,arch_db:product_reference.product_template_list_inherit
 #: model_terms:ir.ui.view,arch_db:product_reference.product_template_search_inherit
-#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
-#: model_terms:ir.ui.view,arch_db:product_reference.product_variant_easy_form_inherit
-#: model_terms:ir.ui.view,arch_db:product_reference.product_normal_form_view_inherit
 #: model:ir.model.fields,field_description:product_reference.field_product_reference_code__reference_code
 #: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
 msgid "Reference"
@@ -207,10 +204,12 @@ msgstr "（命中参考号：%(codes)s）"
 
 #. module: product_reference
 #. module: product_reference
-#. odoo-javascript
-#: code:addons/product_reference/static/src/js/product_reference_editor.js:0
-msgid "Manage additional references"
-msgstr "管理额外参考号"
+# 输入框前的标签：中英界面统一显示 Ref.，不做本地化翻译
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+#: model_terms:ir.ui.view,arch_db:product_reference.product_variant_easy_form_inherit
+#: model_terms:ir.ui.view,arch_db:product_reference.product_normal_form_view_inherit
+msgid "Ref."
+msgstr "Ref."
 
 #. module: product_reference
 #. odoo-javascript
@@ -266,6 +265,7 @@ msgstr "类型"
 
 #. module: product_reference
 #: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+#: code:addons/product_reference/static/src/js/product_reference_editor.js:0
 msgid "Add a reference"
 msgstr "新增一条参考号"
 
