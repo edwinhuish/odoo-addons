@@ -2,12 +2,24 @@
 
 import { _t } from "@web/core/l10n/translation";
 import { imageUrl } from "@web/core/utils/urls";
-import { onWillUpdateProps, useState } from "@odoo/owl";
+import { Component, onWillUpdateProps, useState } from "@odoo/owl";
 import { KanbanRecord } from "@web/views/kanban/kanban_record";
 
 import { getProductCardPayload } from "./product_card_model";
 
 const IMAGE_FIELD = "image_512";
+
+/**
+ * 变体按钮行（sub-component）：
+ * 单独成组件以隔离内层 t-foreach（values）的 reactive 上下文——
+ * Owl 19 在 ProductCardRecord 主模板里嵌套 t-foreach（rows × values）会触发
+ * 重渲染循环；拆成 sub-component 后，外层只 t-foreach rows，内层 values 的
+ * t-foreach 在独立组件内，reactive 依赖不再跨层耦合。
+ */
+class ProductCardVariantRow extends Component {
+    static template = "product_card_view.VariantRow";
+    static props = ["row", "record"];
+}
 
 /**
  * 单张产品卡片：顶部主图轮播（左右箭头 / 滑动），主体 title / reference /
@@ -23,6 +35,11 @@ const IMAGE_FIELD = "image_512";
  */
 export class ProductCardRecord extends KanbanRecord {
     static template = "product_card_view.Card";
+
+    static components = {
+        ...KanbanRecord.components,
+        ProductCardVariantRow,
+    };
 
     setup() {
         super.setup();

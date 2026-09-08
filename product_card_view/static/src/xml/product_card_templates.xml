@@ -85,19 +85,39 @@
                 </div>
             </div>
 
-            <!-- 变体按钮行（一属性一行） -->
+            <!-- 变体按钮行（一属性一行）：用 sub-component 隔离内层 t-foreach -->
             <t t-if="rows.length">
                 <div class="o_product_card__variants o_product_card__stop">
                     <t t-foreach="rows" t-as="row" t-key="row.attr_id">
-                        <div class="o_product_card__row d-flex align-items-start">
-                            <span class="o_product_card__attr text-nowrap" t-att-title="row.attr_name">
-                                <t t-esc="row.attr_name" />
-                            </span>
-                        </div>
+                        <ProductCardVariantRow row="row" record="this"/>
                     </t>
                 </div>
             </t>
         </article>
+    </t>
+
+    <!--
+      变体按钮行 sub-component：接收 row + record 引用，
+      内部单层 t-foreach 渲染 values（不与外层 rows t-foreach 嵌套，避开 Owl 重渲染循环）。
+    -->
+    <t t-name="product_card_view.VariantRow" owl="1">
+        <div class="o_product_card__row d-flex align-items-start">
+            <span class="o_product_card__attr text-nowrap" t-att-title="props.row.attr_name">
+                <t t-esc="props.row.attr_name" />
+            </span>
+            <div class="o_product_card__values d-flex flex-wrap">
+                <t t-foreach="props.row.values" t-as="value" t-key="value.id">
+                    <button type="button"
+                        class="o_product_card__value btn btn-sm"
+                        t-attf-class="{{ props.record.isValueSelected(props.row.attr_id, value.id) ? 'active' : '' }}{{ !props.record.isValueAllowed(props.row.attr_id, value.id) ? ' disabled' : '' }}"
+                        t-on-click.stop="() => props.record.selectValue(props.row.attr_id, value.id)"
+                        t-att-disabled="!props.record.isValueAllowed(props.row.attr_id, value.id)"
+                        t-att-title="value.name">
+                        <t t-esc="value.name" />
+                    </button>
+                </t>
+            </div>
+        </div>
     </t>
 
 </templates>
