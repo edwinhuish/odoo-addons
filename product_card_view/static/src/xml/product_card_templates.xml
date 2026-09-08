@@ -71,12 +71,12 @@
                 </div>
                 <div class="o_product_card__meta d-flex align-items-center justify-content-between">
                     <span class="o_product_card__reference text-truncate"
-                        t-att-title="_t('Reference')">
+                        t-att-title="referenceLabel">
                         <t t-esc="referenceText" />
                     </span>
                     <span class="o_product_card__stock badge"
-                        t-att-title="_t('On hand')"
-                        t-att-aria-label="_t('On hand')">
+                        t-att-title="onHandLabel"
+                        t-att-aria-label="onHandLabel">
                         <t t-esc="onHandText" />
                     </span>
                 </div>

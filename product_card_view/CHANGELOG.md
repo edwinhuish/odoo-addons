@@ -26,6 +26,10 @@
     `AttributeError: 'product.product' object has no attribute 'attribute_value_ids'`。
     改用 `product_template_attribute_value_ids` + `attribute_id` /
     `product_attribute_value_id`。
+  - **修复** 卡片模板里 `t-att-title="_t('Reference')"` / `_t('On hand')` 直接调
+    `_t`：OWL 模板编译上下文无全局 `_t`，运行时报
+    `TypeError: ctx._t is not a function`。改为组件 getter `referenceLabel` /
+    `onHandLabel` 返回 `_t(...)`，po 入口（`code:addons/.../product_card_record.js:0`）不变。
 
 ### 影响
 

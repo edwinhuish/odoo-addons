@@ -162,6 +162,15 @@ export class ProductCardRecord extends KanbanRecord {
         return _t("Product image");
     }
 
+    // 标签文案走方法返回，不在模板里直接调 _t（OWL 模板 ctx 无全局 _t）
+    get referenceLabel() {
+        return _t("Reference");
+    }
+
+    get onHandLabel() {
+        return _t("On hand");
+    }
+
     nextImage() {
         const length = this.imageCount;
         if (!length) {
