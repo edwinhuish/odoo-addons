@@ -11,7 +11,7 @@ const IMAGE_FIELD = "image_512";
  * 单张产品卡片：顶部主图轮播（左右箭头 / 滑动），主体 title / reference /
  * on hand，多变体产品底部按属性分行渲染变体按钮。
  *
- * 数据均来自 model 批量装载的 productCardPayload（按 resId 索引，见 product_card_model.js），
+ * 数据均来自 model 批量装载并挂到 record.productCardData（见 product_card_model.js），
  * 切换变体仅改前端 state，不发请求。
  */
 export class ProductCardRecord extends KanbanRecord {
@@ -32,10 +32,8 @@ export class ProductCardRecord extends KanbanRecord {
     // ---------------------------------------------------------------------
 
     get payload() {
-        // 从 model 实例按 resId 取（见 product_card_model.js：payload 存在 model.productCardPayload）
-        const map = this.props.record.model?.productCardPayload;
-        const resId = this.props.record.resId;
-        return (map && resId != null && map[resId]) || null;
+        // model 在 load 后按 resId 挂到 record.productCardData（见 product_card_model.js）
+        return this.props.record.productCardData || null;
     }
 
     get templateId() {

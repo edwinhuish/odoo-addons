@@ -30,14 +30,18 @@
     `_t`：OWL 模板编译上下文无全局 `_t`，运行时报
     `TypeError: ctx._t is not a function`。改为组件 getter `referenceLabel` /
     `onHandLabel` 返回 `_t(...)`，po 入口（`code:addons/.../product_card_record.js:0`）不变。
-  - **修复** 卡片空白（核心 bug）：原实现把 payload 挂到 `super._loadData` 返回的
-    `result.records` 原始对象上，但 `_createRoot` 随后用它们重建 Record 实例时丢弃
-    自定义属性，导致 KanbanRecord 的 `record.productCardData` 始终为 null，卡片只
-    显示空骨架 + 底部「—」。改为把 payload 存到 model 实例 `productCardPayload`
-    （按 resId 索引），卡片通过 `record.model.productCardPayload[record.resId]` 取。
+  - **修复** 卡片空白 + 加载卡死（核心 bug，两版迭代）：
+    ① 第一版在 `_loadData` 里把 payload 挂到 `super._loadData` 返回的 `result.records`
+       原始对象上，但 `_createRoot` 随后用它们重建 Record 实例时丢弃自定义属性，
+       导致 KanbanRecord 的 `record.productCardData` 始终为 null，卡片只显示空骨架
+       + 底部「—」；
+    ② 第二版改把 payload 存到 reactive model 实例 `productCardPayload`，触发了
+       reload 循环（keepLast 竞争 + 第二次空响应 + 页面一直加载中）；
+    ③ 最终改为重写 `load`：`super.load` 后 root 已就绪，按 resId 挂到
+       `record.productCardData`，ViewController await load 故渲染时已就绪，且不在
+       `_loadData` 里给 reactive model 赋值，无循环。
     同时修正 `templateId` 用 `record.resId`（原用 `record.id` 是 datapoint 内部编号，
-    会导致图片 URL 404）；分组模式收集 resId 统一用 `resId ?? id`（group.records 是
-    Record 实例，`.id` 非 resId）。
+    会导致图片 URL 404）。
 
 ### 影响
 
