@@ -16,14 +16,43 @@
         </field>
     </record>
 
-    <!-- 扩展官方 Products 动作：view_mode 加 card（视图切换器出现 Card 按钮） -->
+    <!--
+      同一 model（product.template）在 Odoo 多个模块各定义了 act_window：
+        - product.product_template_action          (Sales / 主 Products 菜单)
+        - product.product_template_action_all      (Inventory > Products 内的 "All")
+        - stock.product_template_action_product    (Inventory > Products 入口)
+      必须都扩展 view_mode 并各加一条 act_window.view 记录
+      （_unique_mode_per_action = (act_window_id, view_mode)）。
+    -->
+
+    <!-- 1) product.product_template_action -->
     <record id="product.product_template_action" model="ir.actions.act_window">
         <field name="view_mode">kanban,list,card,form</field>
     </record>
-
-    <!-- 将 card view 绑定到动作（view_mode=card，sequence 插 list 与 form 之间） -->
     <record id="product_template_action_card_view" model="ir.actions.act_window.view">
         <field name="act_window_id" ref="product.product_template_action"/>
+        <field name="view_id" ref="product_template_card_view"/>
+        <field name="view_mode">card</field>
+        <field name="sequence" eval="3"/>
+    </record>
+
+    <!-- 2) product.product_template_action_all -->
+    <record id="product.product_template_action_all" model="ir.actions.act_window">
+        <field name="view_mode">kanban,list,card,form</field>
+    </record>
+    <record id="product_template_action_all_card_view" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="product.product_template_action_all"/>
+        <field name="view_id" ref="product_template_card_view"/>
+        <field name="view_mode">card</field>
+        <field name="sequence" eval="3"/>
+    </record>
+
+    <!-- 3) stock.product_template_action_product（Inventory > Products 入口） -->
+    <record id="stock.product_template_action_product" model="ir.actions.act_window">
+        <field name="view_mode">kanban,list,card,form</field>
+    </record>
+    <record id="product_template_action_product_card_view" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="stock.product_template_action_product"/>
         <field name="view_id" ref="product_template_card_view"/>
         <field name="view_mode">card</field>
         <field name="sequence" eval="3"/>
