@@ -37,3 +37,59 @@ msgstr "参考号"
 #: code:addons/product_card_view/static/src/js/product_card_record.js:0
 msgid "On hand"
 msgstr "在手数量"
+
+#. module: base
+#: model:ir.module.module,shortdesc:base.module_product_card_view
+msgid "Product Card View"
+msgstr "产品卡片视图"
+
+#. module: base
+#: model:ir.module.module,summary:base.module_product_card_view
+msgid "Masonry product card view with image carousel and variant switcher"
+msgstr "瀑布流产品卡片视图，支持图片轮播与变体切换"
+
+#. module: base
+#: model:ir.module.module,description:base.module_product_card_view
+msgid ""
+"\n"
+"Modern product list card view (masonry) for foreign trade SOHO scenarios.\n"
+"\n"
+"Source language: English (en_US); Simplified Chinese translation in "
+"i18n/zh_CN.po.\n"
+"\n"
+"Features:\n"
+"- Adds a \"Card\" entry to the official Products view switcher (Inventory / "
+"Sales / Purchase)\n"
+"- Card with main image carousel (arrows + swipe), title, reference, on "
+"hand\n"
+"- Multi-image sources follow product_image (template + per-variant, never "
+"mixed)\n"
+"- Variant switcher on the card for multi-variant products\n"
+"- Masonry (waterfall) responsive multi-column layout\n"
+"\n"
+"Optional integrations:\n"
+"- product_image: enables the multi-image gallery; without it only the main "
+"image shows\n"
+"- sale / purchase: Card is injected into their Products actions only when "
+"installed\n"
+msgstr ""
+"\n"
+"外贸 SOHO 场景下的现代化产品列表卡片视图（瀑布流）。\n"
+"\n"
+"源语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
+"\n"
+"功能：\n"
+"- 为官方 Products 视图切换器新增「Card」入口（库存 / 销售 / 采购）\n"
+"- 卡片包含主图轮播（左右箭头 + 滑动）、标题、参考号与在手数量\n"
+"- 多图图源跟随 product_image（模板 + 变体两层，互不叠加）\n"
+"- 多变体产品可在卡片上切换变体\n"
+"- 瀑布流（masonry）响应式多列布局\n"
+"\n"
+"可选集成：\n"
+"- product_image：启用多图图库；未安装时只显示主图\n"
+"- sale / purchase：仅在安装后才把 Card 注入其 Products 动作\n"
+
+#. module: base
+#: model:ir.module.category,name:base.module_category_inventory_product
+msgid "Product"
+msgstr "产品"

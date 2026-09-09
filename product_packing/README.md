@@ -71,6 +71,7 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 - **源语言：英文（`en_US`）**。Python / XML 中所有用户可见文本一律写英文，中文由译文文件提供。
 - **中文译文：`i18n/zh_CN.po`**（简体中文 `zh_CN`）；模块默认展示英文，安装中文语言后界面切为中文。
 - 覆盖范围：字段名称 / `help`、尺寸单位 selection 标签、`ValidationError` 报错、视图标题 / 列标题 / 占位提示 / 单位文本。
+- **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_product_packing` 三条提供，分类另有 `model:ir.module.category,name:base.module_category_inventory_product` → 「产品」；改 `__manifest__.py` 的 `name` / `summary` / `description` 英文文案时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - 占位符统一用命名形式 `%(name)s`，禁止按位置 `%s` 拼接。
 - 改动流程：改英文源文本 → 在 `i18n/zh_CN.po` 补 `msgid` / `msgstr` → `odoo -d <db> -u product_packing --stop-after-init` 升级 → 刷新页面。
 - 启用中文：设置 → 语言 → 安装「简体中文 (zh_CN)」。
@@ -127,6 +128,7 @@ Odoo 19 `product` 模块扩展，为产品增加外贸常用的包装/纸箱信�
 | 校验：净重 > 毛重 | 保存时报中文/英文错误 | 通过 |
 | 列表可选列 | 产品列表可选显示「纸箱」「CBM」列 | 通过 |
 | 中英双语 | 英文界面为英文，切换简体中文后字段标签、报错、单位为中文 | 通过 |
+| 应用列表中文名（19.0.1.1.3） | 中文环境「应用」搜 `product_packing`，卡片标题显示「产品装箱」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 | 待验 |
 
 ## 交付记录（T-009）
 

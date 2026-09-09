@@ -18,7 +18,7 @@
 - 自定义前端：`views` 注册表 **`card`**（新 view type，`kanbanView` 派生）
 - 主依赖：`stock`（`product` 经其传递依赖）
 - 可选集成（**不在 `depends`**）：`product_image`（多图图库）、`sale` / `purchase`（注入 Card 入口）
-- 当前版本：`19.0.2.0.0`
+- 当前版本：`19.0.2.0.1`（19.0.2.0.1 补应用列表（Apps）中文元数据：`shortdesc` / `summary` / `description` + 分类 `Product` 译文）
 
 ---
 
@@ -87,6 +87,7 @@
    `"Card"`，未走 `_t()`），中文界面仍显示英文。官方 type 的名称由服务端提供故可翻译，自定义 type
    无此通道；如需中文化，改为 `_t("Card")` + 补 po，并注意模块加载期翻译可能未就绪（建议 getter 延迟求值）。
 5. 收尾动作：改英文源文本 → 同步 `i18n/zh_CN.po` → 提升版本 → `-u` + 强刷浏览器，中英文各验一遍。
+6. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description` 后，必须同步 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_product_card_view` 三条（`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`，逐字符一致），改 `category` 则同步 `model:ir.module.category,name:base.module_category_inventory_product`。这些记录归属 `base` 且 `noupdate=True`，导入只补缺失语种、不覆盖库里已有值；改译文后的强制刷新方式见根 [`AGENTS.md`](../AGENTS.md) 4.8。违反后果：中文环境「应用」列表显示英文，或译文与英文源文本长期不同步。
 
 ---
 

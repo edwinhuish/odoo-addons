@@ -5,6 +5,30 @@
 
 ---
 
+## [19.0.2.0.1] - 2026-09-09（待验证）
+
+### 变更（i18n / 文档）
+
+- **应用列表（Apps）中文化**：`i18n/zh_CN.po` 补充「应用列表元数据」译文，中文环境下应用卡片与详情页显示中文模块名 / 摘要 / 描述。
+  - `model:ir.module.module,shortdesc:base.module_product_card_view` → 「产品卡片视图」
+  - `model:ir.module.module,summary:base.module_product_card_view`：摘要整句译文
+  - `model:ir.module.module,description:base.module_product_card_view`：`description` 整段译文（`translate=True` 整值翻译，`msgid` 与 `textwrap.dedent(manifest["description"])` 逐字符一致）
+  - `model:ir.module.category,name:base.module_category_inventory_product` → 「产品」（`Inventory/Product` 的自定义子分类，官方 `base` 无译文）
+- 说明：视图切换器上的 **Card 按钮名称**属于 `session.view_info` 的 `display_name`，与本次应用列表元数据无关，仍是遗留问题（见 `README.md` →「遗留问题」）。
+
+### 影响
+
+- 纯译文改动，无模型 / 字段 / 视图 / 权限变更，**无需迁移脚本**。
+- `odoo -d <db> -u product_card_view --stop-after-init` 升级后，中文环境「应用」列表显示中文名称 / 摘要 / 描述与中文分类；英文环境不变。
+- 这些记录归属 `base`（xmlid `base.module_*` / `base.module_category_*`、`noupdate=True`）：po 导入只补齐缺失语种，**不覆盖库中已有的 `zh_CN` 值**；后续改译文的强制刷新方式见根 `AGENTS.md` 4.8。
+
+### 文档
+
+- 同步 `__manifest__.py`（版本 19.0.2.0.1）、`README.md`（国际化节）、`AGENTS.md`（当前版本 + i18n 约束）、根 `README.md` / `AGENTS.md` / `TODO.md`。
+- 规范沉淀：根 `AGENTS.md` 新增 4.8「应用列表元数据（模块名 / 摘要 / 描述 / 分类）翻译规范」，并更正 4.1 中「写在自研模块 po 里匹配不到、无效果」的错误说法。
+
+---
+
 ## [19.0.2.0.0] - 2026-09-09（Card 入口已确认，其余待复验）
 
 ### 交付记录（T-012）

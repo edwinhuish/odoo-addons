@@ -92,6 +92,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 - **源语言：英文（`en_US`）**。Python / XML 中所有用户可见文本一律写英文，中文由译文文件提供。
 - **中文译文：`i18n/zh_CN.po`**（简体中文 `zh_CN`）；模块默认展示英文，安装中文语言后界面切为中文。
 - 覆盖范围：模型与字段名称 / `help`、参考号类型 selection 标签、唯一约束与 `ValidationError` 报错、视图标题 / 列标题 / 占位提示 / 页面提示 / 空视图帮助。
+- **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_product_reference` 三条提供，分类另有 `model:ir.module.category,name:base.module_category_inventory_product` → 「产品」；改 `__manifest__.py` 的 `name` / `summary` / `description` 英文文案时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - 术语对照：英文 `reference` ↔ 中文「参考号」。
 - 列表命中参考号的后缀提示由 `product_template.py` 的 `_(" (Matching reference: %(codes)s)")` 生成，中文译文为「（命中参考号：xxx）」。
 - 占位符统一用命名形式 `%(name)s`，禁止按位置 `%s` 拼接。
@@ -189,6 +190,7 @@ odoo -d <db> -u product_reference --stop-after-init
 | 回归 | 按参考号搜索与命中提示、同产品（变体）去重、删除产品级联清理均正常 | 通过 |
 | 中英双语 | 英文界面 `Ref.` / `Reference` 系列文案，中文界面「参考号」系列文案 | 通过 |
 | 索引与约束 | `product_template__reference_code_index_index`、`product_product__variant_reference_code_index_index`（trigram）与两条 `UNIQUE` 存在 | 通过 |
+| 应用列表中文名（19.0.2.5.1） | 中文环境「应用」搜 `product_reference`，卡片标题显示「产品参考号」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 | 待验 |
 
 ### 历史验收项（`19.0.2.2.0` 及更早，页签时代，仅供参考）
 

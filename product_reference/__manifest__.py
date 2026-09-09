@@ -1,6 +1,6 @@
 {
     "name": "Product References",
-    "version": "19.0.2.5.0",
+    "version": "19.0.2.5.1",
     "summary": "Attach several references to one product and find the product from any of its references; the standard Odoo Reference is edited right under the product name and the extra references are managed from the + button inside it (a product with several variants keeps one set of references per variant)",
     "description": """
         Product reference management module for foreign trade SOHO scenarios.

@@ -1,5 +1,28 @@
 # 变更日志
 
+## [19.0.1.8.1] - 2026-09-09（待验证）
+
+### 变更（i18n / 文档）
+
+- **应用列表（Apps）中文化**：`i18n/zh_CN.po` 补充「应用列表元数据」译文，中文环境下应用卡片与详情页显示中文模块名 / 摘要 / 描述。
+  - `model:ir.module.module,shortdesc:base.module_sale_order_no` → 「订单编号」（并入已有 `Order Number` 条目，作为多引用，避免重复 `msgid`）
+  - `model:ir.module.module,summary:base.module_sale_order_no`：摘要整句译文
+  - `model:ir.module.module,description:base.module_sale_order_no`：`description` 整段译文（`translate=True` 整值翻译，`msgid` 与 `textwrap.dedent(manifest["description"])` 逐字符一致）
+  - 分类 `Sales` 是官方分类，`base` 已有译文，本模块不重复翻译
+
+### 影响
+
+- 不涉及模型 / 字段 / 视图 / 权限变更，**无需迁移脚本**。
+- `odoo -d <db> -u sale_order_no --stop-after-init` 升级后，中文环境「应用」列表显示中文名称 / 摘要 / 描述；英文环境不变。
+- 这些记录归属 `base`（xmlid `base.module_*`、`noupdate=True`）：po 导入只补齐缺失语种，**不覆盖库中已有的 `zh_CN` 值**；后续改译文的强制刷新方式见根 `AGENTS.md` 4.8。
+
+### 文档
+
+- 同步 `__manifest__.py`（版本 19.0.1.8.1）、`README.md`（国际化节）、`AGENTS.md`（当前版本 + i18n 约束）、根 `README.md` / `AGENTS.md` / `TODO.md`。
+- 规范沉淀：根 `AGENTS.md` 新增 4.8「应用列表元数据（模块名 / 摘要 / 描述 / 分类）翻译规范」，并更正 4.1 中「写在自研模块 po 里匹配不到、无效果」的错误说法。
+
+---
+
 ## [19.0.1.8.0] - 2026-09-07（验收通过）
 
 ### 变更（功能）

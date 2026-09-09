@@ -23,6 +23,23 @@
 
 ---
 
+## 新模块 i18n 必备清单（建库即带中文）
+
+新模块**首版就要**具备下列内容，缺任一项视为未完成（细则见根 [`AGENTS.md`](AGENTS.md) 第 4 节）：
+
+- [ ] `__manifest__.py` 的 `name` / `summary` / `description` 写**英文源文本**（不写中文）。
+- [ ] `i18n/zh_CN.po` 存在，头部 `"Language: zh_CN\n"`，每条都有 `#. module: <module>` + `#:` 引用。
+- [ ] 界面文本译文齐备：字段 `string` / `help`、selection、约束消息、`_()` / `_t()`、视图与动作文案。
+- [ ] **应用列表（Apps）元数据 4 条**（根 `AGENTS.md` 4.8）：
+      `model:ir.module.module,shortdesc:base.module_<module>`、
+      `…,summary:base.module_<module>`、
+      `…,description:base.module_<module>`（`msgid` = `textwrap.dedent(manifest["description"])`）、
+      以及自定义分类段 `model:ir.module.category,name:base.module_category_<…>`（官方已有分类不重复翻译）。
+- [ ] 跑过根 `AGENTS.md` 4.6 的自校验（重复 `msgid` / 元数据 `msgid` 与 manifest 一致 / 残留中文）。
+- [ ] 模块 `README.md`「国际化（i18n）」节与 `AGENTS.md`「国际化约束」节按本模板填写，含应用列表元数据条目说明。
+
+---
+
 ## 一、`README.md` 模板
 
 ```markdown
@@ -86,6 +103,7 @@
 
 - **源语言：英文（`en_US`）**，源码（Python / XML / JS / QWeb 模板）里一律写英文；中文只出现在 `i18n/zh_CN.po` 的 `msgstr`。
 - 覆盖范围：<列出本模块涉及的类型：字段标签 / help / selection / 约束与校验 / 通知 / 视图与动作 / 前端 `_t()` 与模板术语>。
+- **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_<module>` 三条提供；用了自定义分类段还要加 `model:ir.module.category,name:base.module_category_<...>`。改 `__manifest__.py` 的 `name` / `summary` / `description` 时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - 占位符统一 `%(name)s` 命名形式，禁止按位置拼接。
 - 改动流程：改英文源文本 → 同步 `i18n/zh_CN.po` → `-u` 升级 + 强刷浏览器，英文与中文各验一遍。
 
@@ -255,6 +273,7 @@ LGPL-3
 3. **禁止拼接句子**：占位符统一 `%(name)s`，禁止按位置 `%s` 或 JS `+` 拼接；模板里夹子元素的句子拆到 JS 侧 `_t()`。
 4. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` → 提升版本 → `-u` 升级 + 强刷浏览器，中英文各验一遍。
 5. **代码注释保持中文**，不为 i18n 改英文。
+6. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description`（或 `category`）后，必须同步 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_<module>`（+ `model:ir.module.category,name:base.module_category_<...>`）；`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`。违反后果：中文环境「应用」列表显示英文，或译文与源文本失同步（不报错，见根 `AGENTS.md` 4.8）。
 
 ---
 
@@ -300,7 +319,7 @@ LGPL-3
 | `views/<x>.xml` | <职责> |
 | `static/src/<x>` | <职责，前端模块> |
 | `security/ir.model.access.csv` | <职责，有独立模型时> |
-| `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`） |
+| `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目（`base.module_<module>` 的 `shortdesc` / `summary` / `description` + 自定义分类），见根 `AGENTS.md` 4.8 |
 
 ---
 
@@ -379,6 +398,6 @@ __manifest__.py  ──version──►  CHANGELOG.md（新增版本条目）
 ```
 
 - 改动涉及数据库结构（字段改名 / 改类型）→ 必须配 `migrations/<version>/pre-migration.py`，CHANGELOG「影响」注明。
-- 改动涉及用户可见行为 → `__manifest__.py` 的 `description` 也要同步。
+- 改动涉及用户可见行为 → `__manifest__.py` 的 `description` 也要同步；`name` / `summary` / `description` 一改，`i18n/zh_CN.po` 里 4.8 的应用列表元数据 `msgid` 必须跟着改。
 - 改动触及 L1 约束或踩坑 → AGENTS.md 的 L1 / L2 对应条目同步。
 - 任务状态流转 → 根 `TODO.md` 同步（待办 → 进行中 → 已完成）。

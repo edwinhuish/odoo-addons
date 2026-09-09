@@ -82,6 +82,7 @@ Odoo 19 销售模块扩展，用于在外贸 SOHO 场景下为报价单/销售�
 - **源语言：英文（`en_US`）**。Python / XML 中所有用户可见文本一律写英文，中文由译文文件提供。
 - **中文译文：`i18n/zh_CN.po`**（简体中文 `zh_CN`）；模块默认展示英文，安装中文语言后界面切为中文。
 - 覆盖范围：字段名称 / `help`、唯一约束与 `ValidationError` 报错、客户编号格式校验、批量补号通知、视图列标题与占位提示、服务端动作名称。
+- **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_sale_order_no` 三条提供（分类 `Sales` 是官方分类，`base` 已有译文）；改 `__manifest__.py` 的 `name` / `summary` / `description` 英文文案时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - 报表 `print_report_name` 表达式与门户模板与语言无关，任意语言下 PDF 文件名与门户标题都使用 `order_no`。
 - 占位符统一用命名形式 `%(name)s`，禁止按位置 `%s` 拼接。
 - 改动流程：改英文源文本 → 在 `i18n/zh_CN.po` 补 `msgid` / `msgstr` → `odoo -d <db> -u sale_order_no --stop-after-init` 升级 → 刷新页面。
@@ -141,6 +142,7 @@ Odoo 19 销售模块扩展，用于在外贸 SOHO 场景下为报价单/销售�
 | 客户门户预览 H2 标题 | 显示 `OW2602` |
 | 重复编号保存 | 阻止并给中文提示 |
 | 复制单据 | 重新分配编号，旧编号保留 |
+| 应用列表中文名（19.0.1.8.1，待验） | 中文环境「应用」搜 `sale_order_no`，卡片标题显示「订单编号」，摘要与详情描述为中文；英文环境仍为英文 |
 
 ---
 

@@ -140,6 +140,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 - **源语言：英文（`en_US`）**。Python / XML / JS / QWeb 模板中所有用户可见文本一律写英文，中文由译文文件提供。
 - **中文译文：`i18n/zh_CN.po`**（简体中文 `zh_CN`）；模块默认展示英文，安装中文语言后界面切为中文。
 - 覆盖范围：模型与字段名称 / `help`、唯一性校验报错、通知与删除确认框文案、视图标题 / 列标题 / 占位提示 / 空视图帮助、OWL 模板内联文本与 `title` / `aria-label`、JS `_t()` 文案。
+- **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_product_image` 三条提供，分类另有 `model:ir.module.category,name:base.module_category_inventory_product` → 「产品」；改 `__manifest__.py` 的 `name` / `summary` / `description` 英文文案时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - 占位符统一用命名形式 `%(name)s`（Python `_()` 与 JS `_t()` 都支持），禁止按位置 `%s` 拼接，避免翻译语序错乱。
 - 模板里无法整体翻译的动态片段（如「已选 N 张」、删除按钮 `aria-label`、Ctrl+V 提示）改为在 JS 侧用 `_t()` 生成后 `t-esc` 输出，不要在模板里拼接中英文片段。
 - 改动流程：改英文源文本 → 在 `i18n/zh_CN.po` 补 `msgid` / `msgstr` → `odoo -d <db> -u product_image --stop-after-init` 升级 → 强刷浏览器（前端术语有缓存）。
@@ -253,6 +254,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 | 模板表单不回归 | 模板表单图片区行为与 19.0.2.5.0 一致（模板共享补充图 / 主图操作不变） |
 | 删除变体 | 删除变体时其专属图片行级联清理 |
 | 模块切换 | 卸载 `product_multi_image` → 安装 `product_image` 后功能正常 |
+| 应用列表中文名（19.0.2.6.3，待验） | 中文环境「应用」搜 `product_image`，卡片标题显示「产品图片」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 |
 
 ### 执行流程
 

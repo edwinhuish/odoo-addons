@@ -64,6 +64,7 @@ Odoo 19 后台图片字段增强模块，让外贸 SOHO 录入产品图片时少
 - **源语言：英文（`en_US`）**。JS 与 QWeb 模板中所有用户可见文本一律写英文，中文由译文文件提供。
 - **中文译文：`i18n/zh_CN.po`**（简体中文 `zh_CN`）；模块默认展示英文，安装中文语言后界面切为中文。
 - 覆盖范围：JS `_t()` 文案（粘贴 / 拖拽格式不接受提示、上传失败提示）、QWeb 模板内联文本（上传中遮罩）。
+- **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_web_image_paste` 三条提供，分类 `Productivity/Images` 的子分类另有 `model:ir.module.category,name:base.module_category_productivity_images` → 「图片」；改 `__manifest__.py` 的 `name` / `summary` / `description` 英文文案时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - 占位符统一用命名形式 `%(name)s`（JS `_t()` 支持），禁止按位置 `%s` 拼接。
 - 改动流程：改英文源文本 → 在 `i18n/zh_CN.po` 补 `msgid` / `msgstr` → `odoo -d <db> -u web_image_paste --stop-after-init` 升级 → 强刷浏览器（前端术语有缓存）。
 - 启用中文：设置 → 语言 → 安装「简体中文 (zh_CN)」，切换语言后刷新页面。
@@ -91,6 +92,7 @@ Odoo 19 后台图片字段增强模块，让外贸 SOHO 录入产品图片时少
 | 多图粘贴 | 一次粘贴多张图片逐张处理 | 通过 |
 | 超大图 | 弹出中文报错，带出具体大小 | 通过 |
 | 复用原生链路 | 不改核心模板文件 | 通过 |
+| 应用列表中文名（19.0.2.1.1） | 中文环境「应用」搜 `web_image_paste`，卡片标题显示「图片粘贴上传」，摘要与详情描述为中文，左侧分类显示「生产力 / 图片」；英文环境仍为英文 | 待验 |
 
 ### 执行流程
 

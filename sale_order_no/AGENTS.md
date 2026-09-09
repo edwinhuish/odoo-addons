@@ -11,7 +11,7 @@
 - 技术目录：`sale_order_no`
 - 继承模型：`sale.order`、`res.partner`、`ir.actions.report`
 - 主依赖：`sale`、`sale_pdf_quote_builder`
-- 当前版本：`19.0.1.8.0`（T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；仅支持全新安装，已删除 migrations）
+- 当前版本：`19.0.1.8.1`（19.0.1.8.1 补应用列表（Apps）中文元数据：`shortdesc` / `summary` / `description` 译文；此前 `19.0.1.8.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；仅支持全新安装，已删除 migrations）
 
 ---
 
@@ -140,6 +140,7 @@ WHERE r.model='sale.order' ORDER BY imd.module, imd.name;
 4. **报表与门户例外**：`print_report_name` 表达式与门户模板输出的是 `order_no`，不含自然语言，无需翻译；任意语言下都不得退化成 `object.name`。
 5. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` 的 `msgid` / `msgstr` → 提升模块版本 → `-u` 升级 + 刷新页面，在英文与中文两种界面各验一遍。
 6. **代码注释保持中文**：注释不参与翻译（符合仓库约定），不要为 i18n 把注释改成英文。
+7. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description` 后，必须同步 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_sale_order_no` 三条（`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`，逐字符一致）。这些记录归属 `base` 且 `noupdate=True`，导入只补缺失语种、不覆盖库里已有值；改译文后的强制刷新方式见根 [`AGENTS.md`](../AGENTS.md) 4.8。违反后果：中文环境「应用」列表显示英文，或译文与英文源文本长期不同步。
 
 ---
 

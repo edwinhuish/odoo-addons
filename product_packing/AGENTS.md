@@ -13,7 +13,7 @@
 - 继承模型：`product.template`
 - 自定义组件（前端模块）：无
 - 主依赖：`product`（不依赖 `stock` / `sale` / `purchase`）
-- 当前版本：`19.0.1.1.2`
+- 当前版本：`19.0.1.1.3`（19.0.1.1.3 补应用列表（Apps）中文元数据：`shortdesc` / `summary` / `description` + 分类 `Product` 译文，并修掉 `Dimension Unit` 重复 `msgid`）
 
 ---
 
@@ -56,6 +56,7 @@
 3. **禁止拼接句子**：占位符统一 `%(name)s`，禁止按位置 `%s` 或 JS `+` 拼接；模板里夹子元素的句子拆到 JS 侧 `_t()`。
 4. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` → 提升版本 → `-u` 升级 + 强刷浏览器，中英文各验一遍。
 5. **代码注释保持中文**，不为 i18n 改英文。
+6. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description` 后，必须同步 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_product_packing` 三条（`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`，逐字符一致），改 `category` 则同步 `model:ir.module.category,name:base.module_category_inventory_product`。这些记录归属 `base` 且 `noupdate=True`，导入只补缺失语种、不覆盖库里已有值；改译文后的强制刷新方式见根 [`AGENTS.md`](../AGENTS.md) 4.8。违反后果：中文环境「应用」列表显示英文，或译文与英文源文本长期不同步。
 
 ---
 

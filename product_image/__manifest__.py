@@ -1,6 +1,6 @@
 {
     "name": "Product Images",
-    "version": "19.0.2.6.2",
+    "version": "19.0.2.6.3",
     "summary": "Multiple product images: the native main image stays independent and the gallery holds the extra images (the main image is the first one in the browsing sequence). In-place browsing / hover zoom / click to preview (zoom, rotate) / paste to add / management dialog with drag & drop reordering, delete confirmation and bulk delete",
     "description": """
         Product image management module for foreign trade SOHO scenarios.

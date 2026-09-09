@@ -163,6 +163,7 @@ title / reference / on hand、多变体产品在卡片上直接按属性切变�
 
 - **源语言：英文（`en_US`）**；源码（Python / XML / JS / QWeb）一律写英文，中文只出现在 `i18n/zh_CN.po` 的 `msgstr`。
 - 覆盖范围：动作 / 菜单名、动作 help、JS `_t()` 术语（图片 alt、上/下一张、参考号、在手数量）。
+- **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_product_card_view` 三条提供，分类另有 `model:ir.module.category,name:base.module_category_inventory_product` → 「产品」；改 `__manifest__.py` 的 `name` / `summary` / `description` 英文文案时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - **已知缺口**：视图切换器里 Card 按钮的名称来自 JS 侧 patch 的 `session.view_info.card.display_name`
   （硬编码 `"Card"`），未走 `_t()`，切换中文后仍显示英文。官方 type 的名称由服务端提供故可翻译，
   自定义 type 无此通道。如必须中文化，需在 `product_card_view.js` 改为 `_t("Card")` 并补 po 条目
@@ -225,6 +226,7 @@ odoo -d <db> -u product_card_view --stop-after-init    # 升级（前端资源�
 | 10 | Card 入口（销售 / 采购） | 装了 `sale` / `purchase` 时，其 Products 切换器也出现 Card 按钮 | 待验 |
 | 11 | 双语 | 英文界面显示英文；切简体中文后菜单 / help / 图片按钮 /「在手 / 参考号」为中文（Card 按钮名见 i18n 已知缺口） | 待验 |
 | 12 | 权限 | 普通库存内部用户可正常浏览卡片数据（含在手） | 待验 |
+| 13 | 应用列表中文名（19.0.2.0.1） | 中文环境「应用」搜 `product_card_view`，卡片标题显示「产品卡片视图」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 | 待验 |
 
 ### 测试用例
 

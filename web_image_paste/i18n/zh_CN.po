@@ -46,3 +46,61 @@ msgstr "抱歉，文件“%(fileName)s”的格式不被允许，未上传。"
 #: code:addons/web_image_paste/static/src/xml/image_field_paste.xml:0
 msgid "Uploading…"
 msgstr "上传中…"
+
+#. module: base
+#: model:ir.module.module,shortdesc:base.module_web_image_paste
+msgid "Image Paste Upload"
+msgstr "图片粘贴上传"
+
+#. module: base
+#: model:ir.module.module,summary:base.module_web_image_paste
+msgid ""
+"Image fields in the backend accept Ctrl+V / Cmd+V paste and drag & drop: "
+"several images at once, with a clear error when a file is too large"
+msgstr "后台图片字段支持 Ctrl+V / Cmd+V 粘贴与拖拽上传，可一次上传多张，文件超限时给出明确报错"
+
+#. module: base
+#: model:ir.module.module,description:base.module_web_image_paste
+msgid ""
+"\n"
+"Image capture enhancement module for foreign trade SOHO scenarios.\n"
+"\n"
+"Source language of this module is English (en_US); a Simplified Chinese\n"
+"translation ships in i18n/zh_CN.po.\n"
+"\n"
+"Key features:\n"
+"- Once an image field (ImageField) has focus, Ctrl+V / Cmd+V pastes the\n"
+"  clipboard image and uploads it\n"
+"- Image files can also be dragged onto the image area to upload them\n"
+"- One paste / drop may upload several images (only for widgets that\n"
+"  support multiple uploads)\n"
+"- A progress hint is displayed while uploading and the preview is\n"
+"  refreshed when it is done\n"
+"- Images larger than the maximum server upload size raise a clear error\n"
+"  that includes the actual size\n"
+"- Read-only mode never triggers an upload; a clipboard without images\n"
+"  does not block normal text pasting\n"
+"- The native Odoo upload pipeline is fully reused\n"
+"  (FileUploader.onFileChange → getDataURLFromFile → onUploaded); no core\n"
+"  template is modified, everything is done with\n"
+"  @web/core/utils/patch and t-inherit\n"
+msgstr ""
+"\n"
+"外贸 SOHO 场景下的图片录入增强模块。\n"
+"\n"
+"本模块源语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
+"\n"
+"主要功能：\n"
+"- 图片字段（ImageField）获得焦点后，Ctrl+V / Cmd+V 即可粘贴剪贴板图片并上传\n"
+"- 也可把图片文件拖到图片区域完成上传\n"
+"- 一次粘贴 / 拖放可上传多张图片（仅限支持多图上传的部件）\n"
+"- 上传过程显示进度提示，完成后刷新预览\n"
+"- 图片超过服务器上传上限时，报错中包含实际大小\n"
+"- 只读态不会触发上传；剪贴板中没有图片时不影响正常文本粘贴\n"
+"- 完整复用 Odoo 原生上传链路（FileUploader.onFileChange → getDataURLFromFile →\n"
+"  onUploaded）；不修改任何核心模板，全部通过 @web/core/utils/patch 与 t-inherit 实现\n"
+
+#. module: base
+#: model:ir.module.category,name:base.module_category_productivity_images
+msgid "Images"
+msgstr "图片"

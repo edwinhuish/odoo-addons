@@ -30,7 +30,24 @@
 
 ## 进行中
 
-（空）
+- [ ] T-013 ｜ sale_order_no + web_image_paste + product_reference + product_image + product_packing + product_card_view ｜ P1 ｜ 🚧 应用列表（Apps）显示中文模块名与描述，并把翻译规范写进开发文档
+
+### 设计约束（T-013）
+
+- 源语言仍是英文：`__manifest__.py` 的 `name` / `summary` / `description` **不写中文**，中文只出现在 `i18n/zh_CN.po` 的 `msgstr`。
+- 译文条目写在**各自模块**的 `i18n/zh_CN.po`，键指向 `base.module_<module>` / `base.module_category_<...>`（记录归属 `base`，不要写成模块名前缀）。
+- `description` 的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`（整值翻译）；不得产生重复 `msgid`（同字面合并到已有条目的 `#:` 列表）。
+- 官方已有分类不重复翻译，只译自定义分类段（`Inventory/Product` 的 `Product`、`Productivity/Images` 的 `Images`）。
+- 规范必须落到文档：根 `AGENTS.md`（4.2 表 + 4.3 事实 + 4.4 反例 + 4.5 SOP + 4.6 自校验 + 4.8 专节）、`DOCS_TEMPLATE.md`（README / AGENTS 模板 + 新模块必备清单）、根 `README.md`。
+
+### 验收标准（T-013）
+
+- [ ] 6 个模块 `-u` 升级无报错：`odoo -d <db> -u sale_order_no,web_image_paste,product_reference,product_image,product_packing,product_card_view --stop-after-init`
+- [ ] 中文环境「应用」列表：6 个模块卡片标题为中文（订单编号 / 图片粘贴上传 / 产品参考号 / 产品图片 / 产品装箱 / 产品卡片视图），卡片摘要为中文
+- [ ] 中文环境点开模块详情：描述整段为中文
+- [ ] 中文环境「应用」左侧分类树：自定义分类段显示「产品」/「图片」（父级「库存」/「生产力」沿用官方译文）
+- [ ] 切换英文界面：名称 / 摘要 / 描述回到 manifest 英文原文
+- [ ] 新增模块时按 `DOCS_TEMPLATE.md` →「新模块 i18n 必备清单」执行，首版即带中文名称与描述
 
 > 已归档任务（T-001 ~ T-012）均已完成并移除，不在本文件留存；
 > 完成信息 / 验收记录见各模块 `CHANGELOG.md` →「交付记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。

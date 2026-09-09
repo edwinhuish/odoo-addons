@@ -10,7 +10,7 @@
 - 技术目录：`web_image_paste`
 - 类型：**纯前端模块**（无 Python 模型、无数据文件、无 `security/` 目录）
 - 主依赖：`web`（最小化，不依赖 `product` / `sale`）
-- 当前版本：`19.0.2.1.0`（T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语）
+- 当前版本：`19.0.2.1.1`（19.0.2.1.1 补应用列表（Apps）中文元数据：`shortdesc` / `summary` / `description` + 分类 `Images` 译文；此前 `19.0.2.1.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语）
 
 ---
 
@@ -66,6 +66,7 @@
 3. **禁止拼接句子**：占位符统一用 `%(name)s` 命名形式（JS `_t()` 支持），禁止字符串 `+` 拼接句子——翻译无法调整语序。
 4. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` 的 `msgid` / `msgstr` → 提升模块版本 → `-u` 升级 + 强刷浏览器（前端术语有缓存），在英文与中文两种界面各验一遍。
 5. **代码注释保持中文**：注释不参与翻译（符合仓库约定），不要为 i18n 把注释改成英文。
+6. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description` 后，必须同步 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_web_image_paste` 三条（`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`，逐字符一致），改 `category` 则同步 `model:ir.module.category,name:base.module_category_productivity_images`。这些记录归属 `base` 且 `noupdate=True`，导入只补缺失语种、不覆盖库里已有值；改译文后的强制刷新方式见根 [`AGENTS.md`](../AGENTS.md) 4.8。违反后果：中文环境「应用」列表显示英文，或译文与英文源文本长期不同步。
 
 ---
 

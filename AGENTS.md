@@ -36,7 +36,7 @@
 ## 3. 模块规范
 
 - `version` 一律 `19.0.x.y.z`：架构/破坏性变更 +x，功能新增 +y，修复与文档 +z。
-- `__manifest__.py` 必填：`name`（中文）、`summary`、`description`、`category`、`author`、`depends`、`installable: True`、`license`。静态资源走 `assets`（`web.assets_backend`），不走 `data`。
+- `__manifest__.py` 必填：`name`、`summary`、`description`（三者写**英文源文本**，中文译文按 4.8 写进 `i18n/zh_CN.po`，否则中文环境「应用」列表显示英文）、`category`、`author`、`depends`、`installable: True`、`license`。静态资源走 `assets`（`web.assets_backend`），不走 `data`。
 - `depends` 最小化：能用 `product` 就不要依赖 `sale`；不要为了方便依赖 `website`。
 - 新增模型必须配 `security/ir.model.access.csv`，权限最小化（普通用户可读写业务数据，管理员可配置）。
 - 数据文件（视图/报表/权限）必须登记进 `data`，顺序：security → views → reports → data。
@@ -50,7 +50,8 @@
 - **译文目录**：简体中文 `i18n/zh_CN.po`；新增语言按 `<lang>.po` 追加（如 `zh_TW.po`）。`i18n/` **无需登记进 `data`**，Odoo 安装 / 升级模块时自动扫描导入。
 - **默认英文**：未安装中文语言的库一律显示英文；安装「简体中文 (zh_CN)」并切换后显示中文。
 - **代码注释保持中文**：注释不参与翻译（XML 注释属于 `SKIPPED_ELEMENT_TYPES`），不要为 i18n 把注释改英文。
-- **manifest 例外**：`name` / `summary` / `description` 写英文即可——模块描述的译文由 Odoo 官方在 `base` 的 po（`model:ir.module.module,description:base.module_<module>`）里集中维护，自研模块的 `i18n/zh_CN.po` 里写它匹配不到、无效果，不要浪费条目。
+- **manifest 也要译**：`name` / `summary` / `description` **源文本写英文**，中文译文写在本模块的 `i18n/zh_CN.po` 里（键指向 `base.module_<module>`），否则中文环境「应用（Apps）」列表里模块名与描述永远是英文。详见 **4.8 应用列表元数据翻译规范**。
+  > 历史更正：本节曾写「自研模块 po 里写 `model:ir.module.module,*:base.module_<module>` 匹配不到、无效果」，**该说法有误**。已对照 `odoo/tools/translate.py` 核实：po 导入按 `#:` 引用里的 xmlid 定位记录，与 po 文件属于哪个模块无关（`TranslationImporter._load` 的 `xmlids` 过滤在 `_load_module_terms` 里未启用）；官方的导出向导不会把这些条目导到自研模块的 po 里，但**手写的条目导入生效**。
 
 ### 4.2 可翻译入口对照表（写错入口 = 翻译不生效）
 
@@ -67,8 +68,13 @@
 | Python 运行期文案 | `_("...")` | `code:addons/<module>/models/<file>.py:0` |
 | JS 文案 | `_t("...")` | `code:addons/<module>/static/src/js/<file>.js:0` |
 | QWeb 模板文本 / `title` / `aria-label` | 直接写英文 | `code:addons/<module>/static/src/xml/<file>.xml:0` |
+| 应用列表模块名 | manifest `name` | `model:ir.module.module,shortdesc:base.module_<module>` |
+| 应用列表摘要 | manifest `summary` | `model:ir.module.module,summary:base.module_<module>` |
+| 应用详情描述 | manifest `description` | `model:ir.module.module,description:base.module_<module>` |
+| 应用列表分类 | manifest `category` | `model:ir.module.category,name:base.module_category_<路径小写下划线>` |
 
 > `<model>` 里的点换成下划线（如 `product.reference.code` → `product_reference_code`）；`<field>` 前是双下划线。
+> 最后 4 行的 xmlid 前缀是 **`base.`**（记录归属 `base` 模块），但条目照样写在自研模块的 `i18n/zh_CN.po` 里，规范与坑点见 4.8。
 
 ### 4.3 已核实的 Odoo 19 抽取事实（对照 `odoo/tools/translate.py`）
 
@@ -78,6 +84,10 @@
 - QWeb 模板中**每个文本节点、每个属性各自独立成术语** → 一句话里夹了子元素（`<kbd>Ctrl</kbd>+<kbd>V</kbd>`、`<t t-esc>`）就会被切碎，无法整体翻译。
 - JS `_t` 由转译器自动注入模块名作上下文，不同模块的同名词条互不干扰；`.po` 里加 `#. odoo-javascript` / `#. odoo-python` 注释是与官方导出格式对齐，不影响导入。
 - 不要在 `.po` 里写**重复的 `msgid`**：同一 `msgid` 只能有一条，多个来源合并到一条的多个 `#:` 引用上，否则 po 解析报错。
+- **`translate=True`（非 callable）是「整值翻译」**（po 里的 `model:` 类型）：整个字段值就是一个翻译单元，`msgid` **允许多行**（如 `ir.module.module.description`），这是「可译文本必须单行」的唯一例外——因为它不是术语抽取。
+- **整值翻译的目标记录只由 `#:` 引用里的 xmlid 决定**：`PoFileReader` 解析 `#: (model|model_terms):<model>,<field>:<module>.<xmlid>` 时用引用里的 `<module>` 定位，与条目的 `#. module:` 注释、与 po 文件属于哪个模块**都无关**；`_load_module_terms` 调用时不传 `xmlids`，所以没有「只能翻译本模块记录」的限制。
+- **整值翻译导入时不比对 `msgid`**：`_load` 只要求 `msgid` 非空，随后按 xmlid 整体覆盖 `msgstr` → `msgid` 写错**不会报错**，但会与源文本长期失同步，只能靠自校验（4.6）保证一致。
+- **每个条目必须有 `#. module: xxx` 作为第一行 `#.` 注释**：`PoFileReader.__iter__` 用 `re.match(r"(module[s]?): (\w+)", entry.comment)` 后直接 `.groups()`，缺这行会 `AttributeError`，**整份 po 导入失败**；其他说明要写在这行之后，或写成 `#` 译者注释。
 
 ### 4.4 禁止的写法（本次改造的真实坑）
 
@@ -90,6 +100,9 @@
 | `或按 <kbd>Ctrl</kbd>+<kbd>V</kbd> 粘贴…` | 被 `<kbd>` 切碎 | 拆成前缀/后缀两个完整可译片段，各自 `_t()` |
 | 多行文本节点 | `msgid` 带换行缩进，写不对 | 压成单行 |
 | `.po` 中同一 `msgid` 写两条 | po 解析失败，整份译文不导入 | 合并为一条多 `#:` 引用 |
+| 改了 manifest 的 `name` / `summary` / `description`，没同步 po | 中文「应用」列表显示英文，或译文与源文本失同步（不报错，很难发现） | 同步 4.8 的三条键，并跑 4.6 的一致性校验 |
+| 应用列表元数据的引用写成 `<module>.module_<module>` | xmlid 找不到记录，**静默不生效** | 前缀必须是 `base.`（记录归属 `base`） |
+| 条目缺少 `#. module: xxx` 首行注释 | `PoFileReader` 抛 `AttributeError`，整份 po 不导入 | 每条都补 `#. module: <module>`（元数据条目写 `base`） |
 
 ### 4.5 执行 SOP（下次做 i18n 直接照此顺序）
 
@@ -97,9 +110,10 @@
 2. **改源文本**：按 4.2 表逐处改英文；占位符统一 `%(name)s`。
 3. **修模板**：把拼接句、夹子元素的句子改成单行或拆到 JS getter。
 4. **写 `.po`**：按 4.2 表的键名写 `msgid`（英文源文本，一字不差）/ `msgstr`（中文），每条带 `#. module: <module>` + `#:` 引用。
-5. **自校验**（无 Odoo 环境也能跑，见 4.6）。
-6. **提版本 + 同步文档**：manifest（版本 + 英文 name/summary/description）、模块 `CHANGELOG.md` / `README.md` / `AGENTS.md`、根 `README.md` / `AGENTS.md` / `TODO.md`。
-7. **交付**：给出「待验证清单」——升级命令、英文与中文各验一遍、强刷浏览器、回滚方式。
+5. **补应用列表元数据**：按 4.8 写 `shortdesc` / `summary` / `description`（+ 自定义分类）四类条目——**新模块必做，改 manifest 文案时必同步**。
+6. **自校验**（无 Odoo 环境也能跑，见 4.6）。
+7. **提版本 + 同步文档**：manifest（版本 + 英文 name/summary/description）、模块 `CHANGELOG.md` / `README.md` / `AGENTS.md`、根 `README.md` / `AGENTS.md` / `TODO.md`。
+8. **交付**：给出「待验证清单」——升级命令、英文与中文各验一遍、强刷浏览器、回滚方式。
 
 ### 4.6 自校验脚本（改造后必跑）
 
@@ -113,10 +127,34 @@ for f in sorted(glob.glob("*/i18n/*.po")):
     dup = [k for k, v in collections.Counter(ids).items() if v > 1]
     print(f, len(ids), "dups:", dup)
 
-# 2) 残留中文界面文本检查（命中应只剩下注释）
+# 2) 应用列表元数据一致性检查（msgid 必须与 manifest 源文本逐字符一致；缺条目要补）
+import ast, textwrap
+KEYS = {"shortdesc": "name", "summary": "summary", "description": "description"}
+for f in sorted(glob.glob("*/i18n/zh_CN.po")):
+    module = f.split("/")[0]
+    manifest = ast.literal_eval(open(f"{module}/__manifest__.py", encoding="utf-8").read())
+    blocks = open(f, encoding="utf-8").read().split("\n\n")
+    found = set()
+    for b in blocks:
+        m = re.search(r"^#: model:ir\.module\.module,(\w+):base\.module_(\w+)$", b, re.M)
+        if not m:
+            continue
+        key, target = m.groups()
+        assert target == module, f"{f}: 引用指向了别的模块 {target}"
+        found.add(key)
+        raw = re.search(r'^msgid ((?:"(?:[^"\\]|\\.)*"\s*)+)', b, re.M).group(1)
+        got = re.sub(r"\\(.)", lambda x: {"n": "\n", "t": "\t"}.get(x.group(1), x.group(1)),
+                     "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', raw)))
+        want = manifest[KEYS[key]]
+        want = textwrap.dedent(want) if key == "description" else want
+        assert got == want, f"{f}: {key} 的 msgid 与 manifest 不一致"
+    assert not (set(KEYS) - found), f"{f}: 缺少应用列表元数据条目 {sorted(set(KEYS) - found)}"
+    print(f, "apps metadata ok")
+
+# 3) 残留中文界面文本检查（命中应只剩下注释）
 # grep -rnP '[\x{4e00}-\x{9fff}]' --include="*.py" --include="*.xml" --include="*.js" --include="*.csv" .
 
-# 3) XML / JS 语法
+# 4) XML / JS 语法
 # python3 -c "import glob,xml.dom.minidom;[xml.dom.minidom.parse(f) for f in glob.glob('*/**/*.xml',recursive=True)]"
 # for f in <module>/static/src/js/*.js; do cp $f /tmp/chk.mjs && node --check /tmp/chk.mjs; done
 ```
@@ -126,14 +164,68 @@ for f in sorted(glob.glob("*/i18n/*.po")):
 - 前端术语（JS `_t` / QWeb 模板）由前端缓存，**`-u` 升级后必须强刷浏览器**才看得到新译文；后端字段标签 / help / 报错刷新页面即可。
 - 源文本改英文后，旧的中文源文本对应的 `ir.translation` 行会成为孤儿项（msgid 已变、不再被查），不影响显示，可在「设置 → 翻译」清理。
 - 只做 i18n 的改动**不需要迁移脚本**（不涉及字段与数据结构）；但仍要 `-u` 升级，否则新译文与新的字段标签不会写入库。
+- 应用列表元数据（4.8）改动后，`-u` 升级即可，无需强刷浏览器；但库里**已有**的 `zh_CN` 值不会被覆盖，见 4.8「改译文要强制刷新」。
+
+### 4.8 应用列表元数据（模块名 / 摘要 / 描述 / 分类）翻译规范
+
+**目标**：中文环境「应用（Apps）」列表里，自研模块的卡片标题、摘要、详情描述、左侧分类都显示中文。
+
+**每个模块必须有的 4 类条目**（写在**本模块** `i18n/zh_CN.po`，`msgid` 为 manifest 里的英文源文本）：
+
+| 显示位置 | 键（`#:` 引用） | `msgid` 取值 |
+|----------|-----------------|--------------|
+| 应用卡片标题 / 模块名 | `model:ir.module.module,shortdesc:base.module_<module>` | manifest `name` |
+| 应用卡片摘要 | `model:ir.module.module,summary:base.module_<module>` | manifest `summary` |
+| 应用详情描述 | `model:ir.module.module,description:base.module_<module>` | `textwrap.dedent(manifest["description"])` |
+| 左侧分类树 | `model:ir.module.category,name:base.module_category_<路径小写下划线>` | 分类段英文名 |
+
+```po
+#. module: base
+#: model:ir.module.module,shortdesc:base.module_product_packing
+msgid "Product Packing"
+msgstr "产品装箱"
+
+#. module: base
+#: model:ir.module.module,description:base.module_product_packing
+msgid ""
+"\n"
+"Product carton packing module for foreign trade SOHO scenarios.\n"
+...
+msgstr ""
+"\n"
+"外贸 SOHO 场景下的产品纸箱装箱模块。\n"
+...
+```
+
+**必须遵守（每条都有对应的坑）**：
+
+1. **xmlid 前缀是 `base.`**，不是模块名：模块记录由 `ir.module.module.create()` 写入 `ir.model.data`（`module='base'`、`name='module_<module>'`、`noupdate=True`），分类由 `odoo/modules/db.py:create_categories()` 写入（`base.module_category_<...>`）。写成 `<module>.module_<module>` 会静默失效。
+2. **分类 xmlid 的算法**：`'module_category_' + '_'.join(段.lower())`，`&`→`and`、空格→`_`，且**逐级都建一条**。例如 `Inventory/Product` → `base.module_category_inventory`（官方已有译文，不要重复翻译）+ `base.module_category_inventory_product`（自定义段，**必须自己译**）。官方已有分类（`Sales`、`Productivity` 等）不重复翻译，避免与 `base` 的译文打架。
+3. **`description` 的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`**（Odoo 存的就是这个值，见 `ir_module.get_values_from_terp`）：多行、缩进、结尾换行都要一致；这是「术语必须单行」规则的例外（整值翻译）。
+4. **`msgstr` 是整段全量译文**，不能只译一部分——整值翻译会用 `msgstr` 覆盖整个字段值。
+5. **每条都要 `#. module: base` 首行注释**（记录归属 `base`）：缺 `#. module:` 会让整份 po 导入崩溃（4.3）。
+6. **不要产生重复 `msgid`**：模块名常与已有条目（动作名 / 字段标签）同字面，例如 `Product References`、`Product Images`、`Order Number`、`Product` → 把新引用**合并到已有条目**的 `#:` 列表里，不要新开一条。
+7. **改 manifest 英文文案 = 必须同步这些 `msgid`**：导入不比对 `msgid`（4.3），写错不报错，只会长期失同步 → 靠 4.6 的一致性校验兜住。
+8. **导出向导不会生成这些条目**：`TranslationModuleReader._export_translatable_records()` 按 `ir_model_data.module` 过滤，这些记录属于 `base`，所以「设置 → 翻译 → 导出」导本模块 po 时**不含**它们。**手写维护**，并且**不要用导出结果整体覆盖** `i18n/zh_CN.po`，否则这几条会被抹掉。
+9. **改译文要强制刷新**：记录是 `noupdate=True`，`TranslationImporter.save()` 只在 `force_overwrite` 时才覆盖它们；`-u` 甚至 `-u --i18n-overwrite` 都只**补齐缺失语种**，不会更新库里已有的 `zh_CN` 值。首次升级正常生效；**后续修改译文**要二选一：
+   - odoo shell：
+     ```python
+     from odoo.tools.translate import TranslationImporter
+     imp = TranslationImporter(env.cr)
+     imp.load_file('<addons-path>/<module>/i18n/zh_CN.po', 'zh_CN')
+     imp.save(force_overwrite=True)
+     env.cr.commit()
+     ```
+   - 或先清掉旧值再 `-u`：`UPDATE ir_module_module SET shortdesc = shortdesc - 'zh_CN', summary = summary - 'zh_CN', description = description - 'zh_CN' WHERE name = '<module>';`
+10. **验证方式**：中文环境「应用」里搜模块技术名，看卡片标题 / 摘要 / 详情描述 / 左侧分类是否中文；切回英文应显示 manifest 原文。
 
 ## 5. Python 规范
 
 - **禁止修改 Odoo 核心源码**；一律 `_inherit` 扩展，必须改行为时用 patch / 继承并注明原因。
 - 创建/写入入口统一用 `@api.model_create_multi` 的 `create` 与 `write`，不要在旧式单个 create 上做逻辑。
 - Odoo 19 显示名统一用 `_compute_display_name()`；`name_get()` / `name_search()` 已从核心移除，禁止再定义或依赖（详见下一节）。
-- 字段定义要有中文 `string` 与 `help`；业务字段加 `index=True`（凡是要搜索的字段）；`copy=False` 需显式声明。
-- 校验用 `@api.constrains` + `ValidationError`，错误信息必须是可直接给用户看的中文，带上出错的具体值。
+- 字段定义要有 `string` 与 `help`（**英文源文本**，中文走 `i18n/zh_CN.po`，见第 4 节）；业务字段加 `index=True`（凡是要搜索的字段）；`copy=False` 需显式声明。
+- 校验用 `@api.constrains` + `ValidationError`，错误信息必须是可直接给用户看的完整句子（英文源文本 + 中文译文），并带上出错的具体值。
 - 搜索能力必须在数据库层实现：可 `store=True` 的计算字段配索引，或字段级 `search=` 方法，或 `('x2many', 'any', [...])` 域；禁止先 `search([])` 再在 Python 里过滤。
 - 结构变更必须写 `migrations/<version>/pre-migration.py`（改名、改类型、数据回填），并在 CHANGELOG 说明影响。
 - 编号 / 流水类字段：创建时一次性快照写入，后续不因主数据变化而重算；作废、取消、删除不回收已用号。
@@ -161,10 +253,11 @@ for f in sorted(glob.glob("*/i18n/*.po")):
 每次功能改动必须同步更新，缺一不可：
 
 1. `__manifest__.py` 的 `version`（按第 3 节规则递增）与 `description`（涉及用户可见行为时）
-2. 模块 `CHANGELOG.md`：变更 / 影响 / 文档同步三段式，注明日期
-3. 模块 `README.md`：用户可见功能、字段表、安装与使用步骤
-4. 模块 `AGENTS.md`：**不可破坏的核心约束**清单（约束变化时更新）
-5. 根目录 `TODO.md`：任务状态流转（见第 8 节）
+2. `i18n/zh_CN.po`：新增 / 改动的用户可见文本译文；改了 manifest 的 `name` / `summary` / `description` 时同步 4.8 的应用列表元数据条目
+3. 模块 `CHANGELOG.md`：变更 / 影响 / 文档同步三段式，注明日期
+4. 模块 `README.md`：用户可见功能、字段表、安装与使用步骤
+5. 模块 `AGENTS.md`：**不可破坏的核心约束**清单（约束变化时更新）
+6. 根目录 `TODO.md`：任务状态流转（见第 8 节）
 
 > 三类模块文档（`README.md` / `CHANGELOG.md` / `AGENTS.md`）的统一骨架与约定见根目录 [`DOCS_TEMPLATE.md`](DOCS_TEMPLATE.md)，新模块按此创建，既有模块迭代时按此对齐。
 
@@ -180,12 +273,12 @@ for f in sorted(glob.glob("*/i18n/*.po")):
 
 | 模块 | 版本 | 作用 | 状态 |
 |------|------|------|------|
-| `sale_order_no` | 19.0.1.8.0 | 销售订单 / 报价单自定义编号（`order_no`，客户编码 + 两位年份 + 年度流水），含客户编码格式校验、报表替换、PDF 文件名定制、门户预览定制、批量补号 | 已交付，目标环境已验证（T-001；T-006 i18n 随 19.0.1.8.0 验收通过，2026-09-07） |
-| `web_image_paste` | 19.0.2.1.0 | 后台图片字段粘贴 / 拖拽上传（patch `ImageField` + `FileUploader`，复用原生上传链路，即时预览 + 进度条；原名 `image_uploader`） | 已交付，目标环境已验证（T-003；T-006 i18n 随 19.0.2.1.0 验收通过，2026-09-07） |
-| `product_reference` | 19.0.2.2.0 | 产品多参考号 + 可搜索（One2many 明细 / 冗余 trigram 索引 / 命中提示）；`19.0.2.0.0` 由 `product_model` 改名（模型 `product.model.code` → `product.reference.code`，含幂等迁移脚本与升级前置 SQL）；`19.0.2.2.0` 参考号页顶部直接展示 Odoo 原生 `default_code`（Reference）供统一编辑，不再在参考号表中存储镜像行 | 已交付，目标环境已验证（T-002 / T-007 / T-008，19.0.2.2.0，2026-09-07：`19.0.2.0.0` 改名迁移与 `19.0.2.2.0` 前端展示均已验收通过） |
-| `product_image` | 19.0.2.6.2 | 产品多图（产品 / 产品变体双入口独立图集（19.0.2.6.0 起）+ 原生主图独立 + 图库补充图 / 主图无删除入口/ 首张上传即主图 / 主图 2 倍 / 悬浮局部放大（540窗口+1080图片平移·左侧不足转下方/缩小·选框按比例·留白区白色）/ 点击预览（多图切换+右侧缩略图·关闭按钮暗色半透明·底部条默认透明悬浮淡入·图片初始避开上下条放大可覆盖全屏·任意大小可拖拽grab/grabbing·GPU 1:1顺滑·切图保留状态·无滚动条·缩略图未选中无边框）/ 右侧竖排缩略图（蓝色选中边框·编辑态无删除按钮·滚动不越界且与主图区顶底贴边·仅切换不写库）/ 图片管理弹窗（「+」打开·顶层overlay：上半大图（仅预览、无删除按钮）+平铺缩略图（每张含主图右上角×：删图库删记录·删主图自动提升图库首张·点缩略图只切弹窗大图·缩略图可拖排序(含主图·首位即主图·避让动画)·删除均先确认(含缩略图·主图提示提升)·批量删除(勾选模式+含缩略图清单确认)·大图固定尺寸缩略图占满余量超高滚动·选中主图名称行留空）·下半dropzone 点击/拖放/Ctrl+V（上传中缩略图+动画·粘贴后不自动关闭·上传不改页面大图）·header 最右侧正方形×关闭按钮 hover 变红）/ 继承 image.mixin 复用多尺寸；原名 `product_multi_image`） | 已交付，目标环境已验证（T-005，19.0.2.4.2，含 19.0.2.2.10~4.2：拖动排序（含主图·首位即主图）/ 删除确认 / 批量删除 / 选中主图名称行留空 / 确认框按钮顺序 / 关闭按钮贴边）；坑点与风险提示见模块 `AGENTS.md` →「会话修改总结与风险提示」/「开发复盘与关键经验（T-005）」；T-010 变体多图（19.0.2.6.1）已完成，目标环境验收通过（2026-09-08，含图库图片占位回归修复与复验；验收记录见模块 `CHANGELOG.md` →「交付记录（T-010）」）；19.0.2.6.2（2026-09-08）修复变体上传报「双归属」Validation Error（变体 action context `default_product_tmpl_id` 污染图库子行创建，见模块 `CHANGELOG.md` → `[19.0.2.6.2]`），待目标环境复验 |
-| `product_packing` | 19.0.1.1.2 | 为产品 Inventory 标签页增加产品自身尺寸（尺寸变化时自动同步原生 Volume）与外贸纸箱字段：装箱数、长宽高、毛重、净重、自动计算 CBM；产品列表增加纸箱规格与 CBM 可选列 | 已交付（T-009，2026-09-08），目标环境已验证 |
-| `product_card_view` | 19.0.2.0.0 | 产品列表卡片视图（瀑布流）：注册新 view type `card`，为官方 Products 视图切换器新增 Card 按钮（库存 / 销售 / 采购入口）；卡片多图轮播（模板 / 变体两层图源不叠加）+ title / reference / on hand + 多变体按钮切换；后端每页一次批量 `/product_card/payload`；`product_image` / `sale` / `purchase` 为可选依赖（运行时判断） | 已交付（T-012，2026-09-09）：Card 入口已确认，其余项待复验；依赖 Odoo 内部 `session.view_info` 的 JS patch，Odoo 升级需回归（见模块 `AGENTS.md` → L2 P2） |
+| `sale_order_no` | 19.0.1.8.1 | 销售订单 / 报价单自定义编号（`order_no`，客户编码 + 两位年份 + 年度流水），含客户编码格式校验、报表替换、PDF 文件名定制、门户预览定制、批量补号 | 已交付，目标环境已验证（T-001；T-006 i18n 随 19.0.1.8.0 验收通过，2026-09-07）；`19.0.1.8.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述），待目标环境验证 |
+| `web_image_paste` | 19.0.2.1.1 | 后台图片字段粘贴 / 拖拽上传（patch `ImageField` + `FileUploader`，复用原生上传链路，即时预览 + 进度条；原名 `image_uploader`） | 已交付，目标环境已验证（T-003；T-006 i18n 随 19.0.2.1.0 验收通过，2026-09-07）；`19.0.2.1.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「图片」），待目标环境验证 |
+| `product_reference` | 19.0.2.5.1 | 产品多参考号 + 可搜索（One2many 明细 / 冗余 trigram 索引 / 命中提示）；`19.0.2.0.0` 由 `product_model` 改名（模型 `product.model.code` → `product.reference.code`，含幂等迁移脚本与升级前置 SQL）；`19.0.2.2.0` 参考号页顶部直接展示 Odoo 原生 `default_code`（Reference）供统一编辑，不再在参考号表中存储镜像行 | 已交付，目标环境已验证（T-002 / T-007 / T-008，19.0.2.2.0，2026-09-07：`19.0.2.0.0` 改名迁移与 `19.0.2.2.0` 前端展示均已验收通过）；`19.0.2.5.0`（T-011，2026-09-08）参考号界面改造 + 多变体不共用已验收通过；`19.0.2.5.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」），待目标环境验证 |
+| `product_image` | 19.0.2.6.3 | 产品多图（产品 / 产品变体双入口独立图集（19.0.2.6.0 起）+ 原生主图独立 + 图库补充图 / 主图无删除入口/ 首张上传即主图 / 主图 2 倍 / 悬浮局部放大（540窗口+1080图片平移·左侧不足转下方/缩小·选框按比例·留白区白色）/ 点击预览（多图切换+右侧缩略图·关闭按钮暗色半透明·底部条默认透明悬浮淡入·图片初始避开上下条放大可覆盖全屏·任意大小可拖拽grab/grabbing·GPU 1:1顺滑·切图保留状态·无滚动条·缩略图未选中无边框）/ 右侧竖排缩略图（蓝色选中边框·编辑态无删除按钮·滚动不越界且与主图区顶底贴边·仅切换不写库）/ 图片管理弹窗（「+」打开·顶层overlay：上半大图（仅预览、无删除按钮）+平铺缩略图（每张含主图右上角×：删图库删记录·删主图自动提升图库首张·点缩略图只切弹窗大图·缩略图可拖排序(含主图·首位即主图·避让动画)·删除均先确认(含缩略图·主图提示提升)·批量删除(勾选模式+含缩略图清单确认)·大图固定尺寸缩略图占满余量超高滚动·选中主图名称行留空）·下半dropzone 点击/拖放/Ctrl+V（上传中缩略图+动画·粘贴后不自动关闭·上传不改页面大图）·header 最右侧正方形×关闭按钮 hover 变红）/ 继承 image.mixin 复用多尺寸；原名 `product_multi_image`） | 已交付，目标环境已验证（T-005，19.0.2.4.2，含 19.0.2.2.10~4.2：拖动排序（含主图·首位即主图）/ 删除确认 / 批量删除 / 选中主图名称行留空 / 确认框按钮顺序 / 关闭按钮贴边）；坑点与风险提示见模块 `AGENTS.md` →「会话修改总结与风险提示」/「开发复盘与关键经验（T-005）」；T-010 变体多图（19.0.2.6.1）已完成，目标环境验收通过（2026-09-08，含图库图片占位回归修复与复验；验收记录见模块 `CHANGELOG.md` →「交付记录（T-010）」）；19.0.2.6.2（2026-09-08）修复变体上传报「双归属」Validation Error（变体 action context `default_product_tmpl_id` 污染图库子行创建，见模块 `CHANGELOG.md` → `[19.0.2.6.2]`），待目标环境复验；`19.0.2.6.3`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」），待目标环境验证 |
+| `product_packing` | 19.0.1.1.3 | 为产品 Inventory 标签页增加产品自身尺寸（尺寸变化时自动同步原生 Volume）与外贸纸箱字段：装箱数、长宽高、毛重、净重、自动计算 CBM；产品列表增加纸箱规格与 CBM 可选列 | 已交付（T-009，2026-09-08），目标环境已验证；`19.0.1.1.3`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」）并修掉 `Dimension Unit` 重复 `msgid`，待目标环境验证 |
+| `product_card_view` | 19.0.2.0.1 | 产品列表卡片视图（瀑布流）：注册新 view type `card`，为官方 Products 视图切换器新增 Card 按钮（库存 / 销售 / 采购入口）；卡片多图轮播（模板 / 变体两层图源不叠加）+ title / reference / on hand + 多变体按钮切换；后端每页一次批量 `/product_card/payload`；`product_image` / `sale` / `purchase` 为可选依赖（运行时判断） | 已交付（T-012，2026-09-09）：Card 入口已确认，其余项待复验；依赖 Odoo 内部 `session.view_info` 的 JS patch，Odoo 升级需回归（见模块 `AGENTS.md` → L2 P2）；`19.0.2.0.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」），待目标环境验证 |
 
 ## 10. 验证流程
 

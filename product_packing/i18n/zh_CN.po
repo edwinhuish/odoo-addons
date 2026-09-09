@@ -27,6 +27,7 @@ msgstr "每个纸箱可装的产品数量。"
 
 #. module: product_packing
 #: model:ir.model.fields,field_description:product_packing.field_product_template__carton_dimension_unit
+#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
 msgid "Dimension Unit"
 msgstr "尺寸单位"
 
@@ -187,11 +188,6 @@ msgstr "纸箱与包装"
 
 #. module: product_packing
 #: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
-msgid "Dimension Unit"
-msgstr "尺寸单位"
-
-#. module: product_packing
-#: model_terms:ir.ui.view,arch_db:product_packing.product_template_form_inherit_carton
 msgid "Dimensions"
 msgstr "尺寸"
 
@@ -224,3 +220,56 @@ msgstr "立方米"
 #: model_terms:ir.ui.view,arch_db:product_packing.product_template_list_inherit_carton
 msgid "Carton"
 msgstr "纸箱"
+
+#. module: base
+#: model:ir.module.module,shortdesc:base.module_product_packing
+msgid "Product Packing"
+msgstr "产品装箱"
+
+#. module: base
+#: model:ir.module.module,summary:base.module_product_packing
+msgid ""
+"Add packing/carton fields (units per carton, dimensions, gross/net weight, "
+"auto CBM) to the product Inventory tab"
+msgstr "在产品「库存」标签页增加装箱 / 纸箱字段：装箱数、长宽高、毛重 / 净重、自动计算 CBM"
+
+#. module: base
+#: model:ir.module.module,description:base.module_product_packing
+msgid ""
+"\n"
+"Product carton packing module for foreign trade SOHO scenarios.\n"
+"\n"
+"Source language of this module is English (en_US); a Simplified Chinese\n"
+"translation ships in i18n/zh_CN.po.\n"
+"\n"
+"Key features:\n"
+"- Adds carton packing fields on product.template, displayed inside the\n"
+"  standard Inventory tab so users do not leave the product form\n"
+"- Units per carton, carton length / width / height, gross weight and\n"
+"  net weight are all editable and saved with the product\n"
+"- Carton dimension unit can be set per product to centimeters or meters\n"
+"- CBM is computed automatically from the dimensions and shown as a\n"
+"  read-only field\n"
+"- A human-readable carton dimension spec (e.g. \"50 x 40 x 30 cm\") is\n"
+"  also computed and available in list views as an optional column\n"
+"- Built-in validation keeps numbers non-negative and ensures net weight\n"
+"  does not exceed gross weight\n"
+msgstr ""
+"\n"
+"外贸 SOHO 场景下的产品纸箱装箱模块。\n"
+"\n"
+"本模块源语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
+"\n"
+"主要功能：\n"
+"- 在 product.template 上增加纸箱装箱字段，并显示在原生「库存」标签页内，\n"
+"  用户无需离开产品表单\n"
+"- 装箱数、纸箱长 / 宽 / 高、毛重与净重均可编辑并随产品保存\n"
+"- 纸箱尺寸单位可按产品设为厘米或米\n"
+"- CBM 根据尺寸自动计算，以只读字段展示\n"
+"- 同时计算便于阅读的纸箱规格文本（如「50 x 40 x 30 cm」），可在列表视图作为可选列显示\n"
+"- 内建校验保证数值非负，且净重不超过毛重\n"
+
+#. module: base
+#: model:ir.module.category,name:base.module_category_inventory_product
+msgid "Product"
+msgstr "产品"

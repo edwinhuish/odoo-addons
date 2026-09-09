@@ -1,6 +1,6 @@
 {
     "name": "Order Number",
-    "version": "19.0.1.8.0",
+    "version": "19.0.1.8.1",
     "summary": "Order numbers built from the customer code plus the year, with manual editing, bulk numbering, a global uniqueness check and custom PDF file names and portal titles",
     "description": """
         Sales order / quotation numbering module for foreign trade SOHO

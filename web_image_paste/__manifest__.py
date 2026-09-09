@@ -1,6 +1,6 @@
 {
     "name": "Image Paste Upload",
-    "version": "19.0.2.1.0",
+    "version": "19.0.2.1.1",
     "summary": "Image fields in the backend accept Ctrl+V / Cmd+V paste and drag & drop: several images at once, with a clear error when a file is too large",
     "description": """
         Image capture enhancement module for foreign trade SOHO scenarios.
