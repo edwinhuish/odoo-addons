@@ -2,44 +2,34 @@
 <odoo>
 
     <!--
-      卡片视图（view type=card，arch 用 <card>，复用 kanban ArchParser/Controller/search）。
-      ir.ui.view.type 的 'card' 选项由 models/product_card.py 扩展 Selection 提供。
-      不再有独立动作 / 菜单——Card 按钮直接加到官方 Products 视图切换器。
+      卡片视图本体：type=card。arch 根 <card>，<field name="name"/> 供卡片
+      渲染读取；具体卡片 UI 由 product_card_renderer 自绘（payload 驱动）。
     -->
-    <record id="product_card_view_card" model="ir.ui.view">
-        <field name="name">product.template.product.card.view</field>
+    <record id="product_template_card_view" model="ir.ui.view">
+        <field name="name">product.template.card</field>
         <field name="model">product.template</field>
         <field name="type">card</field>
         <field name="arch" type="xml">
-            <card records_draggable="0" quick_create="false">
+            <kanban records_draggable="0" quick_create="false">
                 <field name="name"/>
-            </card>
+                <templates>
+                    <t t-name="card"><div/></t>
+                </templates>
+            </kanban>
         </field>
     </record>
 
-    <!--
-      扩展官方产品 action：view_mode 加 card（在 kanban 左侧），
-      view_ids 加 card view。Inventory / Sales / Purchase 的 Products 菜单
-      用的就是这两个 action，故 Card 按钮在所有 Products 页面都出现。
-    -->
+    <!-- 扩展官方 Products 动作：view_mode 加 card（视图切换器出现 Card 按钮） -->
     <record id="product.product_template_action" model="ir.actions.act_window">
-        <field name="view_mode">card,kanban,list,form</field>
-    </record>
-    <record id="product_template_action_card_view" model="ir.actions.act_window.view">
-        <field name="act_window_id" ref="product.product_template_action"/>
-        <field name="sequence" eval="1"/>
-        <field name="view_mode">card</field>
-        <field name="view_id" ref="product_card_view_card"/>
+        <field name="view_mode">kanban,list,card,form</field>
     </record>
 
-    <record id="product.product_template_action_all" model="ir.actions.act_window">
-        <field name="view_mode">card,kanban,list,form</field>
-    </record>
-    <record id="product_template_action_all_card_view" model="ir.actions.act_window.view">
-        <field name="act_window_id" ref="product.product_template_action_all"/>
-        <field name="sequence" eval="1"/>
+    <!-- 将 card view 绑定到动作（view_mode=card，sequence 插 list 与 form 之间） -->
+    <record id="product_template_action_card_view" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="product.product_template_action"/>
+        <field name="view_id" ref="product_template_card_view"/>
         <field name="view_mode">card</field>
-        <field name="view_id" ref="product_card_view_card"/>
+        <field name="sequence" eval="3"/>
     </record>
 
 </odoo>
