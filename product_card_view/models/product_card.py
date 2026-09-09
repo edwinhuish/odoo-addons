@@ -21,6 +21,13 @@ class IrUiView(models.Model):
     type = fields.Selection(selection_add=[("card", "Card")])
 
 
+class IrActionsActWindowView(models.Model):
+    _inherit = "ir.actions.act_window.view"
+
+    # 扩展 view_mode Selection，新增 'card'（让 ir.actions.act_window.view 记录可用 card）
+    view_mode = fields.Selection(selection_add=[("card", "Card")])
+
+
 class ProductTemplate(models.Model):
     """扩展 product.template，提供卡片视图数据，不新增字段。"""
 
