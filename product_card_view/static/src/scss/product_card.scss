@@ -9,20 +9,19 @@
 // 不同高度的卡片逐列自然堆叠；column-width 保证小屏自适应列数。
 // ---------------------------------------------------------------------------
 .o_product_card_view.o_kanban_ungrouped {
-    display: block;
-    column-count: auto;
-    column-width: 15rem;
-    column-gap: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
     padding: 0.75rem;
 
-    // 分组后的 kanban 列内记录走原生布局，不命中本规则
+    // 卡片在 min ~ max 区间内自动伸缩占满容器宽度（flex:1 grow 填满剩余空间，
+    // max-width 防止过宽、min-width 防止过窄）
     > .o_kanban_record {
-        width: auto;
-        max-width: none;
-        min-width: 0;
+        flex: 1 1 15rem;
+        min-width: 15rem;
+        max-width: 22.5rem;
         margin: 0 0 0.75rem;
-        break-inside: avoid;
-        // 空位占位块在多列布局里没有意义，直接隐藏
+        // 空位占位块在 flex 布局里没有意义，直接隐藏
         &.o_kanban_ghost {
             display: none;
         }
