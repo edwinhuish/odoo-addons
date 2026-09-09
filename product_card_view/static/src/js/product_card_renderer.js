@@ -37,6 +37,7 @@ export class ProductCardRenderer extends KanbanRenderer {
         this.rootRef = useRef("root");
         this._onResize = this._debounce(() => this._layoutWaterfall(), 150);
         this._onImgLoad = () => this._layoutWaterfall();
+        this._onPcvResize = () => this._layoutWaterfall();
         onWillStart(() => fillProductCardPayload(this.props.list?.records || []));
         onWillUpdateProps((nextProps) => {
             fillProductCardPayload(nextProps.list?.records || []);
@@ -45,11 +46,14 @@ export class ProductCardRenderer extends KanbanRenderer {
         });
         onMounted(() => {
             window.addEventListener("resize", this._onResize);
+            // 卡片变体切换后高度可能变，监听 bubbling 的 pcv-resize 重算
+            this.rootRef.el?.addEventListener("pcv-resize", this._onPcvResize);
             // 下一帧再算：等子组件挂载完、offsetHeight 稳定
             requestAnimationFrame(() => this._layoutWaterfall());
         });
         onWillUnmount(() => {
             window.removeEventListener("resize", this._onResize);
+            this.rootRef.el?.removeEventListener("pcv-resize", this._onPcvResize);
         });
     }
 

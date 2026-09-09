@@ -287,6 +287,11 @@ export class ProductCardRecord extends KanbanRecord {
         }
         this.cardState.selected = next;
         this.cardState.imgIndex = 0;
+        // 变体切换可能改变卡片高度（按钮行 / selectionText 变），
+        // 下一帧（re-render 后 DOM 更新）通知渲染器重算瀑布流
+        requestAnimationFrame(() => {
+            this.el?.dispatchEvent(new CustomEvent("pcv-resize", { bubbles: true }));
+        });
     }
 
     // ---------------------------------------------------------------------
