@@ -171,6 +171,7 @@ odoo -d <db> -u product_reference --stop-after-init
 > `19.0.2.0.0` 完成 `product_model` → `product_reference` 改名与数据迁移，T-007；
 > `19.0.2.2.0` 完成参考号页顶部原生 `Reference` 统一编辑，T-008）。
 > 完整验收记录见 `CHANGELOG.md` →「验收记录（T-011）」/「交付记录（T-011）」。
+> `19.0.2.5.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 + 分类「产品」），目标环境已验收通过；记录见 `CHANGELOG.md` →「验收记录（T-013）」。
 
 | 验证项 | 期望 | 结果 |
 |--------|------|------|
@@ -190,7 +191,7 @@ odoo -d <db> -u product_reference --stop-after-init
 | 回归 | 按参考号搜索与命中提示、同产品（变体）去重、删除产品级联清理均正常 | 通过 |
 | 中英双语 | 英文界面 `Ref.` / `Reference` 系列文案，中文界面「参考号」系列文案 | 通过 |
 | 索引与约束 | `product_template__reference_code_index_index`、`product_product__variant_reference_code_index_index`（trigram）与两条 `UNIQUE` 存在 | 通过 |
-| 应用列表中文名（19.0.2.5.1） | 中文环境「应用」搜 `product_reference`，卡片标题显示「产品参考号」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 | 待验 |
+| 应用列表中文名（19.0.2.5.1） | 中文环境「应用」搜 `product_reference`，卡片标题显示「产品参考号」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 | 通过 |
 
 ### 历史验收项（`19.0.2.2.0` 及更早，页签时代，仅供参考）
 

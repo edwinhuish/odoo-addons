@@ -206,6 +206,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 > `19.0.2.6.0`（2026-09-08）完成产品变体多图（T-010）：`product.image.gallery` 增加 `product_id` 变体维度（产品 / 变体归属二选一）、`product.product` 新增 `variant_image_gallery_ids`，变体「独立编辑」表单图片区启用多图 widget——**目标环境验收通过（2026-09-08，随 19.0.2.6.1 复验，验收记录见 CHANGELOG →「交付记录（T-010）」）**。
 > `19.0.2.6.1`（2026-09-08）修复 19.0.2.6.0 回归：图库 One2many 需经 widget `fieldDependencies` 加载子数据（invisible x2many 不在主加载 spec 取 children），恢复该机制并按 `image_1920` options `gallery_field` 分流产品 / 变体图库字段——**目标环境复验通过（2026-09-08）**：产品 / 变体表单图库图片全部正常显示、不再出现占位符（验收记录见 CHANGELOG →「交付记录（T-010）」）。
 > `19.0.2.6.2`（2026-09-08）修复变体上传补充图报「双归属」Validation Error：变体编辑 action context 携带 `default_product_tmpl_id`（官方 product 变体列表 action），图库子行 `(0, 0)` 创建时子模型 default_get 把它填进 `product_tmpl_id`，与 One2many inverse 回填的 `product_id` 冲突——`product.product` 的 create / write 现对 `variant_image_gallery_ids` 的 `(0,0)` 创建命令子行强制置空 `product_tmpl_id`——**待目标环境复验**。
+> `19.0.2.6.3`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 + 分类「产品」），**目标环境已验收通过**；记录见 `CHANGELOG.md` →「验收记录（T-013）」。
 
 | 验证项 | 期望 |
 |--------|------|
@@ -254,7 +255,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 | 模板表单不回归 | 模板表单图片区行为与 19.0.2.5.0 一致（模板共享补充图 / 主图操作不变） |
 | 删除变体 | 删除变体时其专属图片行级联清理 |
 | 模块切换 | 卸载 `product_multi_image` → 安装 `product_image` 后功能正常 |
-| 应用列表中文名（19.0.2.6.3，待验） | 中文环境「应用」搜 `product_image`，卡片标题显示「产品图片」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 |
+| 应用列表中文名（19.0.2.6.3，已验收） | 中文环境「应用」搜 `product_image`，卡片标题显示「产品图片」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 |
 
 ### 执行流程
 
