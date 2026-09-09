@@ -10,12 +10,12 @@
         <field name="model">product.template</field>
         <field name="type">card</field>
         <field name="arch" type="xml">
-            <kanban records_draggable="0" quick_create="false">
+            <card records_draggable="0" quick_create="false">
                 <field name="name"/>
                 <templates>
                     <t t-name="card"><div/></t>
                 </templates>
-            </kanban>
+            </card>
         </field>
     </record>
 
