@@ -1,0 +1,319 @@
+/* ==========================================================================
+ * Web Multi Tabs - Styles
+ * ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+ * 标签栏：header 内部的子元素
+ * --------------------------------------------------------------------------- */
+.o_multi_tabs_bar {
+    width: 100%;
+    background: #71639e;
+    padding: 0 8px;
+    user-select: none;
+    flex-shrink: 0;
+    flex-basis: 100%;
+    order: -1;
+    display: flex;
+    align-items: stretch;
+    gap: 1px; /* 容器与折叠按钮之间的间隙，与标签间 gap 一致 */
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+
+.o_multi_tabs_bar > .o_multi_tabs_container {
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 32px;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+
+/* ---------------------------------------------------------------------------
+ * 溢出折叠按钮
+ * 固定宽度，与容器并排（flex 布局）。
+ * 用 visibility + opacity + width 替代 display 切换，避免重排闪烁。
+ * 默认 width: 0（隐藏），显形时由 .o_overflow_visible 覆盖为 32px。
+ * --------------------------------------------------------------------------- */
+.o_multi_tabs_overflow_btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    position: relative;
+    font-size: 12px;
+    padding: 0;
+    visibility: hidden;
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+.o_multi_tabs_overflow_btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.o_multi_tabs_overflow_btn.o_overflow_visible {
+    visibility: visible;
+    opacity: 1;
+    width: 32px;
+    overflow: visible; /* 允许下拉列表溢出按钮区域 */
+}
+
+/* ---------------------------------------------------------------------------
+ * 溢出下拉列表
+ * --------------------------------------------------------------------------- */
+.o_multi_tabs_overflow_dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    min-width: 200px;
+    max-width: 300px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: #4a3f6b;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 10001;
+}
+
+.o_multi_tabs_overflow_dropdown.o_dropdown_open {
+    display: block;
+}
+
+.o_multi_tabs_overflow_item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+.o_multi_tabs_overflow_item:last-child {
+    border-bottom: none;
+}
+
+.o_multi_tabs_overflow_item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.o_multi_tabs_overflow_item.o_overflow_active {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-weight: 600;
+}
+
+.o_multi_tabs_overflow_item.o_overflow_active::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #7c6bc4;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * 单个标签
+ * --------------------------------------------------------------------------- */
+.o_multi_tab,
+.o_multi_tab_close {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+}
+
+.o_multi_tab {
+    display: flex;
+    align-items: center;
+    max-width: 180px;
+    min-width: 80px;
+    height: 28px;
+    padding: 0 6px 0 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    transition: background-color 0.15s, color 0.15s;
+    flex-shrink: 0;
+}
+
+.o_multi_tab:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+}
+
+.o_multi_tab.o_multi_tab_active {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    height: 30px;
+}
+
+.o_multi_tab_name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 4px;
+}
+
+.o_multi_tab_close {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.o_multi_tab_close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+/* ==========================================================================
+ * PWA WCO 模式
+ *
+ * 标签栏保持在文档流中（position: relative），作为 header 第一个子元素，
+ * 导航栏自然排在下方。宽度由 JS inline style 控制（基于 CSS env() 值）。
+ * 左上角预留 LOGO 区域（可拖动），容器占据剩余空间。
+ * ========================================================================== */
+.o_multi_tabs_bar.o_multi_tabs_pwa_wco {
+    flex-basis: auto;
+    order: -1;
+    position: relative;
+    left: auto;
+    top: auto;
+    width: env(titlebar-area-width, 100%);
+    height: env(titlebar-area-height, 36px);
+    z-index: 9999;
+    border-bottom: none;
+    padding: 0;
+    background: #71639e;
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+
+/* WCO 模式下左上角 LOGO 区域，固定宽度，可拖动移动窗口 */
+.o_multi_tabs_bar.o_multi_tabs_pwa_wco > .o_multi_tabs_logo {
+    flex-shrink: 0;
+    width: 48px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.15);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 16px;
+    font-weight: 700;
+    font-family: serif;
+    -webkit-app-region: drag;
+    app-region: drag;
+    cursor: default;
+}
+
+/* LOGO 文字内容（通过 ::after 避免 DOM 文本节点被 innerHTML 清空） */
+.o_multi_tabs_bar.o_multi_tabs_pwa_wco > .o_multi_tabs_logo::after {
+    content: "O";
+}
+
+/* 非 WCO 模式下隐藏 LOGO 区域 */
+.o_multi_tabs_bar:not(.o_multi_tabs_pwa_wco) > .o_multi_tabs_logo {
+    display: none;
+}
+
+.o_multi_tabs_bar.o_multi_tabs_pwa_wco > .o_multi_tabs_container {
+    height: 100%;
+    border-bottom: none;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+    -webkit-app-region: drag;
+    app-region: drag;
+}
+
+.o_multi_tabs_bar.o_multi_tabs_pwa_wco .o_multi_tab {
+    height: calc(env(titlebar-area-height, 36px) - 8px);
+    min-width: 60px;
+    border-radius: 4px;
+    margin: 0 1px;
+}
+
+.o_multi_tabs_bar.o_multi_tabs_pwa_wco .o_multi_tab.o_multi_tab_active {
+    height: calc(env(titlebar-area-height, 36px) - 4px);
+}
+
+.o_multi_tabs_bar.o_multi_tabs_pwa_wco .o_multi_tabs_overflow_btn {
+    height: 100%;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ==========================================================================
+ * PWA standalone 模式滚动约束
+ *
+ * 在隐藏标题栏的 PWA / standalone 模式下，触摸板滑动会导致整个 web 界面
+ * （即 html / body）向下滚动，出现空白与错位。根因是 html / body 未锁定
+ * 视口高度，滚动发生在根元素而非 .o_action_manager 内部。
+ *
+ * 解决方案：PWA 模式下将 html / body 固定为 100vh 并禁止溢出滚动，
+ * 同时让 .o_action_manager 接管滚动（overflow:auto + flex:1），
+ * 使触摸板滑动仅作用于 .o_action_manager 区域。
+ *
+ * 注意：仅在 PWA 模式（html.o_multi_tabs_pwa 类标记）下生效，不影响
+ * 普通浏览器中的页面行为。该类由 JS 在初始化时根据 isPWA() 添加。
+ * ========================================================================== */
+html.o_multi_tabs_pwa,
+html.o_multi_tabs_pwa body {
+    height: 100vh;
+    height: 100dvh; /* 优先使用动态视口高度，避免移动端地址栏伸缩抖动 */
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* 禁止根元素滚动 */
+}
+
+html.o_multi_tabs_pwa body {
+    display: flex;
+    flex-direction: column;
+}
+
+html.o_multi_tabs_pwa .o_action_manager {
+    flex: 1 1 auto;
+    min-height: 0; /* flex 子项允许收缩，内部才能正常滚动 */
+    overflow: auto; /* 接管滚动，触摸板滑动仅作用于此处 */
+}

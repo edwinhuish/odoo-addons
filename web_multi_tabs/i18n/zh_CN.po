@@ -1,0 +1,282 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#	* web_multi_tabs
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-09 00:00+0000\n"
+"PO-Revision-Date: 2026-09-09 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Home"
+msgstr "首页"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Action"
+msgstr "操作"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Page"
+msgstr "页面"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Close"
+msgstr "关闭"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "More tabs"
+msgstr "更多标签"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Sales"
+msgstr "销售"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Contacts"
+msgstr "联系人"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Inventory"
+msgstr "库存"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Invoicing"
+msgstr "发票"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Accounting"
+msgstr "会计"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Settings"
+msgstr "设置"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Discuss"
+msgstr "消息"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Calendar"
+msgstr "日历"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Employees"
+msgstr "员工"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Purchase"
+msgstr "采购"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Manufacturing"
+msgstr "制造"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Project"
+msgstr "项目"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "CRM"
+msgstr "CRM"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Website"
+msgstr "网站"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "E-commerce"
+msgstr "电商"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Point of Sale"
+msgstr "销售点"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Spreadsheet"
+msgstr "电子表格"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Knowledge"
+msgstr "知识库"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Approvals"
+msgstr "审批"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Sign"
+msgstr "签名"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Expenses"
+msgstr "费用"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Timesheets"
+msgstr "工时表"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Maintenance"
+msgstr "维护"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Fleet"
+msgstr "车队"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Quality"
+msgstr "质量"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Repair"
+msgstr "维修"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Surveys"
+msgstr "调查"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Live Chat"
+msgstr "在线聊天"
+
+#. module: web_multi_tabs
+#. odoo-javascript
+#: code:addons/web_multi_tabs/static/src/js/multi_tabs.js:0
+msgid "Dashboard"
+msgstr "仪表板"
+
+#. module: base
+#: model:ir.module.module,shortdesc:base.module_web_multi_tabs
+msgid "Web Multi Tabs"
+msgstr "后台多标签页"
+
+#. module: base
+#: model:ir.module.module,summary:base.module_web_multi_tabs
+msgid ""
+"In-app tab bar for the Odoo backend: every opened view becomes a switchable "
+"/ closable tab, with an overflow menu and PWA (Window Controls Overlay) "
+"support"
+msgstr ""
+"Odoo 后台内部多标签页：每次打开视图都生成一个可切换 / 可关闭的标签，标签过多时折叠为"
+"下拉菜单，并适配 PWA（Window Controls Overlay）模式"
+
+#. module: base
+#: model:ir.module.module,description:base.module_web_multi_tabs
+msgid ""
+"\n"
+"Backend navigation enhancement module for foreign trade SOHO scenarios.\n"
+"\n"
+"Source language of this module is English (en_US); a Simplified Chinese\n"
+"translation ships in i18n/zh_CN.po.\n"
+"\n"
+"Key features:\n"
+"- A tab bar is rendered inside the top navbar (header.o_navbar)\n"
+"- Opening a view automatically creates a tab; clicking a tab switches\n"
+"  the view and every tab has a close button (the last one stays)\n"
+"- Tabs that do not fit collapse into a \"more tabs\" drop-down menu, and\n"
+"  the active tab is scrolled into view automatically\n"
+"- Tab titles follow the current view (quotation number, customer name,\n"
+"  ...) and are used as the document title in PWA mode\n"
+"- Homepage URL variants (/, /web, /odoo, /odoo/) are normalised into a\n"
+"  single \"Home\" tab, and the startup redirect is merged into it\n"
+"- PWA / Window Controls Overlay aware: the bar is sized with\n"
+"  CSS env(titlebar-area-*), so it fills the title bar area and can be\n"
+"  used to drag the window\n"
+"- The PWA webmanifest is extended with\n"
+"  display_override = [\"window-controls-overlay\"] through standard\n"
+"  controller inheritance; no core class is monkey-patched\n"
+"- No core template is rewritten: the bar is a plain DOM node inserted\n"
+"  into header.o_navbar\n"
+msgstr ""
+"\n"
+"外贸 SOHO 场景下的后台导航增强模块。\n"
+"\n"
+"本模块源语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
+"\n"
+"主要功能：\n"
+"- 在顶部导航栏（header.o_navbar）内渲染标签栏\n"
+"- 打开视图自动新建标签；点击标签切换视图，每个标签都有关闭按钮（最后一个保留）\n"
+"- 放不下的标签折叠为「更多标签」下拉菜单，并自动把当前标签滚动到可见区域\n"
+"- 标签标题跟随当前视图（报价单编号、客户名称等），PWA 模式下同步为浏览器标题\n"
+"- 首页的各种等价 URL（/、/web、/odoo、/odoo/）统一为一个「首页」标签，\n"
+"  启动时的自动跳转也合并进该标签\n"
+"- 适配 PWA / Window Controls Overlay：标签栏宽度按 CSS env(titlebar-area-*)\n"
+"  计算，铺满标题栏区域并可用于拖动窗口\n"
+"- 通过标准控制器继承给 PWA manifest 追加\n"
+"  display_override = [\"window-controls-overlay\"]；不对核心类做 monkey-patch\n"
+"- 不重写任何核心模板：标签栏只是插入到 header.o_navbar 的普通 DOM 节点\n"
