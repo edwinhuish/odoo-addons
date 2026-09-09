@@ -18,7 +18,7 @@ const IMAGE_FIELD = "image_512";
  */
 class ProductCardVariantRow extends Component {
     static template = "product_card_view.VariantRow";
-    static props = ["row", "record"];
+    static props = ["row", "record", "selectedValues"];
 }
 
 /**

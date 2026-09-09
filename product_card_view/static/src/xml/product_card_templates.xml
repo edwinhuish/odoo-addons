@@ -89,7 +89,7 @@
             <t t-if="rows.length">
                 <div class="o_product_card__variants o_product_card__stop">
                     <t t-foreach="rows" t-as="row" t-key="row.attr_id">
-                        <ProductCardVariantRow row="row" record="this"/>
+                        <ProductCardVariantRow row="row" record="this" selectedValues="cardState.selected"/>
                     </t>
                 </div>
             </t>
@@ -109,11 +109,11 @@
                 <t t-foreach="props.row.values" t-as="value" t-key="value.id">
                     <button type="button"
                         class="o_product_card__value btn btn-sm"
-                        t-attf-class="{{ props.record.isValueSelected(props.row.attr_id, value.id) ? 'active' : '' }}{{ !props.record.isValueAllowed(props.row.attr_id, value.id) ? ' disabled' : '' }}"
+                        t-attf-class="{{ props.selectedValues[props.row.attr_id] === value.id ? 'active' : '' }}{{ !props.record.isValueAllowed(props.row.attr_id, value.id) ? ' disabled' : '' }}"
                         t-on-click.stop="() => props.record.selectValue(props.row.attr_id, value.id)"
                         t-att-disabled="!props.record.isValueAllowed(props.row.attr_id, value.id)"
                         t-att-title="value.name">
-                        <t t-if="props.record.isValueSelected(props.row.attr_id, value.id)">
+                        <t t-if="props.selectedValues[props.row.attr_id] === value.id">
                             <i class="fa fa-check o_product_card__value_check" aria-hidden="true" />
                         </t>
                         <t t-esc="value.name" />
