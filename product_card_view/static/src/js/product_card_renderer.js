@@ -1,7 +1,6 @@
 /** @odoo-module **/
 
-import { onMounted, onWillStart, onWillUnmount, onWillUpdateProps, useEffect } from "@odoo/owl";
-import { browser } from "@web/core/browser/browser";
+import { onMounted, onWillStart, onWillUnmount, onWillUpdateProps } from "@odoo/owl";
 import { KanbanRenderer } from "@web/views/kanban/kanban_renderer";
 
 import { fillProductCardPayload } from "./product_card_model";
@@ -19,8 +18,11 @@ const PAD = 12; // 容器内边距（0.75rem）
  * 填入全局 Map（见 product_card_model.js），卡片组件按 resId 查。
  *
  * 未分组时启用 JS 瀑布流：卡片 position absolute，按内容高度放最矮列，
- * 各列高度均衡；响应式列数（容器宽 / CARD_MIN_WIDTH，桌面 3-4、平板 2-3、手机 1-2）；
+ * 各列高度均衡；响应式列数（容器宽 / CARD_MIN_WIDTH）；
  * resize + 图片 load 重算；卡片 transition 平滑过渡。
+ *
+ * 用 requestAnimationFrame 延迟一帧再算：等 KanbanRecord 子组件挂载完、
+ * DOM 尺寸稳定（首次 / props 变更后）。
  */
 export class ProductCardRenderer extends KanbanRenderer {
     static template = "product_card_view.ProductCardRenderer";
@@ -35,20 +37,19 @@ export class ProductCardRenderer extends KanbanRenderer {
         this._onResize = this._debounce(() => this._layoutWaterfall(), 150);
         this._onImgLoad = () => this._layoutWaterfall();
         onWillStart(() => fillProductCardPayload(this.props.list?.records || []));
-        onWillUpdateProps((nextProps) =>
-            fillProductCardPayload(nextProps.list?.records || [])
-        );
+        onWillUpdateProps((nextProps) => {
+            fillProductCardPayload(nextProps.list?.records || []);
+            // props 变（翻页/筛选/reload）后下一帧重算（等 DOM 更新）
+            requestAnimationFrame(() => this._layoutWaterfall());
+        });
         onMounted(() => {
-            browser.addEventListener("resize", this._onResize);
-            this._layoutWaterfall();
+            window.addEventListener("resize", this._onResize);
+            // 下一帧再算：等子组件挂载完、offsetHeight 稳定
+            requestAnimationFrame(() => this._layoutWaterfall());
         });
         onWillUnmount(() => {
-            browser.removeEventListener("resize", this._onResize);
+            window.removeEventListener("resize", this._onResize);
         });
-        // 渲染后跑瀑布流（records 数量变时重跑，如翻页 / 筛选）
-        useEffect(() => {
-            this._layoutWaterfall();
-        }, () => [this.props.list?.records?.length]);
     }
 
     _debounce(fn, wait) {
