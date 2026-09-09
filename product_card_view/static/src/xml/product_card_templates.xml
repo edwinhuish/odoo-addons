@@ -23,6 +23,7 @@
     -->
     <t t-name="product_card_view.Card">
         <article class="o_kanban_record o_product_card d-flex flex-column overflow-hidden"
+            t-ref="card"
             t-att-tabindex="0"
             t-on-click="onCardClick"
             t-on-keydown="onCardKeyDown"

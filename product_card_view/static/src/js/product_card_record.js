@@ -2,7 +2,7 @@
 
 import { _t } from "@web/core/l10n/translation";
 import { imageUrl } from "@web/core/utils/urls";
-import { Component, onWillUpdateProps, useState } from "@odoo/owl";
+import { Component, onWillUpdateProps, useRef, useState } from "@odoo/owl";
 import { KanbanRecord } from "@web/views/kanban/kanban_record";
 
 import { getProductCardPayload } from "./product_card_model";
@@ -43,6 +43,7 @@ export class ProductCardRecord extends KanbanRecord {
 
     setup() {
         super.setup();
+        this.cardRef = useRef("card");
         this.cardState = useState({
             selected: {}, // {attribute_id: value_id}
             imgIndex: 0,
@@ -290,7 +291,7 @@ export class ProductCardRecord extends KanbanRecord {
         // 变体切换可能改变卡片高度（按钮行 / selectionText 变），
         // 下一帧（re-render 后 DOM 更新）通知渲染器重算瀑布流
         requestAnimationFrame(() => {
-            this.el?.dispatchEvent(new CustomEvent("pcv-resize", { bubbles: true }));
+            this.cardRef.el?.dispatchEvent(new CustomEvent("pcv-resize", { bubbles: true }));
         });
     }
 
