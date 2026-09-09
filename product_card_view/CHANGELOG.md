@@ -54,6 +54,12 @@
        循环卡死。修复：setup 时把 `resId` 缓存到**非 reactive**实例属性 `_resId`
        （`onWillUpdateProps` 同步更新），payload / templateId getter 用 `_resId` 取，
        不访问任何 reactive state。
+    ⑦ VariantRow sub-component 隔离嵌套 t-foreach：删 variants 不卡、加回卡，
+       二分定位到 values t-foreach（内层嵌套 t-foreach）触发 Owl 重渲染循环。
+       拆出 `ProductCardVariantRow` sub-component，外层只 t-foreach rows，内层
+       values 的 t-foreach 在独立组件内，reactive 依赖不再跨层耦合，循环切断。
+    - 卡片宽度限制 max 360px（`column-width` + 卡片 `max-width`）；变体按钮 active
+      样式加 `!important` 覆盖 Bootstrap `.btn.active`。
     同时修正 `templateId` 用 `record.resId`（原用 `record.id` 是 datapoint 内部编号，
     会导致图片 URL 404）。
 

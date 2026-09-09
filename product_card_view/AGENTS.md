@@ -56,7 +56,11 @@
      （effect 监听 `props.record` 并写 `dataState.record` 触发 re-render）；若 payload
      getter 访问 `props.record.resId` 或 `dataState.record?.id?.value`（reactive），
      会与该 effect 冲突 → render 循环卡死
-   - 违反后果：页面卡顿，后端压力大；payload 关联错误会导致卡片空白或前端卡死
+   - 变体按钮行必须用 sub-component（`ProductCardVariantRow`）隔离内层 t-foreach：
+     Owl 19 在主模板嵌套 t-foreach（rows × values）会触发重渲染循环；sub-component
+     隔离 reactive 上下文，外层只 t-foreach rows，内层 values 在独立组件内
+   - 违反后果：页面卡顿，后端压力大；payload 关联错误会导致卡片空白或前端卡死；
+     嵌套 t-foreach 不隔离会 render 循环卡死
 
 7. **所有用户可见文本源语言为英文（`en_US`）**
    - Python / XML / JS / QWeb 不写中文界面文案；中文只在 `i18n/zh_CN.po` 的 `msgstr`
@@ -84,11 +88,11 @@
 | `controllers/product_card_controller.py` | `/product_card/payload` JSON 接口 |
 | `views/product_card_views.xml` | kanban 视图（`js_class="product_cards"`）+ 独立动作 + 库存菜单 |
 | `static/src/js/product_card_view.js` | 注册 `views.product_cards`（kanbanView 派生） |
-| `static/src/js/product_card_model.js` | RelationalModel 子类，`_loadData` 中批量请求 payload 填入非 reactive 全局 Map（按 resId 索引，导出 `getProductCardPayload`） |
-| `static/src/js/product_card_renderer.js` | KanbanRenderer 子类，替换记录卡片组件并加根类 |
-| `static/src/js/product_card_record.js` | 卡片组件：轮播 / 变体选择 / 信息同步 / 打开产品 |
-| `static/src/xml/product_card_templates.xml` | 渲染器 primary 继承模板 + 卡片 QWeb |
-| `static/src/scss/product_card.scss` | 瀑布流多列布局 + 卡片 / 轮播 / 变体按钮样式 |
+| `static/src/js/product_card_model.js` | `ProductCardModel`（只 `withCache=false`）+ 全局 Map（按 resId 索引）+ `fillProductCardPayload` / `getProductCardPayload` |
+| `static/src/js/product_card_renderer.js` | KanbanRenderer 子类，替换记录卡片组件并加根类；`onWillStart`/`onWillUpdateProps` 钩子拉取 payload |
+| `static/src/js/product_card_record.js` | 卡片组件：轮播 / 变体选择 / 信息同步 / 打开产品；`_resId` 缓存（避开 useRecordObserver effect）；内含 `ProductCardVariantRow` sub-component 隔离嵌套 t-foreach |
+| `static/src/xml/product_card_templates.xml` | 渲染器 primary 继承模板 + 卡片 QWeb + VariantRow sub-component 模板 |
+| `static/src/scss/product_card.scss` | 瀑布流多列布局（max 360px）+ 卡片 / 轮播 / 变体按钮样式 |
 | `i18n/zh_CN.po` | 简体中文译文 |
 | `README.md` / `CHANGELOG.md` / `AGENTS.md` | 三件套文档 |
 

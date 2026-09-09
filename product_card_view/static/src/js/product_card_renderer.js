@@ -6,9 +6,6 @@ import { KanbanRenderer } from "@web/views/kanban/kanban_renderer";
 import { fillProductCardPayload } from "./product_card_model";
 import { ProductCardRecord } from "./product_card_record";
 
-let _onWillStartCount = 0;
-let _onWillUpdatePropsCount = 0;
-
 /**
  * 渲染器：结构沿用 KanbanRenderer，仅替换记录卡片组件并加自定义根类。
  * 在生命周期钩子（onWillStart / onWillUpdateProps）里批量拉取卡片 payload
@@ -27,21 +24,10 @@ export class ProductCardRenderer extends KanbanRenderer {
         super.setup();
         // 首次挂载：model 已加载（ViewController onWillStart await model.load），
         // props.list.records 有数据，拉取 payload；Owl 等 onWillStart resolve 才渲染卡片。
-        onWillStart(() => {
-            _onWillStartCount++;
-            console.warn("[PCV DEBUG] onWillStart #" + _onWillStartCount);
-            return fillProductCardPayload(this.props.list?.records || []);
-        });
+        onWillStart(() => fillProductCardPayload(this.props.list?.records || []));
         // props 变化（翻页 / 筛选 / reload 重建 root）：重新拉取。
-        onWillUpdateProps((nextProps) => {
-            _onWillUpdatePropsCount++;
-            if (_onWillUpdatePropsCount <= 5) {
-                console.warn(
-                    "[PCV DEBUG] onWillUpdateProps #" + _onWillUpdatePropsCount,
-                    "list=", nextProps.list,
-                );
-            }
-            return fillProductCardPayload(nextProps.list?.records || []);
-        });
+        onWillUpdateProps((nextProps) =>
+            fillProductCardPayload(nextProps.list?.records || [])
+        );
     }
 }
