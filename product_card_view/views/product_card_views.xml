@@ -13,9 +13,6 @@
         <field name="arch" type="xml">
             <card records_draggable="0" quick_create="false">
                 <field name="name"/>
-                <templates>
-                    <t t-name="card"><div/></t>
-                </templates>
             </card>
         </field>
     </record>
