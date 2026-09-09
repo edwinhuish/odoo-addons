@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { onMounted, onWillStart, onWillUnmount, onWillUpdateProps } from "@odoo/owl";
+import { onMounted, onWillStart, onWillUnmount, onWillUpdateProps, useRef } from "@odoo/owl";
 import { KanbanRenderer } from "@web/views/kanban/kanban_renderer";
 
 import { fillProductCardPayload } from "./product_card_model";
@@ -21,8 +21,8 @@ const PAD = 12; // 容器内边距（0.75rem）
  * 各列高度均衡；响应式列数（容器宽 / CARD_MIN_WIDTH）；
  * resize + 图片 load 重算；卡片 transition 平滑过渡。
  *
- * 用 requestAnimationFrame 延迟一帧再算：等 KanbanRecord 子组件挂载完、
- * DOM 尺寸稳定（首次 / props 变更后）。
+ * 用 rootRef（KanbanRenderer 模板根 div 的 t-ref="root"）取容器，
+ * 不用 this.el（在 onMounted 的 rAF 里可能为 null）。
  */
 export class ProductCardRenderer extends KanbanRenderer {
     static template = "product_card_view.ProductCardRenderer";
@@ -34,6 +34,7 @@ export class ProductCardRenderer extends KanbanRenderer {
 
     setup() {
         super.setup();
+        this.rootRef = useRef("root");
         this._onResize = this._debounce(() => this._layoutWaterfall(), 150);
         this._onImgLoad = () => this._layoutWaterfall();
         onWillStart(() => fillProductCardPayload(this.props.list?.records || []));
@@ -65,7 +66,7 @@ export class ProductCardRenderer extends KanbanRenderer {
      * 容器高度 = 最高列。图片未加载时 offsetHeight 不准，故监听 img load 重算。
      */
     _layoutWaterfall() {
-        const container = this.el;
+        const container = this.rootRef.el;
         console.warn("[PCV DEBUG] _layoutWaterfall: container=", !!container, "ungrouped=", container?.classList?.contains("o_kanban_ungrouped"));
         if (!container || !container.classList.contains("o_kanban_ungrouped")) {
             return;
