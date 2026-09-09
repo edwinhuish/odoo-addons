@@ -58,4 +58,24 @@
         <field name="sequence" eval="3"/>
     </record>
 
+    <!--
+      4) sale.product_template_action（Sales > Products 入口）
+      5) purchase.product_normal_action_puchased（Purchase > Products 入口）
+      这两个 action 用 view_ids（Command.create）而非 view_mode 字符串，
+      _compute_views 优先 view_ids。只加一条独立的 act_window.view 记录即可，
+      不覆盖 view_ids（原 kanban/list/form/activity 保留），避免重复升级冲突。
+    -->
+    <record id="product_template_action_sale_card_view" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="sale.product_template_action"/>
+        <field name="view_id" ref="product_template_card_view"/>
+        <field name="view_mode">card</field>
+        <field name="sequence" eval="3"/>
+    </record>
+    <record id="product_normal_action_puchased_card_view" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="purchase.product_normal_action_puchased"/>
+        <field name="view_id" ref="product_template_card_view"/>
+        <field name="view_mode">card</field>
+        <field name="sequence" eval="3"/>
+    </record>
+
 </odoo>

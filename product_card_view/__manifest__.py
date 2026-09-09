@@ -16,7 +16,7 @@
     """,
     "category": "Inventory/Product",
     "author": "edwinhuish",
-    "depends": ["product_image", "stock"],
+    "depends": ["product_image", "stock", "sale", "purchase"],
     "data": [
         "views/product_card_views.xml",
     ],
