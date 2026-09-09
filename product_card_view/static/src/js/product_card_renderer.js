@@ -39,10 +39,11 @@ export class ProductCardRenderer extends KanbanRenderer {
             fillProductCardPayload(nextProps.list?.records || [])
         );
         onMounted(() => {
-            browser.addEventListener(window, "resize", this._onResize);
+            browser.addEventListener("resize", this._onResize);
+            this._layoutWaterfall();
         });
         onWillUnmount(() => {
-            browser.removeEventListener(window, "resize", this._onResize);
+            browser.removeEventListener("resize", this._onResize);
         });
         // 渲染后跑瀑布流（records 数量变时重跑，如翻页 / 筛选）
         useEffect(() => {
