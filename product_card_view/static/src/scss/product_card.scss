@@ -88,28 +88,33 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 1.9rem;
-    height: 1.9rem;
+    width: 2rem;
+    height: 2.6rem;
     padding: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.85);
+    border-radius: 0.25rem;
+    background: rgba(255, 255, 255, 0.7);
     color: #495057;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-    opacity: 0.85;
-    transition: opacity 0.15s ease, color 0.15s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
 
     &:hover {
-        opacity: 1;
+        background: rgba(255, 255, 255, 0.9);
         color: var(--o-product-card-accent);
     }
 
     &.o_product_card__arrow_left {
-        left: 0.4rem;
+        left: 0;
     }
 
     &.o_product_card__arrow_right {
-        right: 0.4rem;
+        right: 0;
     }
+}
+
+// 图片区悬浮时才显示切换按钮
+.o_product_card__imgbox:hover .o_product_card__arrow {
+    opacity: 1;
 }
 
 .o_product_card__counter {
@@ -181,26 +186,35 @@
 }
 
 .o_product_card__row {
-    gap: 0.5rem;
+    gap: 0.3rem;
     min-width: 0;
+    flex-wrap: wrap;
 }
 
-.o_product_card__attr {
-    flex-shrink: 0;
-    font-size: 0.72rem;
-    line-height: 1.75rem;
-    color: #868e96;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    min-width: 2.2rem;
-    max-width: 4.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+// 颜色类型变体按钮（圆形色块）
+.o_product_card__color {
+    width: 1.4rem;
+    height: 1.4rem;
+    padding: 0;
+    border: 2px solid #dee2e6;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 
-.o_product_card__values {
-    gap: 0.25rem;
-    min-width: 0;
+    &:hover:not(.disabled):not(:disabled) {
+        transform: scale(1.12);
+    }
+
+    &.active {
+        border-color: var(--o-product-card-accent);
+        box-shadow: 0 0 0 2px var(--o-product-card-accent);
+    }
+
+    &.disabled,
+    &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
 }
 
 .o_product_card__value {

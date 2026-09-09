@@ -72,9 +72,11 @@ class ProductTemplate(models.Model):
         # ---- 属性 / 属性值名称与排序键：一次 browse 缓存 ----
         attr_records = env["product.attribute"].browse(sorted(all_attr_ids))
         attr_name = {attr.id: attr.name for attr in attr_records}
+        attr_type = {attr.id: attr.display_type for attr in attr_records}
         attr_order = {attr.id: (attr.sequence, attr.id) for attr in attr_records}
         value_records = env["product.attribute.value"].browse(sorted(all_value_ids))
         value_name = {value.id: value.name for value in value_records}
+        value_html_color = {value.id: value.html_color for value in value_records}
         value_order = {value.id: (value.sequence, value.id) for value in value_records}
 
         # ---- 图库补充图（product.image.gallery）一次拉取 ----
@@ -113,7 +115,15 @@ class ProductTemplate(models.Model):
                     {
                         "attr_id": attr_id,
                         "attr_name": attr_name.get(attr_id, ""),
-                        "values": [{"id": v_id, "name": value_name.get(v_id, "")} for v_id in values],
+                        "attr_type": attr_type.get(attr_id, "radio"),
+                        "values": [
+                            {
+                                "id": v_id,
+                                "name": value_name.get(v_id, ""),
+                                "html_color": value_html_color.get(v_id, ""),
+                            }
+                            for v_id in values
+                        ],
                     }
                 )
 
