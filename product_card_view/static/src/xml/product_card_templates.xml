@@ -113,6 +113,9 @@
                         t-on-click.stop="() => props.record.selectValue(props.row.attr_id, value.id)"
                         t-att-disabled="!props.record.isValueAllowed(props.row.attr_id, value.id)"
                         t-att-title="value.name">
+                        <t t-if="props.record.isValueSelected(props.row.attr_id, value.id)">
+                            <i class="fa fa-check o_product_card__value_check" aria-hidden="true" />
+                        </t>
                         <t t-esc="value.name" />
                     </button>
                 </t>

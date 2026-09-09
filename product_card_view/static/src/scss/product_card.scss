@@ -11,14 +11,14 @@
 .o_product_card_view.o_kanban_ungrouped {
     display: block;
     column-count: auto;
-    column-width: 360px;
+    column-width: 15rem;
     column-gap: 0.75rem;
     padding: 0.75rem;
 
     // 分组后的 kanban 列内记录走原生布局，不命中本规则
     > .o_kanban_record {
-        width: auto;
-        max-width: 360px;
+        width: 15rem;
+        max-width: 15rem;
         min-width: 0;
         margin: 0 0 0.75rem;
         break-inside: avoid;
@@ -223,6 +223,13 @@
         border-color: var(--o-product-card-accent) !important;
         background: var(--o-product-card-accent) !important;
         color: #fff !important;
+        box-shadow: 0 0 0 1px var(--o-product-card-accent), 0 2px 6px rgba(0, 0, 0, 0.18);
+    }
+
+    .o_product_card__value_check {
+        margin-right: 0.25rem;
+        font-size: 0.7rem;
+        vertical-align: middle;
     }
 
     &.disabled,
