@@ -6,12 +6,16 @@ import { registry } from "@web/core/registry";
 import { ProductCardModel } from "./product_card_model";
 import { ProductCardRenderer } from "./product_card_renderer";
 
-// Kanban 允许在视图 arch 上写 js_class="product_cards"，web 加载时会用本注册表
-// 项替换默认 kanban 的 Model / Renderer，其余（Controller/ArchParser/搜索等）原样复用。
-export const productCardView = {
+// 注册新 view type "card"：复用 kanban 的 Controller/ArchParser/search，
+// 换 Model/Renderer 为产品卡片瀑布流。arch 用 <card>（KanbanArchParser 不
+// 检查根元素名，读属性 + 遍历子节点，<card> 可被解析）。
+export const cardView = {
     ...kanbanView,
+    type: "card",
+    display_name: "Card",
+    icon: "fa-th-large",
     Model: ProductCardModel,
     Renderer: ProductCardRenderer,
 };
 
-registry.category("views").add("product_cards", productCardView);
+registry.category("views").add("card", cardView);

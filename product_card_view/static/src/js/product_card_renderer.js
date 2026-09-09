@@ -71,14 +71,12 @@ export class ProductCardRenderer extends KanbanRenderer {
      */
     _layoutWaterfall() {
         const container = this.rootRef.el;
-        console.warn("[PCV DEBUG] _layoutWaterfall: container=", !!container, "ungrouped=", container?.classList?.contains("o_kanban_ungrouped"));
         if (!container || !container.classList.contains("o_kanban_ungrouped")) {
             return;
         }
         const cards = container.querySelectorAll(
             ":scope > .o_kanban_record:not(.o_kanban_ghost)"
         );
-        console.warn("[PCV DEBUG] cards.length=", cards.length, "innerWidth=", container.clientWidth - PAD * 2);
         if (!cards.length) {
             container.style.height = "";
             return;
@@ -88,7 +86,6 @@ export class ProductCardRenderer extends KanbanRenderer {
         let cardWidth = Math.floor((innerWidth - GAP * (numCols - 1)) / numCols);
         cardWidth = Math.min(cardWidth, CARD_MAX_WIDTH);
         const colHeights = new Array(numCols).fill(0);
-        let _dbg = 0;
         for (const card of cards) {
             const col = colHeights.indexOf(Math.min(...colHeights));
             card.style.position = "absolute";
@@ -96,10 +93,6 @@ export class ProductCardRenderer extends KanbanRenderer {
             card.style.left = PAD + col * (cardWidth + GAP) + "px";
             card.style.top = PAD + colHeights[col] + "px";
             colHeights[col] += card.offsetHeight + GAP;
-            if (_dbg < 3) {
-                _dbg++;
-                console.warn("[PCV DEBUG] card #" + _dbg, "offsetHeight=", card.offsetHeight, "col=", col, "top=", card.style.top, "left=", card.style.left, "width=", card.style.width);
-            }
             // 图片未加载完时监听 load，加载后重算（高度变化）
             for (const img of card.querySelectorAll("img")) {
                 if (!img.complete) {

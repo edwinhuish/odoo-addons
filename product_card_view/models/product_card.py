@@ -11,7 +11,14 @@
 
 from collections import defaultdict
 
-from odoo import models
+from odoo import fields, models
+
+
+class IrUiView(models.Model):
+    _inherit = "ir.ui.view"
+
+    # 扩展 view type Selection，新增 'card'（卡片瀑布流视图）
+    type = fields.Selection(selection_add=[("card", "Card")])
 
 
 class ProductTemplate(models.Model):

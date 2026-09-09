@@ -2,47 +2,47 @@
 <odoo>
 
     <!--
-      产品卡片视图本体：本质是 kanban，通过 js_class 让 web 加载 product_cards
-      注册表项（Model 批量装载卡片数据 + Renderer 换瀑布流记录卡片）。
+      卡片视图（view type=card，arch 用 <card>，复用 kanban ArchParser/Controller/search）。
+      ir.ui.view.type 的 'card' 选项由 models/product_card.py 扩展 Selection 提供。
+      不再有独立动作 / 菜单——Card 按钮直接加到官方 Products 视图切换器。
     -->
-    <record id="product_card_view_kanban" model="ir.ui.view">
+    <record id="product_card_view_card" model="ir.ui.view">
         <field name="name">product.template.product.card.view</field>
         <field name="model">product.template</field>
+        <field name="type">card</field>
         <field name="arch" type="xml">
-            <kanban js_class="product_cards"
-                records_draggable="0"
-                quick_create="false">
+            <card records_draggable="0" quick_create="false">
                 <field name="name"/>
                 <templates>
                     <t t-name="card"><div/></t>
                 </templates>
-            </kanban>
+            </card>
         </field>
     </record>
 
-    <!-- 独立动作：官方默认列表 / 看板 / 表单均不动 -->
-    <record id="product_card_view_action" model="ir.actions.act_window">
-        <field name="name">Product Cards</field>
-        <field name="res_model">product.template</field>
-        <field name="view_mode">kanban,list,form</field>
-        <field name="view_id" ref="product_card_view_kanban"/>
-        <field name="search_view_id" ref="product.product_template_search_view"/>
-        <field name="context">{"search_default_filter_to_sell":1}</field>
-        <field name="help" type="html">
-            <p class="o_view_nocontent_smiling_face">
-                Create a new product
-            </p><p>
-                Products are shown as cards with image carousel, reference,
-                on hand quantity and a variant switcher for multi-variant items.
-            </p>
-        </field>
+    <!--
+      扩展官方产品 action：view_mode 加 card（在 kanban 左侧），
+      view_ids 加 card view。Inventory / Sales / Purchase 的 Products 菜单
+      用的就是这两个 action，故 Card 按钮在所有 Products 页面都出现。
+    -->
+    <record id="product.product_template_action" model="ir.actions.act_window">
+        <field name="view_mode">card,kanban,list,form</field>
+    </record>
+    <record id="product_template_action_card_view" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="product.product_template_action"/>
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">card</field>
+        <field name="view_id" ref="product_card_view_card"/>
     </record>
 
-    <!-- 库存应用下的独立菜单入口（不动官方 Products 菜单） -->
-    <menuitem id="menu_product_card_view"
-        name="Product Cards"
-        parent="stock.menu_stock_inventory_control"
-        sequence="15"
-        action="product_card_view_action"/>
+    <record id="product.product_template_action_all" model="ir.actions.act_window">
+        <field name="view_mode">card,kanban,list,form</field>
+    </record>
+    <record id="product_template_action_all_card_view" model="ir.actions.act_window.view">
+        <field name="act_window_id" ref="product.product_template_action_all"/>
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">card</field>
+        <field name="view_id" ref="product_card_view_card"/>
+    </record>
 
 </odoo>
