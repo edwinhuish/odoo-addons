@@ -5,24 +5,14 @@
     "description": """
         Modern product list card view for foreign trade SOHO scenarios.
 
-        Source language of this module is English (en_US); a Simplified Chinese
-        translation ships in i18n/zh_CN.po.
+        Source language: English (en_US); Simplified Chinese translation in i18n/zh_CN.po.
 
-        Key features:
-        - A dedicated "Product Cards" action (independent menu inside Inventory,
-          official product list/kanban views are left untouched)
-        - Each card shows the product main image on top, with left/right arrows
-          and swipe gestures to browse multiple images
-        - Multi-image sources follow product_image: template main image plus the
-          template shared gallery, and per-variant main image plus its own
-          gallery once a variant is selected (the two sets never mix)
-        - Under the image, the card shows title, reference (default_code) and
-          on hand quantity
-        - For multi-variant products a variant switcher is rendered on the card
-          (one row per attribute); picking a variant instantly switches image,
-          reference and on hand to that variant
-        - Masonry (waterfall) layout: cards of different heights flow into a
-          responsive multi-column grid
+        Features:
+        - Dedicated "Product Cards" action in Inventory, official views untouched
+        - Card with main image carousel (arrows + swipe), title, reference, on hand
+        - Multi-image sources follow product_image (template + per-variant, never mixed)
+        - Variant switcher on the card for multi-variant products
+        - Masonry (waterfall) responsive multi-column layout
     """,
     "category": "Inventory/Product",
     "author": "edwinhuish",
