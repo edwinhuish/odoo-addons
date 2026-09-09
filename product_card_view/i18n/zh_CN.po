@@ -14,22 +14,6 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 #. module: product_card_view
-#: model:ir.actions.act_window,name:product_card_view.product_card_view_action
-#: model:ir.ui.menu,name:product_card_view.menu_product_card_view
-msgid "Product Cards"
-msgstr "产品卡片"
-
-#. module: product_card_view
-#: model_terms:ir.actions.act_window,help:product_card_view.product_card_view_action
-msgid "Create a new product"
-msgstr "创建一个新产品"
-
-#. module: product_card_view
-#: model_terms:ir.actions.act_window,help:product_card_view.product_card_view_action
-msgid "Products are shown as cards with image carousel, reference, on hand quantity and a variant switcher for multi-variant items."
-msgstr "产品以卡片形式展示：顶部多图轮播、参考号、在手数量；多变体产品可在卡片上直接切换变体。"
-
-#. module: product_card_view
 #: code:addons/product_card_view/static/src/js/product_card_record.js:0
 msgid "Product image"
 msgstr "产品图片"

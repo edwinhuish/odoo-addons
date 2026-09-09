@@ -5,6 +5,63 @@
 
 ---
 
+## [19.0.2.0.0] - 2026-09-09（Card 入口已确认，其余待复验）
+
+### 交付记录（T-012）
+
+- 验收日期：2026-09-09
+- 验收环境：目标 Odoo 19 部署环境（`19.0-20260817`）
+- 验收结果：Card 视图入口（库存 → Products 切换器）已由使用方确认可见可用；卡片内容 / 多图轮播 /
+  变体联动 / Sales / Purchase 入口 / 中英双语 / 权限列入待复验清单
+  （见模块 `README.md` →「验证清单」「测试用例」「遗留问题」）
+
+### 变更
+
+- **架构调整：从「独立动作 + `js_class`」改为注册新 view type `card`**（T-012 需求是官方产品列表
+  右上角能切到卡片视图；`js_class` 变体不会在切换器产生新按钮，故必须新增 view type）：
+  - Python：`ir.ui.view.type`、`ir.actions.act_window.view.view_mode` 的 Selection 追加 `card`。
+  - JS：`registry.category("views").add("card", {...kanbanView, type:"card", ArchParser, Model, Renderer})`；
+    **patch `session.view_info.card`**——核心 `view.js` 用 `type in session.view_info` 校验、
+    `loadView` 用 `session.view_info[type]` 判存在、`action_service.js` 解构
+    `{icon, display_name, multi_record}` 生成按钮；该白名单由服务端核心提供，模块级 Python 无法扩展。
+  - 新增 `ProductCardArchParser`（继承 `KanbanArchParser`）：card arch 经 server 校验禁止 OWL 指令，
+    不能写 `<templates>`，故在 `parse` 时注入虚拟 `<t t-name="card">` 以满足父类的模板检查。
+- **注入官方产品动作**（只加 Card 视图入口，不改官方列表 / 看板 / 表单本身）：
+  - 硬依赖：`product.product_template_action`、`product.product_template_action_all`、
+    `stock.product_template_action_product`——`view_mode` 加 `card` + 各加一条 `act_window.view` 记录。
+    （定位到库存入口实际绑定的是 `stock.product_template_action_product`，
+    原先只扩展 product 的两条 action 不生效，这是「升级成功但无 Card 按钮」的根因）
+  - 可选：`sale.product_template_action`、`purchase.product_normal_action_puchased` 由
+    `<function>` → `_sync_product_card_views()` 条件注入。
+- **移除独立的「Product Cards」动作与菜单**：Card 已成为官方 Products 的并列视图，独立入口不再需要
+  （`i18n/zh_CN.po` 中对应的 3 条孤儿译文同步删除）。
+- 切换器图标改为 `oi oi-view-kanban`（`session.view_info.card.icon`）。
+
+### 影响
+
+- 用户可见：官方 Products（库存 / 销售 / 采购入口）切换器新增 **Card** 按钮
+  （顺序 Kanban / List / Card / Form）；默认视图不变，官方 list / kanban / form 的 arch 未改动。
+- 依赖收敛：`depends` 仅为 `["stock"]`。
+  - `product_image` 改可选：未安装时 `env.get("product.image.gallery")` 返回 `None`，图库留空，
+    卡片**只显示主图**，其余功能不受影响。
+  - `sale` / `purchase` 改可选：未安装时 `env.ref(..., raise_if_not_found=False)` 判空跳过，不注入也不报错；
+    后装这两个模块时需再升级一次本模块才会注入。
+- 数据库：无新建模型 / 字段 / 表结构变更，**无需迁移脚本**；仅新增 1 条 `ir.ui.view` 与若干
+  `ir.actions.act_window.view` 记录，并扩展已有 action 的 `view_mode` 字段值。
+- **卸载注意**：Odoo 不记录字段覆盖前的值，卸载后官方 action 的 `view_mode` 不会自动回滚为不含 `card`，
+  需人工确认。
+- 风险：`session.view_info` 的 patch 依赖 Odoo 内部实现（校验与解构方式），Odoo 升级需回归
+  （见模块 `AGENTS.md` → L2 P2）。
+
+### 文档
+
+- 同步 `__manifest__.py`（版本 + description）、`README.md`（需求 / 接口 / 验收 / 截图 / 遗留问题）、
+  `AGENTS.md`（技术设计 / L1 约束 2 改写 / L2 P1~P4 / T-012 复盘）、`i18n/zh_CN.po`
+- 同步根 `TODO.md`（T-012 移出，标记已完成）、根 `README.md`（模块一览表 + 路线图）、
+  根 `AGENTS.md`（模块速查表）
+
+---
+
 ## [19.0.1.0.1] - 2026-09-08（待验证）
 
 ### 变更
