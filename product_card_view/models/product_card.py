@@ -18,14 +18,14 @@ class IrUiView(models.Model):
     _inherit = "ir.ui.view"
 
     # 扩展 view type Selection，新增 'card'（卡片瀑布流视图）
-    type = fields.Selection(selection_add=[("card", "Card")])
+    type = fields.Selection(selection_add=[("card", "Card")], ondelete={"card": "cascade"})
 
 
 class IrActionsActWindowView(models.Model):
     _inherit = "ir.actions.act_window.view"
 
     # 扩展 view_mode Selection，新增 'card'（让 ir.actions.act_window.view 记录可用 card）
-    view_mode = fields.Selection(selection_add=[("card", "Card")])
+    view_mode = fields.Selection(selection_add=[("card", "Card")], ondelete={"card": "cascade"})
 
 
 class ProductTemplate(models.Model):
