@@ -20,7 +20,7 @@ if (!session.view_info) {
 }
 if (!("card" in session.view_info)) {
     session.view_info.card = {
-        icon: "fa-id-card-o",
+        icon: "oi oi-view-kanban",
         display_name: "Card",
         multi_record: true,
     };
