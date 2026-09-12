@@ -35,11 +35,18 @@ export async function prefetchLineHoverPayload(lineIds) {
     }
     try {
         const payload = await rpc("/sale_product_hover/payload", { line_ids: ids });
+        let received = 0;
         for (const lineId of ids) {
             const data = payload && payload[lineId];
             if (data) {
                 payloadByLineId.set(lineId, data);
+                received += 1;
             }
+        }
+        if (typeof odoo !== "undefined" && odoo.debug) {
+            console.debug(
+                `[sale_product_hover] payload: requested ${ids.length}, received ${received}`
+            );
         }
     } catch (error) {
         for (const lineId of ids) {

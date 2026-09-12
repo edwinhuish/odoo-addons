@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """销售订单行悬浮卡片的 JSON 数据接口。"""
 
+import logging
+
 from odoo import http
 from odoo.http import request
+
+_logger = logging.getLogger(__name__)
 
 
 class SaleProductHoverController(http.Controller):
@@ -29,4 +33,10 @@ class SaleProductHoverController(http.Controller):
         if not ids:
             return {}
         lines = request.env["sale.order.line"].browse(ids).exists()
-        return lines._get_product_hover_payload()
+        try:
+            return lines._get_product_hover_payload()
+        except Exception:
+            # 兜底：接口异常不应打断用户操作，只表现为「没有浮层」，
+            # 因此在此记录服务端日志便于排查（前端另有 console.warn）。
+            _logger.exception("sale_product_hover: unable to build hover payload for lines %s", ids)
+            return {}

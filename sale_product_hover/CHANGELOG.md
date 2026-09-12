@@ -3,6 +3,42 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能 +y，修复/文档 +z。
 
+## [19.0.1.0.1] - 2026-09-13（待验证）
+
+### 变更
+
+- **修复**：安装后悬停订单行不出现浮层。逐项加固触发链路与数据链路：
+  - 事件监听改为 **document 级 `mouseover` / `mouseout` 委托**，并用 `this.el.contains()` 限定
+    只处理本渲染器渲染的行。此前监听挂在渲染器根节点 `this.rootRef.el`（`t-ref="root"`）上，
+    而销售订单行使用的是 `sale.ListRenderer.RecordRow` ← `account.SectionAndNoteListRenderer`
+    （primary 继承的自定义模板），根节点 ref 不可靠，可能出现「监听从未绑定 → 完全无反应」。
+  - `usePopover` 增加 `setActiveElement: false`：popover 服务默认会 `?? true` 抢占焦点，
+    悬停浮层不应打断正在进行的输入与快捷键。
+  - `_isProductHoverList()` 增加 x2many 兜底：`props.list.resModel` 取不到时回退首条记录的
+    `resModel`。
+  - 后端 `_get_product_hover_payload()` 改为**按 `product.product` 实际字段过滤**后再 `read()`，
+    取值统一用 `dict.get()`：避免个别环境字段缺失触发 `Invalid field` 使接口整体失败
+    （前端只表现为「没有浮层」，无弹窗报错）。
+  - 控制器增加异常兜底 + `_logger.exception` 服务端日志，失败返回 `{}`，不再静默。
+  - 增加排障日志（默认级别下不可见，控制台勾 Verbose 或用 `?debug=1`）：
+    资源加载时输出 `[sale_product_hover] assets loaded`；预取时输出
+    `[sale_product_hover] prefetch sale.order.line: N saved line(s)` 与
+    `[sale_product_hover] payload: requested N, received M`，用于区分
+    「资源未加载」「前端未发请求」「请求返回无数据」三种情况。
+
+### 影响
+
+- 功能行为不变，仅修复触发链路并提升健壮性；**不涉及数据库结构变更，无需迁移脚本**。
+- 前端资源改动，升级后需**强刷浏览器**。
+- 排障入口见模块 `AGENTS.md` →「调试建议」。
+
+### 文档
+
+- 同步更新 `__manifest__.py`（`19.0.1.0.1`）、`AGENTS.md`（L1 / L2 增补）、`README.md`、
+  根 `README.md` / `AGENTS.md` 的版本引用。
+
+---
+
 ## [19.0.1.0.0] - 2026-09-12（待验证）
 
 ### 变更

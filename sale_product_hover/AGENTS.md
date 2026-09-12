@@ -14,7 +14,7 @@
 - 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.0.0`（首版，待目标环境验证）
+- 当前版本：`19.0.1.0.1`（首版 + 悬停不触发的加固修复，待目标环境验证）
 
 ---
 
@@ -33,8 +33,9 @@
 3. **不影响原有行交互**
    - 浮层必须由 popover 服务渲染在 overlay 容器，不改变列表 DOM；
      `mouseover` / `mouseout` 只读事件，不得 `preventDefault` / 停止传播；
-     编辑态（`props.list.editedRecord`）不弹浮层
-   - 违反后果：点击进入、内联编辑、勾选、删除等原有操作被干扰或出现闪烁
+     编辑态（`props.list.editedRecord`）不弹浮层；popover 必须传 `setActiveElement: false`
+   - 违反后果：点击进入、内联编辑、勾选、删除等原有操作被干扰，或悬停抢走输入焦点
+     （popover 服务默认 `setActiveElement ?? true`）
 
 4. **悬停不发请求**
    - 数据在列表挂载 / DOM 更新时按行 id 差集批量预取（`prefetchLineHoverPayload`），
@@ -95,7 +96,17 @@
 **陷阱 4：异步取数返回后行已切换**
 - 现象：浮层显示在错误的行上，或组件已卸载仍尝试打开
 - 根因：`await prefetchLineHoverPayload(...)` 之后指针可能已移到别处
-- 正确做法：`await` 之后必须重新校验 `this._productHoverRowEl === row` 再 `open`
+- 正确做法：`await` 之后必须重新校验 `this._productHoverRowEl === row` 且 `row.isConnected` 再 `open`
+
+**陷阱 5：把监听挂在渲染器根节点 ref 上（本模块真实踩过）**
+- 现象：悬停完全没反应，控制台无报错，Network 里也没有 `/sale_product_hover/payload` 请求
+- 根因：`web.ListRenderer` 模板根节点有 `t-ref="root"`，但销售订单行用的是
+  `sale.ListRenderer.RecordRow` ← `account.SectionAndNoteListRenderer`
+  （primary 继承的自定义模板，`static template = "account.SectionAndNoteListRenderer"`）；
+  自定义渲染器的根节点 ref 不一定存在，`onMounted` 里的 `addEventListener` 整段被跳过
+- 正确做法：用 `useExternalListener(document, "mouseover" / "mouseout", ...)` 在 **setup 阶段**
+  注册（与 DOM 结构、挂载时机均无关），回调里用 `this.el.contains(ev.target)` 只处理本渲染器
+  渲染出来的行；`_isProductHoverList()` 另有 `list.resModel` 取不到时的记录级兜底
 
 ### P2：reactive 缓存导致的渲染循环
 

@@ -23,8 +23,8 @@
 | 设计点 | 说明 |
 |--------|------|
 | patch `ListRenderer` 而非继承模板 | 报价单 / 销售订单表单内的订单行使用 sale 自定义行模板 `sale.ListRenderer.RecordRow`，继承 `web.ListRenderer.RecordRow` 在该处不会生效；补丁作用于渲染器实例，对其所有子类（含自定义渲染器）一致生效，且不必改动任何视图 arch |
-| 原生 `mouseover` / `mouseout` 事件委托 | `mouseenter` / `mouseleave` 不冒泡，无法做事件委托；改用可冒泡事件 + `closest("tr.o_data_row")` 定位行，并以「同一行内移动不重开」「指针移入浮层不关闭」消除抖动 |
-| 用 popover 服务渲染浮层 | 浮层挂在 overlay 容器，不改变列表 DOM，因此不干扰原有行交互；`holdOnHover` 让指针进入浮层后位置锁定，避免跟随抖动 |
+| document 级 `mouseover` / `mouseout` 事件委托 | `mouseenter` / `mouseleave` 不冒泡，无法做事件委托；改用可冒泡事件 + `closest("tr.o_data_row")` 定位行，再用 `this.el.contains()` 限定只处理本渲染器渲染的行。**不依赖渲染器根节点 ref**：销售订单行是 primary 继承的自定义模板（`account.SectionAndNoteListRenderer`），`t-ref="root"` 不一定存在 |
+| 用 popover 服务渲染浮层 | 浮层挂在 overlay 容器，不改变列表 DOM，因此不干扰原有行交互；`holdOnHover` 让指针进入浮层后位置锁定，避免跟随抖动；`setActiveElement: false` 保证悬停不抢占页面焦点 |
 | 后端一次装配展示数据 | 前端不解析 many2one 数据格式、不做货币格式化：`_get_product_hover_payload()` 用 `formatLang` 按用户语言与货币精度直接返回可展示字符串，前端零格式化逻辑 |
 | 每页一次批量请求 + 非 reactive 缓存 | 列表挂载与每次 DOM 更新后按行 id 差集预取；缓存放**模块级 `Map`**（挂到 reactive 对象会触发 Owl 重渲染循环，见 `product_card_view` 的 P1 踩坑） |
 | 只读、不提权 | 控制器以当前用户身份读取（不 `sudo`），沿用产品与订单行的既有记录规则与权限 |
@@ -168,6 +168,16 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 - 增减浮层字段：改 `models/sale_order_line.py` 的 payload 与 `static/src/xml/product_hover_templates.xml`（必要时同步 po）。
 - 调整延迟 / 位置 / 样式：`static/src/js/product_hover_list_patch.js` 顶部常量与 `static/src/scss/product_hover.scss`。
 - 扩大适用范围（如采购订单行）：需把 `sale.order.line` 的 payload 方法抽象到共用模型，并在补丁里扩展目标模型清单。
+- 悬停无浮层时的排查顺序（控制台勾上 Verbose，或用 `?debug=1` 打开页面）：
+  1. 确认有 `[sale_product_hover] assets loaded` —— **没有**说明前端资源没加载：
+     `-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）；
+  2. 悬停订单行，确认有 `[sale_product_hover] prefetch sale.order.line: N saved line(s)`
+     与 `[sale_product_hover] payload: requested N, received M`：
+     **没有 prefetch 日志** → 列表判断未命中或事件未触发（看是否 `sale.order.line` 列表、
+     是否处于编辑态）；**有日志但 `received 0`** → 接口没返回数据，查服务端日志里的
+     `sale_product_hover: unable to build hover payload` 记录；
+  3. 两条日志都有且 `received > 0` 仍无浮层 → 查 `this.el.contains()` 过滤、
+     `props.list.resModel` 与 `record.resId` 是否正常。
 
 ---
 

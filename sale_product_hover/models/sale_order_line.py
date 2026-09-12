@@ -32,21 +32,23 @@ class SaleOrderLine(models.Model):
         if not lines:
             return {}
 
-        # 产品字段一次批量读取，避免逐行访问触发多次查询
+        # 产品字段一次批量读取，避免逐行访问触发多次查询；且只读模型上真实存在的
+        # 字段（未装 stock / 字段改名时不会因 "Invalid field" 整批失败）
+        product_model = env["product.product"]
+        wanted_fields = ["display_name", "default_code", "description_sale", "list_price", "uom_id"]
+        if "qty_available" in product_model._fields:
+            wanted_fields.append("qty_available")
+        if "is_storable" in product_model._fields:
+            wanted_fields.append("is_storable")
+        read_fields = [name for name in wanted_fields if name in product_model._fields]
         products = lines.product_id
-        read_fields = ["display_name", "default_code", "description_sale", "list_price", "uom_id"]
-        has_qty = "qty_available" in env["product.product"]._fields
-        if has_qty:
-            read_fields.append("qty_available")
-        has_storable = "is_storable" in env["product.template"]._fields
-        if has_storable:
-            read_fields.append("is_storable")
         # display_default_code=False：名称里不重复带 "[参考号] " 前缀（型号单独展示）
         product_data = {
             row["id"]: row
             for row in products.with_context(display_default_code=False).read(read_fields)
         }
 
+        has_qty = "qty_available" in product_model._fields
         company_currency = env.company.currency_id
         payload = {}
         for line in lines:
@@ -54,27 +56,29 @@ class SaleOrderLine(models.Model):
             if not data:
                 continue
 
+            list_price = data.get("list_price") or 0.0
             # 本单单价（订单币种）与产品售价（公司币种）不同才单独展示，避免冗余
             order_currency = line.currency_id
             show_order_price = (
                 order_currency != company_currency
-                or not order_currency.is_zero(line.price_unit - data["list_price"])
+                or not order_currency.is_zero(line.price_unit - list_price)
             )
 
             # 可用库存：仅为跟踪库存的产品展示（单位精度取 "Product Unit"）
             qty_text = ""
-            uom_name = data["uom_id"][1] if data.get("uom_id") else ""
-            if has_qty and has_storable and data.get("is_storable"):
+            uom = data.get("uom_id")
+            uom_name = uom[1] if uom else ""
+            if has_qty and data.get("is_storable"):
                 qty_text = formatLang(env, data.get("qty_available") or 0.0, dp="Product Unit")
 
             payload[line.id] = {
                 "line_id": line.id,
                 "product_id": line.product_id.id,
-                "name": data["display_name"] or "",
-                "reference": data["default_code"] or "",
+                "name": data.get("display_name") or "",
+                "reference": data.get("default_code") or "",
                 "image_url": "/web/image/product.product/%s/image_256" % line.product_id.id,
-                "description": data["description_sale"] or "",
-                "sales_price_text": formatLang(env, data["list_price"], currency_obj=company_currency),
+                "description": data.get("description_sale") or "",
+                "sales_price_text": formatLang(env, list_price, currency_obj=company_currency),
                 "order_price_text": formatLang(env, line.price_unit, currency_obj=order_currency),
                 "show_order_price": show_order_price,
                 "qty_available_text": qty_text,
