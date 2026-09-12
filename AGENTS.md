@@ -283,6 +283,7 @@ msgstr ""
 | `product_packing` | 19.0.1.1.3 | 为产品 Inventory 标签页增加产品自身尺寸（尺寸变化时自动同步原生 Volume）与外贸纸箱字段：装箱数、长宽高、毛重、净重、自动计算 CBM；产品列表增加纸箱规格与 CBM 可选列 | 已交付（T-009，2026-09-08），目标环境已验证；`19.0.1.1.3`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」）并修掉 `Dimension Unit` 重复 `msgid`，目标环境已验收通过 |
 | `product_card_view` | 19.0.2.0.1 | 产品列表卡片视图（瀑布流）：注册新 view type `card`，为官方 Products 视图切换器新增 Card 按钮（库存 / 销售 / 采购入口）；卡片多图轮播（模板 / 变体两层图源不叠加）+ title / reference / on hand + 多变体按钮切换；后端每页一次批量 `/product_card/payload`；`product_image` / `sale` / `purchase` 为可选依赖（运行时判断） | 已交付（T-012，2026-09-09）：Card 入口已确认，其余项待复验；依赖 Odoo 内部 `session.view_info` 的 JS patch，Odoo 升级需回归（见模块 `AGENTS.md` → L2 P2）；`19.0.2.0.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」），目标环境已验收通过（Card 其余项仍待复验） |
 | `web_multi_tabs` | 19.0.2.0.0 | 后台内部多标签页：每次打开视图生成一个可切换 / 可关闭的标签，溢出折叠为下拉菜单，URL 归一化 + 首页重定向合并避免重复标签；PWA / Window Controls Overlay 适配（标签栏按 CSS `env(titlebar-area-*)` 铺满标题栏）；`WebManifestMultiTabs` 控制器继承注入 `display_override` | 2026-09-09 在 `19.0.1.0.0` 基础上升级优化：补 `/** @odoo-module **/` 与 `static/src/{js,scss}` 路径、控制器继承替 monkey-patch、源语言改英文 + `i18n/zh_CN.po` 中英双语、修调试开关与 ResizeObserver 重绑；功能与交互不变，待目标环境验证；本模块文档见 `web_multi_tabs/AGENTS.md` |
+| `sale_product_hover` | 19.0.1.0.0 | 报价单 / 销售订单订单行悬停展示产品详情浮层（图片 / 名称 / 型号 / 描述 / 售价 / 本单单价 / 可用库存）：patch `ListRenderer` + popover 服务，每页一次批量 payload 与浏览器缓存，仅 `sale.order.line` 生效，不新增模型 / 字段 / 权限 / 视图 | 已开发（T-014，2026-09-12），**待目标环境验证**；验证清单见模块 `README.md`，技术约束与踩坑见模块 `AGENTS.md` |
 
 ## 10. 验证流程
 

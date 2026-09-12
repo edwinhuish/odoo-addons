@@ -1,0 +1,83 @@
+# Translation of Odoo Server.
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-12 00:00+0000\n"
+"PO-Revision-Date: 2026-09-12 00:00+0000\n"
+"Last-Translator: edwinhuish <>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: zh_CN\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: sale_product_hover
+#: code:addons/sale_product_hover/static/src/js/product_hover_card.js:0
+#, python-format
+msgid "%(qty)s %(uom)s"
+msgstr "%(qty)s %(uom)s"
+
+#. module: sale_product_hover
+#: code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0
+msgid "Sales Price"
+msgstr "销售价"
+
+#. module: sale_product_hover
+#: code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0
+msgid "Order Price"
+msgstr "本单单价"
+
+#. module: sale_product_hover
+#: code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0
+msgid "On Hand"
+msgstr "可用库存"
+
+#. module: base
+#: model:ir.module.module,shortdesc:base.module_sale_product_hover
+msgid "Sale Product Hover"
+msgstr "订单行产品悬浮卡"
+
+#. module: base
+#: model:ir.module.module,summary:base.module_sale_product_hover
+msgid "Show a product detail popover when hovering order lines in quotations and sales orders"
+msgstr "鼠标悬停报价单 / 销售订单的订单行时，弹出浮层展示产品图片、名称、型号、描述、价格与可用库存"
+
+#. module: base
+#: model:ir.module.module,description:base.module_sale_product_hover
+msgid ""
+"\n"
+"Product hover preview for quotation and sales order lines, for foreign\n"
+"trade SOHO scenarios.\n"
+"\n"
+"Source language of this module is English (en_US); a Simplified Chinese\n"
+"translation ships in i18n/zh_CN.po.\n"
+"\n"
+"Key features:\n"
+"- Hovering an order line opens a popover with the product image, name,\n"
+"  reference, sales description, prices and available quantity\n"
+"- Quotations and sales orders are covered alike: they share the same\n"
+"  model and the same view\n"
+"- Data is fetched with one batch payload per list page and cached in the\n"
+"  browser, so hovering a line never triggers an extra request\n"
+"- The popover opens after a short delay, closes when the pointer leaves\n"
+"  the line, and can be entered with the pointer before it closes\n"
+"- Normal row behaviour is untouched: click to open, inline edit,\n"
+"  selection and deletion keep working as before\n"
+"- Only sales order lines are targeted; other list views are untouched\n"
+"- No new model, no new field and no extra access right is introduced\n"
+msgstr ""
+"\n"
+"外贸 SOHO 场景下，报价单 / 销售订单行悬停展示产品详情的模块。\n"
+"\n"
+"本模块源语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
+"\n"
+"主要功能：\n"
+"- 悬停订单行时弹出浮层，展示产品图片、名称、型号、销售描述、价格与可用库存\n"
+"- 报价单与销售订单同样覆盖：两者共用同一模型与视图\n"
+"- 每个列表页只发一次批量数据请求并在浏览器缓存，悬停不会产生额外请求\n"
+"- 浮层延迟弹出，指针离开行后关闭，可在关闭前把指针移入浮层\n"
+"- 不影响行原有行为：点击打开、内联编辑、勾选与删除照旧\n"
+"- 只作用于销售订单行，其他列表视图不受影响\n"
+"- 不新增模型、字段与权限\n"

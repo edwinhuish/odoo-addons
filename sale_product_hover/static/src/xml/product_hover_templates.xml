@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!--
+      订单行悬浮卡片：展示产品图片 / 名称 / 型号 / 描述 / 售价 / 本单单价 / 可用库存。
+      数据来自 /sale_product_hover/payload（列表页按行 id 一次性预取并缓存），
+      本模板只负责展示，不发请求、不改动列表 DOM。
+    -->
+    <t t-name="sale_product_hover.ProductHoverCard">
+        <div class="o_sph_card" t-on-pointerleave="onPointerLeave">
+            <div class="o_sph_header">
+                <img t-if="showImage"
+                     class="o_sph_image"
+                     t-att-src="props.payload.image_url"
+                     t-att-alt="props.payload.name"
+                     loading="lazy"
+                     t-on-error="() => this.state.imageFailed = true"/>
+                <div t-else="" class="o_sph_image o_sph_image_placeholder">
+                    <i class="fa fa-picture-o" aria-hidden="true"/>
+                </div>
+                <div class="o_sph_identity">
+                    <div class="o_sph_name" t-esc="props.payload.name"/>
+                    <div class="o_sph_reference"
+                         t-if="props.payload.reference"
+                         t-esc="props.payload.reference"/>
+                </div>
+            </div>
+
+            <div class="o_sph_description"
+                 t-if="props.payload.description"
+                 t-esc="props.payload.description"/>
+
+            <dl class="o_sph_fields"
+                t-if="props.payload.sales_price_text or props.payload.show_order_price or onHandText">
+                <t t-if="props.payload.sales_price_text">
+                    <dt>Sales Price</dt>
+                    <dd t-esc="props.payload.sales_price_text"/>
+                </t>
+                <t t-if="props.payload.show_order_price">
+                    <dt>Order Price</dt>
+                    <dd t-esc="props.payload.order_price_text"/>
+                </t>
+                <t t-if="onHandText">
+                    <dt>On Hand</dt>
+                    <dd t-esc="onHandText"/>
+                </t>
+            </dl>
+        </div>
+    </t>
+
+</templates>
