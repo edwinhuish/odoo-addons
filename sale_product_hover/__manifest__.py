@@ -1,6 +1,6 @@
 {
     "name": "Sale Product Hover",
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.2",
     "summary": "Show a product detail popover when hovering order lines in quotations and sales orders",
     "description": """
         Product hover preview for quotation and sales order lines, for foreign

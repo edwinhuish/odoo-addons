@@ -15,9 +15,19 @@ const TARGET_MODEL = "sale.order.line";
 const OPEN_DELAY = 350;
 // 鼠标移开后延迟关闭（毫秒）：留出把指针移入浮层的时间
 const CLOSE_DELAY = 200;
+// 与 __manifest__.py 的 version 保持一致：排查「无浮层」时，先看控制台的 assets 日志确认版本
+const MODULE_VERSION = "19.0.1.0.2";
 
-// 资源加载自证：排查「无浮层」时，先在控制台（Verbose 级别 / ?debug=1）确认本行日志存在
-console.debug("[sale_product_hover] assets loaded");
+/** 诊断日志：`?debug=1` / `?debug=assets` 下输出（info 级别，控制台默认可见）。 */
+function debugInfo(...args) {
+    if (typeof odoo !== "undefined" && odoo.debug) {
+        console.info(...args);
+    }
+}
+
+// 资源加载自证（始终输出一条）：确认前端资源已加载，括号内为当前运行版本。
+// 若控制台看不到这一行，说明浏览器仍在用旧缓存 / assets 未重建 → `-u` 升级后强刷。
+console.info(`[sale_product_hover] assets loaded (${MODULE_VERSION})`);
 
 /**
  * 列表渲染器补丁：订单行悬停展示产品详情浮层。
@@ -27,10 +37,11 @@ console.debug("[sale_product_hover] assets loaded");
  * 继承 `web.ListRenderer.RecordRow` 在该处不会生效；补丁作用在 ListRenderer 实例上，
  * 对其所有子类（含自定义渲染器）一致生效，且不必改动任何视图 arch。
  *
- * 事件用 document 级 mouseover / mouseout 委托（而非渲染器根节点 ref：自定义渲染器
- * 可能 primary 继承 / 替换根模板，`t-ref="root"` 不一定存在）：
- * - mouseenter / mouseleave 不冒泡，无法做事件委托，故用可冒泡事件 + closest 定位行；
- * - 每个实例靠 `this.el.contains(ev.target)` 只处理自己渲染出来的行。
+ * 事件用 mouseover / mouseout（mouseenter 不冒泡，无法做事件委托），并**双重绑定**：
+ * 1) document 级委托：在 setup 阶段注册，与模板结构、挂载时机无关；
+ * 2) 渲染器根元素 `this.el` 上再绑一次（onMounted）：兜底不同版本渲染器结构差异。
+ * 每个实例用 `this.el.contains(ev.target)` 只处理自己渲染出来的行；同一行重复命中由
+ * `_productHoverRowEl` 判重挡住，因此双重绑定不会重复打开浮层。
  *
  * 浮层由 popover 服务渲染在 overlay 容器中，不改变列表 DOM，因此不影响行的
  * 点击、内联编辑、勾选与删除等原有操作。
@@ -47,13 +58,22 @@ patch(ListRenderer.prototype, {
             onClose: () => this._resetProductHover(),
         });
         this._productHoverRowEl = null;
+        this._productHoverBoundEl = null;
         this._productHoverOpenTimer = null;
         this._productHoverCloseTimer = null;
-        useExternalListener(document, "mouseover", this._onProductHoverRowOver.bind(this));
-        useExternalListener(document, "mouseout", this._onProductHoverRowOut.bind(this));
-        onMounted(() => this._prefetchProductHover());
+        this._onProductHoverRowOver = this._onProductHoverRowOver.bind(this);
+        this._onProductHoverRowOut = this._onProductHoverRowOut.bind(this);
+        useExternalListener(document, "mouseover", this._onProductHoverRowOver);
+        useExternalListener(document, "mouseout", this._onProductHoverRowOut);
+        onMounted(() => {
+            this._bindProductHoverToRoot();
+            this._prefetchProductHover();
+        });
         onPatched(() => this._prefetchProductHover());
-        onWillUnmount(() => this._clearProductHoverTimers());
+        onWillUnmount(() => {
+            this._unbindProductHoverFromRoot();
+            this._clearProductHoverTimers();
+        });
     },
 
     /** 当前列表渲染的是否为销售订单行。 */
@@ -65,6 +85,27 @@ patch(ListRenderer.prototype, {
         // 主列表读 list.resModel；x2many 子列表读不到时回退到首条记录
         const resModel = list.resModel || (list.records && list.records[0] && list.records[0].resModel);
         return resModel === TARGET_MODEL;
+    },
+
+    /** 兜底监听：document 级委托之外，再绑到渲染器根元素上（见文件头注释）。 */
+    _bindProductHoverToRoot() {
+        const el = this.el;
+        if (!el || this._productHoverBoundEl === el) {
+            return;
+        }
+        this._unbindProductHoverFromRoot();
+        el.addEventListener("mouseover", this._onProductHoverRowOver);
+        el.addEventListener("mouseout", this._onProductHoverRowOut);
+        this._productHoverBoundEl = el;
+    },
+
+    _unbindProductHoverFromRoot() {
+        if (!this._productHoverBoundEl) {
+            return;
+        }
+        this._productHoverBoundEl.removeEventListener("mouseover", this._onProductHoverRowOver);
+        this._productHoverBoundEl.removeEventListener("mouseout", this._onProductHoverRowOut);
+        this._productHoverBoundEl = null;
     },
 
     /**
@@ -82,11 +123,7 @@ patch(ListRenderer.prototype, {
                 lineIds.push(record.resId);
             }
         }
-        if (typeof odoo !== "undefined" && odoo.debug) {
-            console.debug(
-                `[sale_product_hover] prefetch ${TARGET_MODEL}: ${lineIds.length} saved line(s)`
-            );
-        }
+        debugInfo(`[sale_product_hover] prefetch ${TARGET_MODEL}: ${lineIds.length} saved line(s)`);
         if (lineIds.length) {
             prefetchLineHoverPayload(lineIds);
         }
@@ -105,6 +142,7 @@ patch(ListRenderer.prototype, {
         if (!row || row === this._productHoverRowEl) {
             return;
         }
+        debugInfo("[sale_product_hover] hover row", row.dataset.id);
         this._productHoverRowEl = row;
         this._scheduleProductHoverOpen(row);
     },
@@ -146,6 +184,7 @@ patch(ListRenderer.prototype, {
         }
         const record = this._getProductHoverRecord(row);
         if (!record || !record.resId) {
+            debugInfo("[sale_product_hover] skip: 行尚无数据库 id（未保存的新行）");
             return;
         }
         let payload = getLineHoverPayload(record.resId);
@@ -155,9 +194,11 @@ patch(ListRenderer.prototype, {
         }
         // 异步返回后需再次确认指针仍在同一行，且行元素仍在文档中
         if (!payload || this._productHoverRowEl !== row || !row.isConnected) {
+            debugInfo("[sale_product_hover] skip: 无数据或指针已移开", record.resId);
             return;
         }
         this._productHoverPopover.open(row, { payload, targetEl: row });
+        debugInfo("[sale_product_hover] popover opened for line", record.resId);
     },
 
     /** 行 DOM（data-id 为 Owl 的 datapoint 内部 id）对应的记录。 */
@@ -178,6 +219,7 @@ patch(ListRenderer.prototype, {
 
     /** 浮层关闭后清空当前行，使指针再次进入该行时能重新计时打开。 */
     _resetProductHover() {
+        debugInfo("[sale_product_hover] popover closed");
         this._productHoverRowEl = null;
     },
 });

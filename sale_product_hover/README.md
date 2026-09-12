@@ -168,16 +168,20 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 - 增减浮层字段：改 `models/sale_order_line.py` 的 payload 与 `static/src/xml/product_hover_templates.xml`（必要时同步 po）。
 - 调整延迟 / 位置 / 样式：`static/src/js/product_hover_list_patch.js` 顶部常量与 `static/src/scss/product_hover.scss`。
 - 扩大适用范围（如采购订单行）：需把 `sale.order.line` 的 payload 方法抽象到共用模型，并在补丁里扩展目标模型清单。
-- 悬停无浮层时的排查顺序（控制台勾上 Verbose，或用 `?debug=1` 打开页面）：
-  1. 确认有 `[sale_product_hover] assets loaded` —— **没有**说明前端资源没加载：
-     `-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）；
-  2. 悬停订单行，确认有 `[sale_product_hover] prefetch sale.order.line: N saved line(s)`
-     与 `[sale_product_hover] payload: requested N, received M`：
-     **没有 prefetch 日志** → 列表判断未命中或事件未触发（看是否 `sale.order.line` 列表、
-     是否处于编辑态）；**有日志但 `received 0`** → 接口没返回数据，查服务端日志里的
-     `sale_product_hover: unable to build hover payload` 记录；
-  3. 两条日志都有且 `received > 0` 仍无浮层 → 查 `this.el.contains()` 过滤、
-     `props.list.resModel` 与 `record.resId` 是否正常。
+- 悬停无浮层时的排查顺序（用 `?debug=1` 或 `?debug=assets` 打开页面；日志为 `info` 级别，控制台默认可见）：
+  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.0.2)` —— **看不到这行**说明浏览器
+     仍在用旧缓存 / assets 未重建：`-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）。
+     括号内版本应与 `__manifest__.py` 的 `version` 一致；
+  2. 列表加载 / 翻页时应有 `[sale_product_hover] prefetch sale.order.line: N saved line(s)` 与
+     `[sale_product_hover] payload: requested N, received M`：**没有 prefetch** 说明当前不是
+     `sale.order.line` 列表或补丁未生效；**`received 0`** 说明接口没返回数据，查服务端日志
+     `sale_product_hover: unable to build hover payload`；
+  3. 悬停订单行时应依次出现 `hover row <id>` → `popover opened for line <id>`：
+     - 完全没有 `hover row` → 悬停事件未命中（行不在本渲染器内或被其它逻辑拦截）；
+     - 有 `hover row` 但没有 `popover opened` → 会同时输出 `skip: …` 说明跳过原因
+       （未保存的新行 / 取不到数据 / 指针已移开）；
+     - 有 `popover opened` 仍看不到浮层 → 查 Elements 里是否存在 `.o_popover .o_sph_card`，
+       以及是否紧接着出现 `popover closed`（被误关闭）。
 
 ---
 

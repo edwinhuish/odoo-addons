@@ -14,7 +14,7 @@
 - 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.0.1`（首版 + 悬停不触发的加固修复，待目标环境验证）
+- 当前版本：`19.0.1.0.2`（首版；`19.0.1.0.1` 加固触发链路；`19.0.1.0.2` 事件双保险 + 诊断日志；均待目标环境验证）
 
 ---
 
@@ -144,7 +144,7 @@
 | `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（按行 id 批量返回，当前用户身份） |
 | `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（去重 / 增量 / 失败重试） |
 | `static/src/js/product_hover_card.js` | 浮层组件：图片降级、库存文案 `_t`、指针离开浮层的关闭判断 |
-| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：事件委托、延迟开 / 关、目标模型与编辑态判断 |
+| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：事件双绑定（document 级 + 根元素兜底）、延迟开 / 关、目标模型与编辑态判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
 | `static/src/scss/product_hover.scss` | 浮层样式（选择器统一 `.o_sph_` 前缀） |
 | `i18n/zh_CN.po` | 简体中文译文；含应用列表元数据条目（`base.module_sale_product_hover`），见根 `AGENTS.md` 4.8 |
@@ -182,9 +182,13 @@
 
 ## 调试建议
 
-- **浮层不出现**：先看控制台是否有 `/sale_product_hover/payload` 报错；
-  再确认当前列表 `props.list.resModel` 是否为 `sale.order.line`（Debug 模式看列表 action）；
-  最后确认 assets 是否已重建（bundle 里搜 `sale_product_hover`）。
+- **浮层不出现**：用 `?debug=1` / `?debug=assets` 打开，按 info 日志链路定位：
+  `assets loaded (版本号)` → `prefetch … N saved line(s)` → `payload: requested N, received M`
+  → `hover row` → `popover opened`（中间若有 `skip: …` 会说明跳过原因）。
+  没有 `assets loaded` = 资源未加载（缓存 / 未升级）；没有 `prefetch` = 列表判断未命中；
+  `received 0` = 接口无数据；没有 `hover row` = 悬停事件未命中；有 `popover opened` 却看不到浮层 =
+  样式 / DOM 问题。控制台无任何 `[sale_product_hover]` 输出时，先确认 `MODULE_VERSION` 与
+  `__manifest__.py` 的 `version` 是否一致（资源确实重新打包了）。
 - **浮层反复闪烁**：多为「同一行内移动」判断失效（行元素被重渲染替换），
   确认 `closest("tr.o_data_row")` 每帧拿到的是当前 DOM 元素。
 - **浮层位置抖动 / 跑到屏幕外**：`holdOnHover` 是否仍传入；若目标行靠近视口边缘，

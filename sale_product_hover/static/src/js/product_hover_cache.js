@@ -44,9 +44,7 @@ export async function prefetchLineHoverPayload(lineIds) {
             }
         }
         if (typeof odoo !== "undefined" && odoo.debug) {
-            console.debug(
-                `[sale_product_hover] payload: requested ${ids.length}, received ${received}`
-            );
+            console.info(`[sale_product_hover] payload: requested ${ids.length}, received ${received}`);
         }
     } catch (error) {
         for (const lineId of ids) {
