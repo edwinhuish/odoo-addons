@@ -1,14 +1,21 @@
 // 订单行悬浮卡片样式（选择器统一以 .o_sph_ 前缀，避免影响其他视图）
+
 .o_sph_popover {
+    // popover 外壳：内边距交给卡片自己控制，避免与卡片的 padding 叠加
     padding: 0;
-    max-width: 22rem;
+    overflow: hidden;
 }
 
 .o_sph_card {
+    // 固定一个易读的宽度，同时保证在任何视口下都不会超出屏幕（窄屏自动收窄）
+    width: min(20rem, calc(100vw - 1.5rem));
+    max-width: 100%;
     padding: 0.75rem;
     font-size: 0.875rem;
-    line-height: 1.35;
+    line-height: 1.4;
     text-align: start;
+    color: var(--bs-body-color, #212529);
+    background-color: var(--bs-body-bg, #fff);
 
     .o_sph_header {
         display: flex;
@@ -18,8 +25,8 @@
 
     .o_sph_image {
         flex: 0 0 auto;
-        width: 4.5rem;
-        height: 4.5rem;
+        width: 5rem;
+        height: 5rem;
         object-fit: contain;
         border: 1px solid var(--bs-border-color, #dee2e6);
         border-radius: 0.25rem;
@@ -31,11 +38,12 @@
         align-items: center;
         justify-content: center;
         color: var(--bs-secondary-color, #6c757d);
-        font-size: 1.5rem;
+        font-size: 1.75rem;
     }
 
     .o_sph_identity {
         flex: 1 1 auto;
+        // flex 子项默认 min-width: auto，超长产品名会把卡片撑破
         min-width: 0;
     }
 
@@ -44,9 +52,15 @@
         word-break: break-word;
     }
 
-    .o_sph_reference {
+    .o_sph_reference,
+    .o_sph_specification {
         margin-top: 0.125rem;
+        font-size: 0.8125rem;
         color: var(--bs-secondary-color, #6c757d);
+        word-break: break-word;
+    }
+
+    .o_sph_reference {
         font-family: var(--font-monospace, monospace);
         word-break: break-all;
     }
@@ -55,16 +69,15 @@
         margin-top: 0.5rem;
         padding-top: 0.5rem;
         border-top: 1px solid var(--bs-border-color, #dee2e6);
-        color: var(--bs-body-color, #212529);
         white-space: pre-line;
         // 长描述截断，保持浮层高度可控
-        max-height: 6rem;
+        max-height: 4.5rem;
         overflow: hidden;
     }
 
     .o_sph_fields {
         display: grid;
-        grid-template-columns: auto 1fr;
+        grid-template-columns: auto minmax(0, 1fr);
         gap: 0.125rem 0.75rem;
         margin: 0.5rem 0 0;
         padding-top: 0.5rem;
@@ -79,7 +92,27 @@
         dd {
             margin: 0;
             text-align: end;
+            // 等宽数字：多行数值右侧对齐整齐
             font-variant-numeric: tabular-nums;
+            word-break: break-word;
+        }
+    }
+}
+
+// 窄屏（手机 / 小窗）：卡片占满可用宽度，图片与字号适当收紧
+@media (max-width: 575.98px) {
+    .o_sph_card {
+        width: calc(100vw - 1rem);
+        padding: 0.625rem;
+        font-size: 0.8125rem;
+
+        .o_sph_image {
+            width: 3.75rem;
+            height: 3.75rem;
+        }
+
+        .o_sph_fields {
+            gap: 0.125rem 0.5rem;
         }
     }
 }

@@ -11,6 +11,12 @@ import { rpc } from "@web/core/network/rpc";
 const payloadByLineId = new Map();
 const requestedLineIds = new Set();
 
+/**
+ * 缓存上限：只在一次会话里翻过非常大量订单行时才会触发（清空后按需重新预取），
+ * 避免长时间使用后内存无上限增长。
+ */
+const MAX_CACHED_LINES = 2000;
+
 /** 取某一行的展示数据（未预取到则返回 undefined）。 */
 export function getLineHoverPayload(lineId) {
     return payloadByLineId.get(lineId);
@@ -23,6 +29,11 @@ export function getLineHoverPayload(lineId) {
  * 新出现的行，悬停时不再发起任何请求。请求失败会回退「已请求」标记以便重试。
  */
 export async function prefetchLineHoverPayload(lineIds) {
+    // 超过上限先整体清空（含「已请求」标记），随后按本次 ids 重新建立缓存
+    if (payloadByLineId.size > MAX_CACHED_LINES) {
+        payloadByLineId.clear();
+        requestedLineIds.clear();
+    }
     const ids = [];
     for (const lineId of lineIds || []) {
         if (lineId && !requestedLineIds.has(lineId)) {

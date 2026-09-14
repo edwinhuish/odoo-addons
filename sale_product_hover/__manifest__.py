@@ -1,6 +1,6 @@
 {
     "name": "Sale Product Hover",
-    "version": "19.0.1.0.2",
+    "version": "19.0.1.1.0",
     "summary": "Show a product detail popover when hovering order lines in quotations and sales orders",
     "description": """
         Product hover preview for quotation and sales order lines, for foreign
@@ -11,13 +11,18 @@
 
         Key features:
         - Hovering an order line opens a popover with the product image, name,
-          reference, sales description, prices and available quantity
+          reference, variant specification, sales description, ordered quantity,
+          unit price, sales price and available quantity
+        - On touch devices, where hovering does not exist, a long press on the
+          line opens the same popover
         - Quotations and sales orders are covered alike: they share the same
           model and the same view
         - Data is fetched with one batch payload per list page and cached in the
           browser, so hovering a line never triggers an extra request
         - The popover opens after a short delay, closes when the pointer leaves
           the line, and can be entered with the pointer before it closes
+        - The card is responsive: it shrinks to the viewport and flips to another
+          side when there is not enough room
         - Normal row behaviour is untouched: click to open, inline edit,
           selection and deletion keep working as before
         - Only sales order lines are targeted; other list views are untouched
