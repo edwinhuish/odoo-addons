@@ -3,6 +3,45 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能 +y，修复/文档 +z。
 
+## [19.0.1.2.0] - 2026-09-14（待验证）
+
+### 变更
+
+- **浮层改为跟随鼠标**（原来固定挂在整行的右侧，离光标很远）：
+  - popover 的目标仍是**行**（这样 `getPopoverForTarget(row)` 才能查到浮层、浮层内移入不关闭），
+    但落点由补丁自己算：`_positionProductHover()` 把浮层摆在**光标右下**
+    （`POINTER_OFFSET_X/Y = 16/12`），右侧放不下就翻到光标左侧，下方放不下就上移贴边，
+    连视口都装不下时自己收紧 `maxHeight` 并允许内部滚动，任何情况下都不会被屏幕裁切。
+  - `mousemove`（document 捕获 + `passive`）用 `requestAnimationFrame` 合帧更新位置；
+    指针**进入浮层后停止跟随**（`el.contains(ev.target)`），方便阅读。
+  - 这样做的可行性来自 Odoo 的 `reposition()`：它会把浮层设成 `position: fixed` 并直接写
+    `left/top`（视口坐标），所以补丁可以直接改写 `left/top` 跟随光标；每次 Odoo 重定位
+    （挂载 / 滚动 / 缩放）后都会回调 `onPositioned`，在那里再套用一次光标位置即可。
+  - 随之 `animation: false`（关掉开合动画的位移与锁位，跟随场景只会造成抖动），
+    并去掉不再需要的 `extendedFlipping`（翻转已由补丁自己处理）。
+  - `open()` 之后补回 `_productHoverRowEl` 与 `_productHoverPointer`：`open()` 内部会先关闭
+    旧浮层并**同步**触发 `onClose`，不补回会导致浮层先闪在行旁边才跳到光标处（见 `AGENTS.md` P1 陷阱 10）。
+- **屏蔽行内元素的原生 tooltip**（截图里那层黑色小提示，原来会和浮层同时出现）：
+  - Odoo 的 tooltip 服务挂在 `document.body` 的**捕获阶段** `mouseenter` 上，元素上的
+    `data-tooltip`（单元格常见，延迟 1000ms）会独立弹出。
+  - 补丁在更外层的 `document` 捕获阶段监听 `mouseenter`，**只在该行确实有我们自己的浮层数据时**
+    `stopPropagation()`（`_isProductHoverCardReady()`：有 record / 有 `resId` / 缓存里有 payload / 非编辑态），
+    tooltip 服务收不到事件就不会再弹；其余行与元素完全不受影响。
+
+### 影响
+
+- 仅前端行为，**不涉及数据库结构变更，无需迁移脚本**；接口 payload 无变化。
+- `MODULE_VERSION` 与 `__manifest__.py` 同步升为 `19.0.1.2.0`（控制台
+  `assets loaded (19.0.1.2.0)` 可确认浏览器已加载新资源）。
+
+### 文档
+
+- 模块 `AGENTS.md` 新增 P1 陷阱 12（原生 tooltip 在 `document.body` 捕获阶段）与
+  陷阱 13（自己接管 popover 定位的可行性与边界）；同步 `README.md`、
+  `__manifest__.py`（`19.0.1.2.0`）、根 `README.md` / `AGENTS.md` 版本引用。
+
+---
+
 ## [19.0.1.1.1] - 2026-09-14（待验证）
 
 ### 变更

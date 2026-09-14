@@ -1,5 +1,6 @@
 /** @odoo-module **/
 
+import { browser } from "@web/core/browser/browser";
 import { onMounted, onPatched, onWillUnmount, useExternalListener } from "@odoo/owl";
 import { getPopoverForTarget } from "@web/core/popover/popover";
 import { usePopover } from "@web/core/popover/popover_hook";
@@ -23,8 +24,13 @@ const TOUCH_OPEN_DELAY = 500;
 const TOUCH_MOUSE_GRACE = 800;
 // 长按过程中位移超过该阈值（像素）即视为滚动，取消长按
 const TOUCH_MOVE_TOLERANCE = 10;
+// 浮层相对光标的偏移（像素）：贴在光标右下，不遮住光标本身
+const POINTER_OFFSET_X = 16;
+const POINTER_OFFSET_Y = 12;
+// 与视口边缘的最小间距（像素）：跟随鼠标时也不让浮层被屏幕裁切
+const VIEWPORT_MARGIN = 8;
 // 与 __manifest__.py 的 version 保持一致：排查「无浮层」时，先看控制台的 assets 日志确认版本
-const MODULE_VERSION = "19.0.1.1.1";
+const MODULE_VERSION = "19.0.1.2.0";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
@@ -62,22 +68,33 @@ console.info(`[sale_product_hover] assets loaded (${MODULE_VERSION})`);
  *
  * 浮层由 popover 服务渲染在 overlay 容器，不改变列表 DOM，因此不影响行的
  * 点击、内联编辑、勾选与删除等原有操作。
+ *
+ * 位置：popover 以**行**为目标（`target` 用行元素，`getPopoverForTarget(row)` 才能查到浮层），
+ * 但落点由 `_positionProductHover()` 自己算——贴着光标右下、空间不足时翻到左上。
+ * Odoo 的 `reposition()` 会把浮层设成 `position: fixed` 并写 `left/top`（视口坐标），
+ * 所以后续可以直接改 `left/top` 来跟随鼠标，不会与 Odoo 的定位打架
+ * （每次 Odoo 重定位后都会回调 `onPositioned`，我们在那里再套用一次光标位置）。
  */
 patch(ListRenderer.prototype, {
     setup() {
         super.setup();
         this._productHoverPopover = usePopover(ProductHoverCard, {
             position: "right-start",
-            // 窄屏 / 行靠近视口边缘时依次尝试其它方位，避免浮层被裁切
-            extendedFlipping: true,
+            // 关闭开合动画：浮层跟随鼠标，动画的位移/锁位只会造成抖动
+            animation: false,
             arrow: false,
+            // 指针移入浮层后锁定位置（`holdOnHover`），方便阅读
             holdOnHover: true,
             popoverClass: "o_sph_popover",
             // 悬停浮层不得抢占焦点，避免打断正在进行的输入 / 快捷键
             setActiveElement: false,
             onClose: () => this._onProductHoverClosed(),
+            // Odoo 每次重新定位后（挂载 / 滚动 / 缩放）都会回调，用来把浮层拉回光标处
+            onPositioned: (el) => this._positionProductHover(this._productHoverPointer, el),
         });
         this._productHoverRowEl = null;
+        this._productHoverPointer = null;
+        this._productHoverFollowFrame = null;
         this._productHoverOpenTimer = null;
         this._productHoverCloseTimer = null;
         this._productHoverTouchTimer = null;
@@ -87,12 +104,19 @@ patch(ListRenderer.prototype, {
 
         this._onProductHoverMouseOver = this._onProductHoverMouseOver.bind(this);
         this._onProductHoverMouseOut = this._onProductHoverMouseOut.bind(this);
+        this._onProductHoverMouseEnter = this._onProductHoverMouseEnter.bind(this);
+        this._onProductHoverMouseMove = this._onProductHoverMouseMove.bind(this);
         this._onProductHoverTouchStart = this._onProductHoverTouchStart.bind(this);
         this._onProductHoverTouchMove = this._onProductHoverTouchMove.bind(this);
         this._onProductHoverTouchEnd = this._onProductHoverTouchEnd.bind(this);
 
         useExternalListener(document, "mouseover", this._onProductHoverMouseOver, CAPTURE);
         useExternalListener(document, "mouseout", this._onProductHoverMouseOut, CAPTURE);
+        useExternalListener(document, "mousemove", this._onProductHoverMouseMove, {
+            capture: true,
+            passive: true,
+        });
+        useExternalListener(document, "mouseenter", this._onProductHoverMouseEnter, CAPTURE);
         useExternalListener(document, "touchstart", this._onProductHoverTouchStart, CAPTURE);
         useExternalListener(document, "touchmove", this._onProductHoverTouchMove, CAPTURE);
         useExternalListener(document, "touchend", this._onProductHoverTouchEnd, CAPTURE);
@@ -107,7 +131,7 @@ patch(ListRenderer.prototype, {
             }
             this._prefetchProductHover();
         });
-        onWillUnmount(() => this._clearProductHoverTimers());
+        onWillUnmount(() => this._cancelProductHoverFollow());
     },
 
     /** 当前列表渲染的是否为销售订单行。 */
@@ -187,7 +211,12 @@ patch(ListRenderer.prototype, {
             return;
         }
         const row = this._getProductHoverRowFromEvent(ev);
-        if (!row || row === this._productHoverRowEl) {
+        if (!row) {
+            return;
+        }
+        // 记录光标位置：浮层就落在光标右下（见 `_positionProductHover`）
+        this._productHoverPointer = { x: ev.clientX, y: ev.clientY };
+        if (row === this._productHoverRowEl) {
             return;
         }
         // 该行已挂着浮层（例如刚由浮层内部移回）：只校准状态，不重新计时打开
@@ -221,6 +250,114 @@ patch(ListRenderer.prototype, {
         this._scheduleProductHoverClose();
     },
 
+    /**
+     * 拦掉行内元素的原生 tooltip。
+     *
+     * Odoo 的 tooltip 服务同样挂在**捕获阶段**（`document.body` 上的 `mouseenter`），
+     * 元素上的 `data-tooltip`（单元格里常见，延迟 1000ms 弹出）会和我们的浮层同时出现。
+     * 在更外层的 `document` 捕获阶段先收下这个事件：只要当前行确实有我们自己的浮层数据，
+     * 就 `stopPropagation()`，tooltip 服务便收不到 `mouseenter`，那层黑色小提示不会再弹。
+     * 只在"我们自己会弹浮层"的行上拦截，其余元素 / 行不受影响。
+     */
+    _onProductHoverMouseEnter(ev) {
+        if (this._productHoverTouchActive) {
+            return;
+        }
+        const row = this._getProductHoverRowFromEvent(ev);
+        if (!row || !this._isProductHoverCardReady(row)) {
+            return;
+        }
+        ev.stopPropagation();
+    },
+
+    /** 该行是否确实有可展示的浮层数据（无产品 / 分节行 / 未保存的新行为假）。 */
+    _isProductHoverCardReady(row) {
+        if (this.props.list.editedRecord) {
+            return false;
+        }
+        const record = this._getProductHoverRecord(row);
+        return Boolean(record && record.resId && getLineHoverPayload(record.resId));
+    },
+
+    // ------------------------------------------------------------------
+    // 跟随鼠标：浮层贴在光标右下，越界时翻到左上 / 贴边
+    // ------------------------------------------------------------------
+    _onProductHoverMouseMove(ev) {
+        if (this._productHoverTouchActive || !this._productHoverRowEl) {
+            return;
+        }
+        if (!this._productHoverPopover.isOpen) {
+            return;
+        }
+        const el = getPopoverForTarget(this._productHoverRowEl);
+        // 指针已进入浮层内部：停止跟随，让它停在原地方便阅读
+        if (el && el.contains(ev.target)) {
+            return;
+        }
+        this._productHoverPointer = { x: ev.clientX, y: ev.clientY };
+        this._scheduleProductHoverFollow();
+    },
+
+    _scheduleProductHoverFollow() {
+        if (this._productHoverFollowFrame) {
+            return;
+        }
+        // 用 rAF 合帧：mousemove 频率远高于屏幕刷新率，且定位里要读 getBoundingClientRect
+        this._productHoverFollowFrame = browser.requestAnimationFrame(() => {
+            this._productHoverFollowFrame = null;
+            this._positionProductHover(this._productHoverPointer);
+        });
+    },
+
+    /**
+     * 把浮层摆到光标附近（`position: fixed`，故 `left/top` 即视口坐标）。
+     *
+     * `el` 可传入已知的浮层元素；不传则按当前行反查。空间不足时依次退让：
+     * 先翻到光标左侧，再贴下边界；浮层比视口还高时自己收紧 `maxHeight`。
+     */
+    _positionProductHover(pointer, el) {
+        if (!pointer) {
+            return;
+        }
+        const popoverEl = el || (this._productHoverRowEl && getPopoverForTarget(this._productHoverRowEl));
+        if (!popoverEl) {
+            return;
+        }
+        // Odoo 在空间不足时会写 maxHeight / overflowY（而且是 min() 叠加），
+        // 浮层位置既然由我们接管，就清掉这两项，避免尺寸被历史值压住
+        popoverEl.style.maxHeight = "";
+        popoverEl.style.overflowY = "";
+        const { width, height } = popoverEl.getBoundingClientRect();
+        const maxX = window.innerWidth - VIEWPORT_MARGIN;
+        const maxY = window.innerHeight - VIEWPORT_MARGIN;
+        let left = pointer.x + POINTER_OFFSET_X;
+        let top = pointer.y + POINTER_OFFSET_Y;
+        if (left + width > maxX) {
+            // 右侧放不下：翻到光标左侧（仍放不下则贴左边）
+            left = Math.max(VIEWPORT_MARGIN, pointer.x - POINTER_OFFSET_X - width);
+        }
+        if (top + height > maxY) {
+            // 下方放不下：上移贴住下边界；连视口都装不下时收紧自身高度并允许内部滚动
+            top = Math.max(VIEWPORT_MARGIN, maxY - height);
+            const available = window.innerHeight - 2 * VIEWPORT_MARGIN;
+            if (height > available) {
+                popoverEl.style.maxHeight = `${available}px`;
+                popoverEl.style.overflowY = "auto";
+                top = VIEWPORT_MARGIN;
+            }
+        }
+        popoverEl.style.left = `${left}px`;
+        popoverEl.style.top = `${top}px`;
+    },
+
+    _cancelProductHoverFollow() {
+        if (this._productHoverFollowFrame) {
+            browser.cancelAnimationFrame(this._productHoverFollowFrame);
+            this._productHoverFollowFrame = null;
+        }
+        this._clearProductHoverTimers();
+    },
+
     // ------------------------------------------------------------------
     // 触屏：没有 hover，用长按代替（不阻止默认行为，不影响滚动与原有点击）
     // ------------------------------------------------------------------
@@ -239,6 +376,10 @@ patch(ListRenderer.prototype, {
         this._productHoverTouchOrigin = touch
             ? { x: touch.clientX, y: touch.clientY }
             : null;
+        // 触屏没有 mousemove，浮层就停在手指位置（越界时由 _positionProductHover 收敛）
+        if (touch) {
+            this._productHoverPointer = { x: touch.clientX, y: touch.clientY };
+        }
         this._productHoverTouchTimer = setTimeout(() => {
             this._productHoverTouchTimer = null;
             // 该点按会紧接着触发一次 click（打开记录），这里把它吃掉
@@ -331,11 +472,15 @@ patch(ListRenderer.prototype, {
             );
             return;
         }
+        const pointer = this._productHoverPointer;
         // 用 popover 服务展示（`open` 内部会先关掉上一个浮层，不会叠加实例）
         this._productHoverPopover.open(row, { payload, targetEl: row });
-        // `open` 内部关闭旧浮层时会同步触发 onClose → `_resetProductHover`，
-        // 故本行必须在 open 之后补回，否则指针在同一行内移动会重新计时、浮层反复刷新
+        // `open` 内部关闭旧浮层时会同步触发 onClose → `_resetProductHover`（会清掉当前行与光标），
+        // 故这两项必须在 open 之后补回：
+        // - 行状态丢失会让指针在同一行内移动时重新计时、浮层反复刷新；
+        // - 光标丢失会让浮层挂载时的 `onPositioned` 无从定位，先闪在行旁边才跳到光标处。
         this._productHoverRowEl = row;
+        this._productHoverPointer = pointer;
         debugInfo("[sale_product_hover] popover opened for line", record.resId);
     },
 
@@ -365,5 +510,10 @@ patch(ListRenderer.prototype, {
 
     _resetProductHover() {
         this._productHoverRowEl = null;
+        this._productHoverPointer = null;
+        if (this._productHoverFollowFrame) {
+            browser.cancelAnimationFrame(this._productHoverFollowFrame);
+            this._productHoverFollowFrame = null;
+        }
     },
 });

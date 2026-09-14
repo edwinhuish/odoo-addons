@@ -12,9 +12,9 @@
 - 新建模型：无；无 `security/ir.model.access.csv`
 - 继承模型：`sale.order.line`（新增方法 `_get_product_hover_payload()` / `_get_hover_specifications()`，不新增字段）
 - 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`）
-- 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按
+- 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按；浮层位置由补丁自己接管（跟随鼠标）
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.1.1`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；均待目标环境验证）
+- 当前版本：`19.0.1.2.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层改为跟随鼠标并屏蔽行内原生 tooltip，见 P1 陷阱 12 / 13；均待目标环境验证）
 
 ---
 
@@ -181,6 +181,49 @@
   是两个完全不同的东西，混用时**不会报错**，只会静默失效；新增任何"用 DOM 找 record"的
   逻辑前，先在控制台 `$0.dataset` 与 `record.id` 打印一下类型
 
+**陷阱 12：行内元素的原生 tooltip 会和我们自己的浮层同时弹（`19.0.1.1.1` 及之前）**
+- 现象：浮层正常弹出，但同时在产品 / 描述单元格上又浮出一层黑色小提示（内容是单元格被截断的全文）
+- 根因：Odoo 的 tooltip 服务挂在 **`document.body` 的捕获阶段** `mouseenter` 上
+  （`tooltip_service.js`：`document.body.addEventListener("mouseenter", onMouseenter, { capture: true })`），
+  元素上的 `data-tooltip`（列表单元格自带，`data-tooltip-delay="1000"`）会独立弹出，
+  与我们的浮层**互不影响、同时存在**；它比浮层晚弹（1000ms vs 300ms），所以看起来像"浮层没把它顶掉"
+- 正确做法：补丁在更外层的 **`document` 捕获阶段**监听 `mouseenter`
+  （`_onProductHoverMouseEnter`），只要该行确实有我们自己的浮层数据
+  （`_isProductHoverCardReady()`：有 record、有 `resId`、缓存里有 payload、非编辑态），
+  就 `ev.stopPropagation()`——事件在 `document` 就被截住，`document.body` 的捕获监听
+  自然收不到，tooltip 不会再弹
+- 边界：**只在"我们自己会弹浮层"的行上拦截**，其余行 / 元素零影响；
+  副作用是行内元素的 `t-on-mouseenter` 也不会触发（Odoo 行模板上只有
+  `ignoreEventInSelectionMode`，仅在触屏选择模式下起作用，可接受）。
+  不要改成"删 `data-tooltip` 属性"：那是改 Owl 管理的 DOM，重渲染时会被还原并可能造成抖动，
+  而且 tooltip 的定时器在 `mouseenter` 时就已捕获参数，删属性拦不住已经排队的弹出
+
+**陷阱 13：浮层跟随鼠标 = 自己接管 popover 定位（`19.0.1.2.0`）**
+- 目标：浮层要贴在光标旁边（原来固定挂在整行右侧，离光标很远），且要连续跟随
+- 关键事实：Odoo 的 `reposition()`（`core/position/utils.js`）会把浮层设成
+  **`position: fixed`** 并直接写 `left/top`（**视口坐标**）
+  ```js
+  popper.style.position = "fixed";
+  popper.style.top = "0px"; popper.style.left = "0px";
+  // …计算后
+  popper.style.top = `${top}px`; popper.style.left = `${left}px`;
+  ```
+  ⇒ 补丁可以放心直接改写 `left/top`（用 `clientX/clientY` 即可对齐），不会与 Odoo 打架
+- 触发时机：`usePosition` 的 `useEffect`（无依赖）会在浮层**每次渲染后**重新定位，
+  另外滚动 / 缩放也会；每次定位完都会回调 `onPositioned` —— 用
+  `usePopover(..., { onPositioned: (el) => this._positionProductHover(pointer, el) })`
+  就能在 Odoo 每次摆位后把浮层拉回光标处（**不要**想靠"改目标元素位置"来跟随：
+  popover 的 props 被 `markRaw`，目标移动不会触发重新定位）
+- 实现要点：
+  - `mousemove`（document 捕获 + `passive: true`）+ `browser.requestAnimationFrame` 合帧更新
+    （定位里要读 `getBoundingClientRect`，直接绑 mousemove 会引发布局抖动）
+  - 指针**进入浮层后停止跟随**（`el.contains(ev.target)`），否则浮层会跟着光标在自身内部乱跑
+  - `animation: false`：开合动画会 `position.lock()` 并在结束后 `unlock()` 重新定位，跟随场景只会抖
+  - 越界兜底自己做（翻到光标左侧 / 上移贴边 / 装不下时收紧 `maxHeight`）；
+    `reposition()` 写的 `maxHeight` 是 `min()` 叠加的，接管定位后要先清掉再判断
+  - 务必保留 `open()` 之后把 `_productHoverRowEl` **和** `_productHoverPointer` 一起补回
+    （见陷阱 10）：光标丢了，浮层挂载时的 `onPositioned` 就无从定位，会先闪在行旁边
+
 ### P2：reactive 缓存导致的渲染循环
 
 **触发条件**：改 `product_hover_cache.js` 时必读
@@ -243,7 +286,7 @@
 | `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（按行 id 批量返回，当前用户身份） |
 | `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（去重 / 增量 / 失败重试 / 上限保护） |
 | `static/src/js/product_hover_card.js` | 浮层组件：图片降级、数量与库存文案 `_t`、指针离开浮层的关闭判断 |
-| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属、延迟开 / 关、目标模型与编辑态判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
+| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、延迟开 / 关、目标模型与编辑态判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
 | `static/src/scss/product_hover.scss` | 浮层样式（选择器统一 `.o_sph_` 前缀，含窄屏媒体查询） |
 | `i18n/zh_CN.po` | 简体中文译文；含应用列表元数据条目（`base.module_sale_product_hover`），见根 `AGENTS.md` 4.8 |
@@ -303,10 +346,15 @@
 - **浮层反复闪烁**：多为「同一行内移动」判断失效（行元素被重渲染替换），
   确认 `closest("tr.o_data_row")` 每帧拿到的是当前 DOM 元素；`onPatched` 里会把已脱离
   文档的 `_productHoverRowEl` 复位，若仍闪烁先确认这段逻辑没被删掉。
-- **浮层位置抖动 / 跑到屏幕外**：`holdOnHover` 与 `extendedFlipping` 是否仍传入；
+- **浮层位置抖动 / 跑到屏幕外**：位置由 `_positionProductHover()` 接管（见 P1 陷阱 13），
+  先确认 `onPositioned` 回调还在、`_productHoverPointer` 在 `open()` 之后被补回；
   宽度由 `.o_sph_card` 的 `width: 20rem; max-width: calc(100vw - 1.5rem)` 控制，若被改宽，
   窄屏会溢出（`.o_sph_popover` 上的 `max-width` 会被 Popover 自带的 `mw-100 !important`
   压过，别指望在那上面限制宽度，见 P4）。
+- **浮层不跟随鼠标**：`mousemove` 监听是否还在（capture + passive）；指针已进入浮层时按设计
+  停止跟随（`el.contains(ev.target)`），这是预期行为，不要当成 bug 改掉。
+- **黑色原生 tooltip 又冒出来**：`mouseenter` 拦截是否还在（见 P1 陷阱 12）；
+  注意它依赖「预取已完成」——列表刚打开、`payload` 还没到时不拦截（避免无谓地屏蔽 tooltip）。
 - **升级后无变化**：前端资源有缓存，必须强刷浏览器（`Ctrl+Shift+R`）。
 - **Odoo 升级后回归**：重点复核 `web/views/list/list_renderer` 的
   `props.list`（`resModel` / `records` / `editedRecord`）、行模板上的
