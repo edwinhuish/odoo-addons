@@ -24,7 +24,7 @@ const TOUCH_MOUSE_GRACE = 800;
 // 长按过程中位移超过该阈值（像素）即视为滚动，取消长按
 const TOUCH_MOVE_TOLERANCE = 10;
 // 与 __manifest__.py 的 version 保持一致：排查「无浮层」时，先看控制台的 assets 日志确认版本
-const MODULE_VERSION = "19.0.1.1.0";
+const MODULE_VERSION = "19.0.1.1.1";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
@@ -142,13 +142,27 @@ patch(ListRenderer.prototype, {
         }
     },
 
-    /** 行 DOM（data-id 为 Owl 的 datapoint id）对应的记录。 */
+    /**
+     * 行 DOM 对应的记录；查不到（不是本列表的行）返回 null。
+     *
+     * 行的 `data-id` 是 Owl 的 **datapoint id，字符串**（`getId()` 返回
+     * `"datapoint_<n>"`，见 `model/relational_model/utils.js`），必须**按字符串比较**：
+     * 旧实现写成 `Number(row.dataset.id)` → `NaN` → 反查永远失败、悬停完全没反应
+     * （这是本模块 `19.0.1.0.0`~`19.0.1.1.0` 「悬停无浮层」的真正根因）。
+     * Odoo 官方同样直接比字符串，如 `kanban_renderer.js`：
+     * `records.find((e) => e.id === target.dataset.id)`。
+     * 这里两侧都做一次字符串化，兼容日后 id 类型变化。
+     */
     _getProductHoverRecord(row) {
-        const id = Number(row.dataset.id);
-        if (!Number.isFinite(id)) {
+        const datapointId = row.dataset.id;
+        if (!datapointId) {
             return null;
         }
-        return (this.props.list.records || []).find((record) => record.id === id) || null;
+        return (
+            (this.props.list.records || []).find(
+                (record) => String(record.id) === datapointId
+            ) || null
+        );
     },
 
     /**

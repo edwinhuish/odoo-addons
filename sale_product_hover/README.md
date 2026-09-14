@@ -26,7 +26,7 @@
 |--------|------|
 | patch `ListRenderer` 而非继承模板 | 报价单 / 销售订单表单内的订单行使用 sale 自定义行模板 `sale.ListRenderer.RecordRow`（← `account.SectionAndNoteListRenderer.RecordRow` ← `web.ListRenderer.RecordRow`），继承 `web.ListRenderer.RecordRow` 在该处不会生效；补丁作用于渲染器实例，对其所有子类（含自定义渲染器）一致生效，且不必改动任何视图 arch |
 | document 级**捕获阶段**事件委托 | `mouseenter` / `mouseleave` 不冒泡，无法委托；改用可冒泡的 `mouseover` / `mouseout`，并在**捕获阶段**注册：先于行内业务监听触发，不会被 `stopPropagation` 吃掉，也与渲染器根节点 ref / 挂载时机无关（自定义渲染器的 `t-ref="root"` 不可靠，这是 `19.0.1.0.1` 之前「悬停完全没反应」的根因） |
-| 行归属用 `data-id` 反查，不用 `this.el.contains()` | 行的 `data-id`（Owl datapoint id）能在 `props.list.records` 里查到就说明是本渲染器的行：既不依赖根元素结构，也天然排除其他模型列表的行 |
+| 行归属用 `data-id` 反查，不用 `this.el.contains()` | 行的 `data-id`（Owl datapoint id）能在 `props.list.records` 里查到就说明是本渲染器的行：既不依赖根元素结构，也天然排除其他模型列表的行。**注意 `data-id` 与 `record.id` 是字符串**（`"datapoint_42"`），必须按字符串比较，不能 `Number()` 化（`Number("datapoint_42")` 是 `NaN`，会静默失效——这是 `19.0.1.1.0` 及之前悬停完全没反应的真正原因）；`record.resId` 才是数据库 id（数字） |
 | 触屏长按 | `touchstart` 计时 500ms，`touchmove` 位移超 10px 视为滚动并取消；长按触发后吃掉紧随的这次 `click`（长按是"看详情"，不是"打开记录"）；手势结束后 800ms 内忽略浏览器补发的 mouse 事件，避免"点一下弹两次" |
 | 用 popover 服务渲染浮层 | 浮层挂在 overlay 容器，不改变列表 DOM，因此不干扰原有行交互；`holdOnHover` 让指针进入浮层后位置锁定，避免跟随抖动；`setActiveElement: false` 保证悬停不抢占页面焦点；`extendedFlipping: true` 让空间不足时自动换方位 |
 | 后端一次装配展示数据 | 前端不解析 many2one 数据格式、不做货币 / 数量格式化：`_get_product_hover_payload()` 用 `formatLang` 按用户语言与货币（单位）精度直接返回可展示字符串；规格由 `product.template.attribute.value.display_name` 拼成（属性名与取值都是产品数据，随产品记录语言展示，不进 po） |
@@ -178,6 +178,9 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 ### 异常情况与处理
 
 - 浮层不出现：确认浏览器控制台是否有 `/sale_product_hover/payload` 报错；若 403，检查当前用户对产品 / 该订单行的读权限。
+- 预取正常（有 `prefetch` / `payload` 日志）但悬停毫无反应、连 `hover row` 都没有：
+  说明行归属判定没命中。先在控制台选中订单行元素，看 `$0.dataset.id`（形如 `datapoint_42`）
+  与 `record.id` —— 两者都是**字符串**，绝不能用 `Number()` 转换（详见 `AGENTS.md` → P1 陷阱 11）。
 - 浮层一直不消失：多为指针停在浮层内（按设计保留），把指针移出浮层即可。
 - 升级后界面无变化：前端资源有缓存，必须强刷浏览器（`Ctrl+Shift+R`）。
 
@@ -188,7 +191,7 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 - 关闭触屏长按：删掉 `product_hover_list_patch.js` 里 `touchstart` / `touchmove` / `touchend` / `touchcancel` 四个监听与对应方法即可（互不影响）。
 - 扩大适用范围（如采购订单行）：需把 `sale.order.line` 的 payload 方法抽象到共用模型，并在补丁里扩展目标模型清单。
 - 悬停无浮层时的排查顺序（用 `?debug=1` 或 `?debug=assets` 打开页面；日志为 `info` 级别，控制台默认可见）：
-  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.1.0)` —— **看不到这行**说明浏览器
+  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.1.1)` —— **看不到这行**说明浏览器
      仍在用旧缓存 / assets 未重建：`-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）。
      括号内版本应与 `__manifest__.py` 的 `version` 一致；
   2. 列表加载 / 翻页时应有 `[sale_product_hover] prefetch sale.order.line: N saved line(s)` 与

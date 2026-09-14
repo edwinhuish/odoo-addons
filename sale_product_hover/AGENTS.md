@@ -14,7 +14,7 @@
 - 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.1.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路（捕获阶段委托 + `data-id` 反查归属，去掉双绑定）、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；均待目标环境验证）
+- 当前版本：`19.0.1.1.1`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；均待目标环境验证）
 
 ---
 
@@ -157,6 +157,29 @@
   （见 `_openProductHover`），不要写在 `open()` 之前，也别自己再调一次 `close()`
 - 顺带：`getPopoverForTarget(row)` 是公开辅助，可用来判断"这一行是否已挂着浮层"，
   在 `mouseover` 里据此跳过重复打开（`POPOVERS` 由 Popover 在 `onMounted` 写入）
+
+**陷阱 11：把 `data-id` 当数字用（`19.0.1.0.0`~`19.0.1.1.0` 悬停没反应的真正根因）**
+- 现象：预取链路完全正常（`prefetch … N saved line(s)`、`payload: requested N, received M`），
+  但鼠标停在订单行上**毫无反应**，也**没有任何 `hover row` 日志**，控制台无报错
+- 根因：行上的 `data-id` 是 Owl 的 **datapoint id，类型是字符串**
+  （`model/relational_model/utils.js`：`getId(prefix = "")` 返回 `` `${prefix}_${++nextId}` ``，
+  即 `"datapoint_42"`）；而 `_getProductHoverRecord()` 写成
+  `const id = Number(row.dataset.id)` → `Number("datapoint_42")` = `NaN` →
+  `Number.isFinite(NaN)` 为假 → 直接 `return null`，于是「行是否属于本渲染器」永远为假，
+  每个 `mouseover` 都在第一步被丢掉。**预取走的是 `record.resId`（数据库 id，数字），
+  所以数据链路看起来一切正常，极具迷惑性**
+- 正确做法：**按字符串比较**，两侧都做一次 `String()` 化以兼容类型变化：
+  ```js
+  const datapointId = row.dataset.id;
+  return (this.props.list.records || []).find(
+      (record) => String(record.id) === datapointId
+  ) || null;
+  ```
+  与 Odoo 官方写法一致：`kanban_renderer.js` 里
+  `this.props.list.records.find((e) => e.id === target.dataset.id)`
+- 排查手法：`record.resId`（DB id，数字）与 `record.id`（datapoint id，字符串 `"datapoint_N"`）
+  是两个完全不同的东西，混用时**不会报错**，只会静默失效；新增任何"用 DOM 找 record"的
+  逻辑前，先在控制台 `$0.dataset` 与 `record.id` 打印一下类型
 
 ### P2：reactive 缓存导致的渲染循环
 

@@ -3,6 +3,37 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能 +y，修复/文档 +z。
 
+## [19.0.1.1.1] - 2026-09-14（待验证）
+
+### 变更
+
+- **修复「预取正常但悬停始终不弹浮层」的真正根因**（`19.0.1.0.0` 起一直存在）：
+  - 现象：控制台只有 `prefetch … N saved line(s)` 与 `payload: requested N, received M`，
+    **完全没有 `hover row`**；鼠标停在订单行上毫无反应，也不报错。
+  - 根因：行 DOM 上的 `data-id` 是 Owl 的 **datapoint id，字符串**
+    （`odoo/addons/web/static/src/model/relational_model/utils.js` 的 `getId()` 返回
+    `` `${prefix}_${++nextId}` ``，即 `"datapoint_42"`），而 `_getProductHoverRecord()`
+    写成 `Number(row.dataset.id)` → `Number("datapoint_42")` = `NaN` →
+    `Number.isFinite(NaN)` 为假 → **反查行归属永远失败**，每个 `mouseover` 都在第一步
+    `return`；因为 prefetch 走的是 `record.resId`（数据库 id），所以数据链路看起来完全正常。
+  - 修复：`_getProductHoverRecord()` 改为**按字符串比较**（两侧都做一次 `String()` 化），
+    与 Odoo 官方写法一致（`kanban_renderer.js`：`records.find((e) => e.id === target.dataset.id)`）。
+  - `MODULE_VERSION` 同步升为 `19.0.1.1.1`，便于用控制台
+    `assets loaded (19.0.1.1.1)` 确认浏览器确实加载了新资源（`19.0.1.1.0` 已被缓存过）。
+
+### 影响
+
+- 仅前端一行判定逻辑，**不涉及数据库结构变更，无需迁移脚本**。
+- `19.0.1.1.0` 的其余改动（捕获阶段委托、去双绑定、规格 / 数量 / 单价、触屏长按、
+  响应式、SCSS `min()` 修坑）保持不变。
+
+### 文档
+
+- 模块 `AGENTS.md` 新增 P1 陷阱 11（datapoint id 是字符串）与调试建议更新；
+  同步 `__manifest__.py`（`19.0.1.1.1`）、`README.md`、根 `README.md` / `AGENTS.md` 版本引用。
+
+---
+
 ## [19.0.1.1.0] - 2026-09-14（待验证）
 
 ### 变更
