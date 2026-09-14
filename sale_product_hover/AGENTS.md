@@ -185,6 +185,32 @@
 
 ---
 
+## P4：SCSS 与 Sass 内置函数
+
+**触发条件**：改 `static/src/scss/product_hover.scss` 时必读
+
+- **陷阱**：写 `width: min(20rem, calc(100vw - 1.5rem))`
+- **现象**：浏览器弹 `SCSS error dialog`，报
+  `"calc(100vw - 1.5rem)" is not a number for 'min'`，
+  `web.assets_web` 与 `web.assets_web_print` **整份 CSS 编译失败**（不只是浮层没样式，
+  全后台样式都可能受影响）
+- **根因**：`min()` / `max()` 是 **Sass 内置函数**，Sass 会先尝试求值；参数里出现
+  `calc()` 这种"计算表达式"时无法求值，直接抛错。`clamp()` / `minmax()` 不是 Sass 内置，
+  会原样透传，所以 `grid-template-columns: auto minmax(0, 1fr)` 是安全的
+  （Odoo 核心也这么写）
+- **正确做法**：宽度约束拆成 `width` + `max-width` 两条，用 `calc()` 兜底
+  （`calc()` 始终原样透传）：
+  ```scss
+  width: 20rem;                             // 目标宽度
+  max-width: calc(100vw - 1.5rem);          // 视口兜底，窄屏自动收窄
+  ```
+  确实需要 `min()` 时改为**上游计算一个变量**再用，不要在 `min()` 里混 `calc()`。
+- **自检**：改完 SCSS 至少跑一次
+  `npx --yes sass@1.77.8 --no-source-map static/src/scss/product_hover.scss /tmp/sph.css`，
+  无输出即通过（本模块 SCSS 无 `@import`，可独立编译）。
+
+---
+
 ## 文件职责
 
 | 文件 | 职责 |
@@ -255,9 +281,9 @@
   确认 `closest("tr.o_data_row")` 每帧拿到的是当前 DOM 元素；`onPatched` 里会把已脱离
   文档的 `_productHoverRowEl` 复位，若仍闪烁先确认这段逻辑没被删掉。
 - **浮层位置抖动 / 跑到屏幕外**：`holdOnHover` 与 `extendedFlipping` 是否仍传入；
-  宽度由 `.o_sph_card` 的 `width: min(20rem, calc(100vw - 1.5rem))` 控制，若被改宽，
+  宽度由 `.o_sph_card` 的 `width: 20rem; max-width: calc(100vw - 1.5rem)` 控制，若被改宽，
   窄屏会溢出（`.o_sph_popover` 上的 `max-width` 会被 Popover 自带的 `mw-100 !important`
-  压过，别指望在那上面限制宽度）。
+  压过，别指望在那上面限制宽度，见 P4）。
 - **升级后无变化**：前端资源有缓存，必须强刷浏览器（`Ctrl+Shift+R`）。
 - **Odoo 升级后回归**：重点复核 `web/views/list/list_renderer` 的
   `props.list`（`resModel` / `records` / `editedRecord`）、行模板上的

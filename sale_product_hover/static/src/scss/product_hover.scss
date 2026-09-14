@@ -7,9 +7,12 @@
 }
 
 .o_sph_card {
-    // 固定一个易读的宽度，同时保证在任何视口下都不会超出屏幕（窄屏自动收窄）
-    width: min(20rem, calc(100vw - 1.5rem));
-    max-width: 100%;
+    // 固定一个易读的宽度，再让 max-width 兜底：任何视口下都不会超出屏幕（窄屏自动收窄）。
+    // 注意：不要写成 `width: min(20rem, calc(...))`——Sass 会把 `min()` 当内置函数求值，
+    // 遇到 `calc()` 参数直接报错（`"calc(...)" is not a number for 'min'`），
+    // 整份 assets 的 CSS 都编译不出来。`calc()` 则始终原样透传。
+    width: 20rem;
+    max-width: calc(100vw - 1.5rem);
     padding: 0.75rem;
     font-size: 0.875rem;
     line-height: 1.4;

@@ -30,8 +30,14 @@
     位移超 10px 视为滚动并取消；长按触发后吃掉紧随的那次 `click`（长按是"看详情"，
     不是"打开记录"）；手势结束后 800ms 内忽略浏览器补发的 mouse 事件，避免"点一下弹两次"。
   - **响应式**：`extendedFlipping: true` 让空间不足时自动换方位；卡片宽度改为
-    `min(20rem, calc(100vw - 1.5rem))`；新增窄屏（≤ 575.98px）媒体查询收紧图片与字号。
+    `width: 20rem; max-width: calc(100vw - 1.5rem)`（窄屏自动收窄）；
+    新增窄屏（≤ 575.98px）媒体查询收紧图片与字号。
   - `arrow: false`：浮层锚在整行（行较高）上，去掉箭头更干净。
+  - **SCSS 修坑**：卡片宽度原写成 `width: min(20rem, calc(100vw - 1.5rem))`，Sass 会把
+    `min()` 当内置函数求值并因 `calc()` 不是数字而报错（`"calc(...)" is not a number for 'min'`），
+    导致 `web.assets_web` / `web.assets_web_print` **整份 CSS 编译失败**；改为
+    `width: 20rem; max-width: calc(100vw - 1.5rem);`（`calc()` 始终原样透传）。
+    踩坑记录见 `AGENTS.md` → P4。
 - 缓存增加**上限保护**（`MAX_CACHED_LINES = 2000`）：一次会话翻过大量订单行时整体清空重建，
   避免长时间使用后内存无界增长。
 
