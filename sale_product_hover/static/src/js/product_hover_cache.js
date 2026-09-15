@@ -14,8 +14,11 @@ import { formatMonetary } from "@web/views/fields/formatters";
  *    服务端用 `formatLang` 一次装配，含产品售价 / 可用库存等）；
  * 2. **未保存的新行**：行还没落库，服务端根本没有这条记录，**按行 id 反查必然查不到**。
  *    所以改用**直接从产品取数**：按 `product_id` 用标准 ORM 读 `product.product`
- *    （任何后端版本都可用，不依赖自研接口），行上的数量 / 单价 / 单位 / 币种直接用
- *    表单里正在编辑的值，数字用 Odoo 前端格式化工具渲染。
+ *    （任何后端版本都可用，不依赖自研接口），数字用 Odoo 前端格式化工具渲染。
+ *
+ * **卡片只展示产品侧信息**（图片 / 名称 / 型号 / 规格 / 描述 / 产品售价 / 可用库存），
+ * **不含行上的数量与本单单价**（浮层的定位是"产品详情"，本单数据在订单行上本来就看得见）。
+ * 因此这里连行的取值都不需要读：`context` 只有 `{key, product_id}`，装配结果只由产品决定。
  *
  * key 的取法见 `product_hover_list_patch.js` 的 `_getProductHoverKey()`：
  * **已保存行用数据库 id（数字）**，**未保存的新行用 Owl datapoint id（字符串
@@ -39,7 +42,7 @@ import { formatMonetary } from "@web/views/fields/formatters";
 const payloadByKey = new Map();
 /** 已请求过的**已保存**订单行（数据库 id）。 */
 const requestedLineIds = new Set();
-/** 未保存新行的取值签名：`key -> 上次装配时的取值`，变了才重新装配。 */
+/** 未保存新行的取值签名：`key -> 上次装配时的产品 id`，变了才重新装配。 */
 const draftSignatureByKey = new Map();
 
 /** 产品数据缓存（未保存新行走它）：`productId -> 产品数据 | null`（null = 读不到，不再重试）。 */
@@ -231,9 +234,9 @@ export async function prefetchLineHoverPayload(lineIds) {
 // ----------------------------------------------------------------------------
 // 未保存的新行：直接从产品取数（标准 ORM）
 //
-// 产品侧（名称 / 型号 / 规格 / 描述 / 图片 / 产品售价 / 可用库存）按 product_id 读
-// `product.product`，与订单没有任何关系；行侧（数量 / 单位 / 单价 / 币种）就是表单里正在
-// 编辑的值。数字用 Odoo 前端格式化工具渲染，与已保存行的 `formatLang` 输出等价。
+// 展示内容全部来自产品（名称 / 型号 / 规格 / 描述 / 图片 / 产品售价 / 可用库存），与订单
+// 没有任何关系，所以按 `product_id` 读 `product.product` 就够了。数字用 Odoo 前端格式化
+// 工具渲染，与已保存行走后端 `formatLang` 的输出等价。
 // ----------------------------------------------------------------------------
 
 /** 需要读取的产品字段（`stock` 是本模块的依赖，`qty_available` / `is_storable` 一定存在）。 */
@@ -301,29 +304,24 @@ async function fetchProducts(orm, productIds) {
 }
 
 /**
- * 把「产品数据 + 行上正在编辑的值」装配成卡片 payload（字段与已保存行的口径完全一致）。
+ * 把产品数据装配成卡片 payload（字段与已保存行的口径完全一致）。
  *
  * @param {object} product `product.product` 的一行数据（`searchRead` 结果）
- * @param {object} context `{key, product_id, quantity, uom_name, price_unit, currency_id}`
+ * @param {object} context `{key, product_id}`
  * @param {number} unitDigits "Product Unit" 小数位
  * @returns {object} payload（字段说明见 README「卡片 payload 字段」）
  */
 function buildProductHoverPayload(product, context, unitDigits) {
-    // `user.activeCompany.currency_id` 是会话里的币种 **id**（`currency.js` 里也是这样直接用的）；
-    // 兼容一下可能出现的 `{id, ...}` 形态，拿不到就退回 null（`formatMonetary` 会省略货币符号）
+    // 产品售价是 `list_price`，币种口径是**公司币种**；`user.activeCompany.currency_id`
+    // 是会话里的币种 **id**（`currency.js` 里也是这样直接用的），兼容一下可能出现的
+    // `{id, ...}` 形态，拿不到就退回 null（`formatMonetary` 会省略货币符号）
     const companyCurrency = user.activeCompany?.currency_id;
     const companyCurrencyId =
         typeof companyCurrency === "number" ? companyCurrency : companyCurrency?.id || null;
-    const orderCurrencyId = context.currency_id || companyCurrencyId;
-    const listPrice = product.list_price || 0;
-    const priceUnit = context.price_unit || 0;
     // 规格：变体属性值在 searchRead 结果里就是 [id, display_name]（如 "颜色: 黑"）
     const specification = (product.product_template_attribute_value_ids || [])
         .map((value) => value[1])
         .join(", ");
-    const uom = product.uom_id;
-    const productUomName = uom ? uom[1] : "";
-    const lineUomName = context.uom_name || productUomName;
     return {
         line_id: context.key,
         product_id: context.product_id,
@@ -332,40 +330,29 @@ function buildProductHoverPayload(product, context, unitDigits) {
         specification,
         image_url: `/web/image/product.product/${context.product_id}/image_256`,
         description: product.description_sale || "",
-        qty_ordered_text: formatFloat(context.quantity || 0, { digits: [1, unitDigits] }),
-        uom_name: lineUomName,
-        unit_price_text: formatMonetary(priceUnit, { currencyId: orderCurrencyId }),
-        list_price_text: formatMonetary(listPrice, { currencyId: companyCurrencyId }),
-        // 本单单价（订单币种）与产品售价（公司币种）相同时不重复展示，与后端口径一致
-        show_list_price:
-            orderCurrencyId !== companyCurrencyId || Math.abs(priceUnit - listPrice) > 1e-6,
+        list_price_text: formatMonetary(product.list_price || 0, {
+            currencyId: companyCurrencyId,
+        }),
         qty_available_text: product.is_storable
             ? formatFloat(product.qty_available || 0, { digits: [1, unitDigits] })
             : "",
-        available_uom_name: productUomName || lineUomName,
+        available_uom_name: product.uom_id ? product.uom_id[1] : "",
     };
 }
 
-/** 未保存新行的取值签名：任一与展示相关的取值变化都要重新装配。 */
+/** 未保存新行的取值签名：展示内容只由产品决定，所以签名就是产品 id。 */
 function draftSignature(context) {
-    return [
-        context.product_id,
-        context.quantity,
-        context.uom_name,
-        context.price_unit,
-        context.currency_id,
-    ].join("|");
+    return String(context.product_id);
 }
 
 /**
  * 预取**尚未保存**的新行（刚新增的产品行）展示数据。
  *
  * 不从订单里查（订单行还没落库，服务端查不到），而是**按 `product_id` 读产品**：
- * 产品数据一次批量读入 `productById` 缓存（同一产品的多行共用），
- * 行的数量 / 单价等取值变化时重新装配。
+ * 产品数据一次批量读入 `productById` 缓存（同一产品的多行共用）。
  *
  * @param {object} orm `this.orm`（ListRenderer 已有）
- * @param {object[]} contexts `{key, product_id, quantity, uom_name, price_unit, currency_id}`
+ * @param {object[]} contexts `{key, product_id}`
  */
 export async function prefetchDraftHoverPayload(orm, contexts) {
     clearCacheIfTooLarge();

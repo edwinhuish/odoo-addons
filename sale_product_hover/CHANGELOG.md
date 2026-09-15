@@ -3,6 +3,45 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能 +y，修复/文档 +z。
 
+## [19.0.1.5.0] - 2026-09-15（待验证）
+
+### 变更
+
+- **浮层移除订单行的「数量」与「单价」两行**（按需求）：浮层的定位是**产品详情**，
+  本单数据在订单行上本来就看得见，重复展示只会让卡片变长。卡片现在只展示产品侧信息：
+  **图片 / 名称 / 型号 / 规格 / 描述 / 产品售价 / 可用库存**。
+- 随之**下线**的部分（两条取数路径同时收窄，不留死代码）：
+
+  | 位置 | 变化 |
+  |------|------|
+  | `models/sale_order_line.py` | `_build_hover_payload()` 的入参由 `{key: {product_id, quantity, uom_name, price_unit, currency}}` 简化为 **`{key: product_id}`**，不再读行的数量 / 单价 / 单位 / 币种；payload 删去 `qty_ordered_text` / `uom_name` / `unit_price_text` / `show_list_price` |
+  | `static/src/js/product_hover_cache.js` | 新行装配删去同样的四个字段；取数上下文简化为 `{key, product_id}`，取值签名由「产品+数量+单位+单价+币种」简化为 **`product_id`**（展示内容只由产品决定）；新行不再需要 `product_uom_qty` / `product_uom_id` / `price_unit` / `currency_id` |
+  | `static/src/js/product_hover_list_patch.js` | `_getProductHoverContext()` 只返回 `{key, product_id}`（原先还要从 `record.data` 里取数量 / 单价 / 单位名，并处理新行 `currency_id` 可能还没从 onchange 回来而回退父记录币种的一大段逻辑——整段删除） |
+  | `static/src/js/product_hover_card.js` | 删除 `quantityText` / `showQuantity`；`_quantityText()` 保留给可用库存用 |
+  | `static/src/xml/product_hover_templates.xml` | 删除 `Quantity` / `Unit Price` 两行；「产品售价」不再有 `show_list_price` 条件（无条件展示，「与本单单价重复」的顾虑已不存在） |
+  | `i18n/zh_CN.po` | 下线 `Quantity`（数量）/ `Unit Price`（单价）两条术语；应用列表 `summary` / `description` 的中文同步 |
+
+- 一处**顺带修掉的行为缺陷**：原「本单单价 = 产品售价时不重复展示产品售价」的判据
+  （`show_list_price`）依赖本单单价；单价行移除后该判据会让「两者相等」的产品**一个价格都不显示**，
+  故一并去掉该标志，产品售价始终展示。
+- 版本 `19.0.1.5.0`（表意调整，`+y`；接口 payload 字段减少，属**内部接口**，仅本模块前端消费）。
+
+### 影响
+
+- 不涉及数据库结构变更，**无需迁移脚本**；无视图 / 权限 / 字段改动。
+- 接口 `/sale_product_hover/payload` 返回字段**减少**：`qty_ordered_text` / `uom_name` /
+  `unit_price_text` / `show_list_price` 不再返回，其余口径见 `README.md` 的「卡片 payload 字段」。
+- 已有缓存无需清理（缓存只在浏览器内存里，刷新即重建）。
+- 性能变好：已保存行少读 4 个字段；新行不再随数量 / 单价输入触发重新装配（签名只看产品 id）。
+
+### 文档
+
+- 模块 `README.md`（功能概述 / 核心设计 / payload 字段 / 交互说明 / i18n / 依赖 / 验证清单）、
+  `AGENTS.md`（当前版本、安全约束、陷阱 16、文件职责）、`__manifest__.py`
+  （`version` + `description`，`summary` 不变）、根 `README.md` / `AGENTS.md` 版本引用与 T-014 描述同步。
+
+---
+
 ## [19.0.1.4.1] - 2026-09-15（待验证）
 
 ### 变更

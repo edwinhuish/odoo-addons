@@ -39,7 +39,7 @@ const VIEWPORT_MARGIN = 8;
 // controllers/product_hover_controller.py 的 MODULE_VERSION）。
 // 排查「无浮层」时先看控制台的 assets 日志确认版本；接口还会回显服务端版本，
 // 两者不一致时缓存层会直接告警（见 product_hover_cache.js 的 checkServerVersion）。
-const MODULE_VERSION = "19.0.1.4.1";
+const MODULE_VERSION = "19.0.1.5.0";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
@@ -103,9 +103,9 @@ console.info(`[sale_product_hover] assets loaded (${MODULE_VERSION})`);
  * - 缓存键 `_getProductHoverKey()`：已保存行用数据库 id，新行用 datapoint id；
  * - **已保存行**走自研接口（按行 id 批量取，服务端 `formatLang` 装配）；
  * - **新行**不碰订单——订单行还没落库，服务端按行 id 反查必然查不到——
- *   而是由 `_getProductHoverContext()` 给出「产品 + 行上正在编辑的值」，
- *   交给 `prefetchDraftHoverPayload()` **按 `product_id` 读产品**（标准 ORM）后在前端装配；
- *   取值一变签名就变、`onPatched` 会重新取数，所以数量 / 单价改完立刻反映到浮层；
+ *   而是由 `_getProductHoverContext()` 给出 `{key, product_id}`，
+ *   交给 `prefetchDraftHoverPayload()` **按 `product_id` 读产品**（标准 ORM）后在前端装配
+ *   （卡片只展示产品侧信息，不含行上的数量 / 单价，所以不需要读行上的取值）；
  * - 编辑态避让只针对「正在被内联编辑的**已保存**行」（`_isProductHoverBlockedByEdit()`）——
  *   Odoo 里 `Record.isInEdition` 对 `!resId` 恒为真，新行一加进来就是 `editedRecord`，
  *   旧版一刀切导致新增产品永远没有预览。
@@ -263,12 +263,13 @@ patch(ListRenderer.prototype, {
     },
 
     /**
-     * 未保存新行的取数上下文：**产品 id + 行上正在编辑的值**；还没选产品（或分节 / 备注行）时返回 null。
+     * 未保存新行的取数上下文：`{key, product_id}`；还没选产品（或分节 / 备注行）时返回 null。
      *
-     * 新行没有数据库 id、服务端也没有这条记录，所以卡片数据只能「按产品 id 查产品」
-     * 再加上表单里当前的取值（数量 / 单位 / 单价 / 币种），由 `product_hover_cache.js` 装配。
-     * 取值的形态见 `model/relational_model/record.js`：many2one 是 `{id, display_name}`
-     * 对象（不是 `[id, name]` 数组）。
+     * 新行没有数据库 id、服务端也没有这条记录，所以卡片数据只能「按产品 id 查产品」，
+     * 由 `product_hover_cache.js` 装配。**不需要读行上的数量 / 单价 / 单位 / 币种**：
+     * 卡片展示的是产品详情（图片 / 名称 / 型号 / 规格 / 描述 / 产品售价 / 可用库存），
+     * 本单数据不在浮层里。取值的形态见 `model/relational_model/record.js`：
+     * many2one 是 `{id, display_name}` 对象（不是 `[id, name]` 数组）。
      */
     _getProductHoverContext(record) {
         const data = record.data || {};
@@ -276,19 +277,9 @@ patch(ListRenderer.prototype, {
         if (!product || !product.id || data.display_type) {
             return null;
         }
-        const uom = data.product_uom_id;
-        // 新行的 currency_id 可能还没从 onchange 回来，退回订单（父记录）的币种。
-        // 两种来源的形态不同：`record.data` 里是 `{id, display_name}` 对象，
-        // 而 `evalContext` 里（`record.js._computeDataContext()`）many2one 已经被压成 id 数字。
-        const currency = data.currency_id || record.evalContext?.parent?.currency_id;
-        const currencyId = typeof currency === "number" ? currency : currency?.id;
         return {
             key: record.id,
             product_id: product.id,
-            quantity: data.product_uom_qty,
-            uom_name: uom ? uom.display_name : "",
-            price_unit: data.price_unit,
-            currency_id: currencyId || null,
         };
     },
 

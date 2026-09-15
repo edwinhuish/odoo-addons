@@ -21,16 +21,6 @@ msgstr "%(qty)s %(uom)s"
 
 #. module: sale_product_hover
 #: code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0
-msgid "Quantity"
-msgstr "数量"
-
-#. module: sale_product_hover
-#: code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0
-msgid "Unit Price"
-msgstr "单价"
-
-#. module: sale_product_hover
-#: code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0
 msgid "Sales Price"
 msgstr "产品售价"
 
@@ -47,7 +37,9 @@ msgstr "订单行产品悬浮卡"
 #. module: base
 #: model:ir.module.module,summary:base.module_sale_product_hover
 msgid "Show a product detail popover when hovering order lines in quotations and sales orders"
-msgstr "鼠标悬停报价单 / 销售订单的订单行时，弹出浮层展示产品图片、名称、型号、规格、数量、单价与可用库存"
+msgstr "鼠标悬停报价单 / 销售订单的订单行时，弹出浮层展示产品图片、名称、型号、规格、售价与可用库存"
+
+#. module: base
 
 #. module: base
 #: model:ir.module.module,description:base.module_sale_product_hover
@@ -61,10 +53,10 @@ msgid ""
 "\n"
 "Key features:\n"
 "- Hovering an order line opens a popover with the product image, name,\n"
-"  reference, variant specification, sales description, ordered quantity,\n"
-"  unit price, sales price and available quantity\n"
-"- Newly added order lines are previewed as well, before they are saved,\n"
-"  and the quantity and unit price shown follow what is being typed\n"
+"  reference, variant specification, sales description, sales price and\n"
+"  available quantity; the popover shows product information only, not\n"
+"  the ordered quantity or the unit price of the line\n"
+"- Newly added order lines are previewed as well, before they are saved\n"
 "- On touch devices, where hovering does not exist, a long press on the\n"
 "  line opens the same popover\n"
 "- Quotations and sales orders are covered alike: they share the same\n"
@@ -86,9 +78,9 @@ msgstr ""
 "本模块源语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
 "\n"
 "主要功能：\n"
-"- 悬停订单行弹出浮层，展示产品图片、名称、型号、变体规格、销售描述、订单数量、\n"
-"  单价、产品售价与可用库存\n"
-"- 刚新增、尚未保存的订单行同样可以预览，浮层里的数量与单价跟随当前输入实时更新\n"
+"- 悬停订单行弹出浮层，展示产品图片、名称、型号、变体规格、销售描述、产品售价与\n"
+"  可用库存；浮层只展示产品信息，不含订单行的数量与单价\n"
+"- 刚新增、尚未保存的订单行同样可以预览\n"
 "- 触屏设备没有悬停，改为长按订单行弹出同一浮层\n"
 "- 报价单与销售订单同样覆盖：两者共用同一模型与视图\n"
 "- 每个列表页只发一次批量数据请求并在浏览器缓存，悬停不会产生额外请求\n"

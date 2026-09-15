@@ -9,10 +9,13 @@
   ``[参考号]`` 前缀）、``default_code``、变体属性值（``display_name`` 形如
   ``颜色: 红``，即"规格"）
 - 描述：``description_sale``
-- 数量 / 单价：订单行数量（行上的计量单位）、本单单价（订单币种）；
-  另附产品售价（公司币种，与单价不同时才由前端展示）
+- 产品售价：``list_price``（公司币种）
 - 可用库存：``qty_available``（``stock`` 提供）+ 产品计量单位名；不跟踪库存的
   产品（如服务）不展示该项
+
+卡片只展示**产品自身**的信息：**不含订单行上的数量（``product_uom_qty``）与本单单价
+（``price_unit``）**——浮层的定位是"产品详情"，本单数据在订单行上本来就看得见。
+因此这里既不需要读行的数量 / 单价 / 单位 / 币种，前端新行路径也只需要 ``product_id``。
 
 **这里只装配「已保存」的订单行**（`_get_product_hover_payload()`，按行 id 批量）。
 **尚未保存的新行不经过本模块的后端**：订单行还没落库、按行 id 反查必然查不到，
@@ -39,24 +42,13 @@ class SaleOrderLine(models.Model):
         lines = self.exists().filtered("product_id")
         if not lines:
             return {}
-        return self._build_hover_payload(
-            {
-                line.id: {
-                    "product_id": line.product_id.id,
-                    "quantity": line.product_uom_qty,
-                    "uom_name": line.product_uom_id.name,
-                    "price_unit": line.price_unit,
-                    "currency": line.currency_id,
-                }
-                for line in lines
-            }
-        )
+        return self._build_hover_payload({line.id: line.product_id.id for line in lines})
 
     def _build_hover_payload(self, specs):
-        """按 ``{key: {product_id, quantity, uom_name, price_unit, currency}}`` 装配展示数据。
+        """按 ``{key: product_id}`` 装配展示数据（卡片只展示产品侧信息，不用行上的取值）。
 
-        展示数据的口径集中在这里（产品字段 + 价格 / 数量 / 库存格式化）。未保存的新行
-        不走后端，前端 `product_hover_cache.js` 按同一口径在前端装配
+        展示数据的口径集中在这里（产品字段 + 价格 / 库存格式化）。未保存的新行不走后端，
+        前端 `product_hover_cache.js` 按同一口径在前端装配
         （`formatFloat` / `formatMonetary` 与这里的 `formatLang` 等价），改动时请两边同步。
         """
         if not specs:
@@ -82,7 +74,7 @@ class SaleOrderLine(models.Model):
         # read 就不会因个别产品无权访问而整批抛 AccessError；
         # active_test=False 保证已归档产品（订单行上仍可能引用）也能取到展示数据。
         products = product_model.with_context(active_test=False).search(
-            [("id", "in", sorted({spec["product_id"] for spec in specs.values()}))]
+            [("id", "in", sorted(set(specs.values())))]
         )
         # display_default_code=False：名称里不重复带 "[参考号] " 前缀（型号单独展示）
         product_data = {
@@ -94,29 +86,18 @@ class SaleOrderLine(models.Model):
         has_qty = "qty_available" in product_model._fields
         company_currency = env.company.currency_id
         payload = {}
-        for key, spec in specs.items():
-            data = product_data.get(spec["product_id"])
+        for key, product_id in specs.items():
+            data = product_data.get(product_id)
             if not data:
                 # 产品不存在 / 当前用户无权读取 → 不生成（前端表现为不弹浮层）
                 _logger.info(
                     "sale_product_hover: product %s not found or not readable "
                     "for the current user, skipped",
-                    spec["product_id"],
+                    product_id,
                 )
                 continue
 
-            list_price = data.get("list_price") or 0.0
-            # 本单单价（订单币种）与产品售价（公司币种）不同才单独展示，避免冗余
-            order_currency = spec.get("currency") or company_currency
-            show_list_price = (
-                order_currency != company_currency
-                or not order_currency.is_zero(spec["price_unit"] - list_price)
-            )
-
-            # 数量用行上的计量单位（订单行允许改单位）；可用库存是产品默认单位口径
             product_uom = data.get("uom_id")
-            product_uom_name = product_uom[1] if product_uom else ""
-            line_uom_name = spec.get("uom_name") or product_uom_name
 
             # 可用库存：仅为跟踪库存的产品展示（单位精度取 "Product Unit"）
             qty_text = ""
@@ -125,19 +106,17 @@ class SaleOrderLine(models.Model):
 
             payload[key] = {
                 "line_id": key,
-                "product_id": spec["product_id"],
+                "product_id": product_id,
                 "name": data.get("display_name") or "",
                 "reference": data.get("default_code") or "",
-                "specification": specifications.get(spec["product_id"], ""),
-                "image_url": "/web/image/product.product/%s/image_256" % spec["product_id"],
+                "specification": specifications.get(product_id, ""),
+                "image_url": "/web/image/product.product/%s/image_256" % product_id,
                 "description": data.get("description_sale") or "",
-                "qty_ordered_text": formatLang(env, spec["quantity"], dp="Product Unit"),
-                "uom_name": line_uom_name,
-                "unit_price_text": formatLang(env, spec["price_unit"], currency_obj=order_currency),
-                "list_price_text": formatLang(env, list_price, currency_obj=company_currency),
-                "show_list_price": show_list_price,
+                "list_price_text": formatLang(
+                    env, data.get("list_price") or 0.0, currency_obj=company_currency
+                ),
                 "qty_available_text": qty_text,
-                "available_uom_name": product_uom_name or line_uom_name,
+                "available_uom_name": product_uom[1] if product_uom else "",
             }
         return payload
 

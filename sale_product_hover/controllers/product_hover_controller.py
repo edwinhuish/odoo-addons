@@ -18,7 +18,7 @@ _logger = logging.getLogger(__name__)
 # static/src/js/product_hover_list_patch.js 的 MODULE_VERSION）。
 # 接口会把它回显给前端（保留键 ``__server_version``），前端据此判断服务端 Python
 # 是否已升级——本模块踩过多次「静态资源已更新、后端没升级」的坑。
-MODULE_VERSION = "19.0.1.4.1"
+MODULE_VERSION = "19.0.1.5.0"
 
 # 保留键：只在响应里携带服务端版本，不参与任何行的取值（订单行 id 是数字，不会与它冲突）
 SERVER_VERSION_KEY = "__server_version"
@@ -38,7 +38,8 @@ class SaleProductHoverController(http.Controller):
         """返回 ``{order_line_id: {…展示数据…}}``（另含保留键 ``__server_version``）。
 
         以当前用户身份读取（不 ``sudo``）：前端只会传当前列表页可见的订单行，
-        产品字段受记录规则与访问权约束，返回内容仅为产品展示字段与该行单价。
+        产品字段受记录规则与访问权约束，返回内容**仅为产品的展示字段**
+        （图片 / 名称 / 型号 / 规格 / 描述 / 产品售价 / 可用库存，不含行上的数量与单价）。
 
         **不要给这个接口加参数来「顺带处理新行」**：新行不在订单里，任何按行 id 的方案都
         无从下手；旧版本一旦收到它不认识的参数（如曾经的 ``drafts``）会整批报错，

@@ -12,10 +12,11 @@
 - 新建模型：无；无 `security/ir.model.access.csv`
 - 继承模型：`sale.order.line`（新增方法 `_get_product_hover_payload()` / `_build_hover_payload()` / `_get_hover_specifications()`，不新增字段；**只服务已保存行**）
 - 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`；**只接受 `line_ids`**，另回显 `__server_version`）
-- 未保存的新行：**不走后端**，前端 `product_hover_cache.js` 按 `product_id` 用标准 ORM 读产品后装配（见陷阱 16）
+- 浮层内容：**只有产品侧信息**（图片 / 名称 / 型号 / 规格 / 描述 / 产品售价 / 可用库存），**不含订单行的数量与本单单价**（`19.0.1.5.0` 起按需求移除）
+- 未保存的新行：**不走后端**，前端 `product_hover_cache.js` 按 `product_id` 用标准 ORM 读产品后装配（上下文只需 `{key, product_id}`，见陷阱 16）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按；浮层位置由补丁自己接管（跟随鼠标）
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.4.1`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**（陷阱 16），`19.0.1.4.1` 把该逻辑并入已有文件、避免新增 assets 文件（陷阱 17）；均待目标环境验证）
+- 当前版本：`19.0.1.5.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**（陷阱 16），`19.0.1.4.1` 把该逻辑并入已有文件、避免新增 assets 文件（陷阱 17）；`19.0.1.5.0` 按需求**移除浮层里的数量与单价**，两条取数路径同步收窄（陷阱 16 的上下文简化为 `{key, product_id}`）；均待目标环境验证）
 
 ---
 
@@ -58,7 +59,7 @@
      `with_context(active_test=False).search([("id", "in", ids)])`——`search` 会应用记录规则并
      剔除读不到的产品，否则一个越权 / 失效的 id 会让 `read()` 整批抛 `AccessError`，把所有行的
      浮层一起打没。前端读产品（未保存的新行）同理：用 `orm.searchRead` 而不是 `orm.read`
-   - 违反后果：越权暴露其他用户订单行的产品与单价信息；或一个异常的产品 id 让整批取数失效
+   - 违反后果：越权暴露其他用户订单行的产品与库存信息；或一个异常的产品 id 让整批取数失效
 
 6. **所有用户可见文本源语言为英文（`en_US`）**
    - Python / JS / QWeb 模板不写中文界面文案；中文只在 `i18n/zh_CN.po` 的 `msgstr`
@@ -253,20 +254,19 @@
   - 避让条件收敛成 `_isProductHoverBlockedByEdit(record)`：
     `editedRecord === record && record.resId`——只有「正在被内联编辑的**已保存**行」才不弹；
   - 缓存键换成 `_getProductHoverKey(record)`：`record.resId || record.id`（数字 / `"datapoint_N"` 不冲突）；
-  - 新行的展示数据由 `_getProductHoverContext(record)` 给出「产品 + 表单里正在编辑的值」，
+  - 新行的展示数据由 `_getProductHoverContext(record)` 给出 `{key, product_id}`，
     再**按 `product_id` 读产品**装配（实现见陷阱 16）；
-  - 实时性：新行按 `产品|数量|单位|单价|币种` 生成签名，产品已缓存且签名未变即命中缓存
-    （**悬停不发请求**），变了才重新装配（`onPatched` 刷新 + 悬停时兜一次）
+  - 缓存：新行展示内容只由产品决定，签名就是 `product_id`（`19.0.1.5.0` 起；此前是
+    `产品|数量|单位|单价|币种`），产品已缓存即命中缓存（**悬停不发请求**）
 - **顺带的坑（读 `record.data` 时必看）**：Odoo 19 里 many2one 的取值是
-  **`{id, display_name}` 对象**，不是 `[id, name]` 数组——`record.data.product_id.id`、
-  `record.data.product_uom_id.display_name`；写 `[0]` / `[1]` 会静默拿到 `undefined`。
-  另：`record.data` 只含列表视图的 `activeFields`（含 `column_invisible` 的），
-  `sale.order.line` 列表里 `currency_id` / `product_uom_qty` / `product_uom_id` / `price_unit`
-  都有声明，所以新行这几个值取得到；`currency_id` 万一还没从 onchange 回来，
-  退回 `record.evalContext?.parent?.currency_id`（订单币种）——注意**两个来源的形态不同**：
-  `record.data` 是 `{id, display_name}`，而 `evalContext` 里 many2one 已被
-  `record.js._computeDataContext()` 压成 **id 数字**，取值要兼容两种（本模块用
-  `typeof currency === "number" ? currency : currency?.id`）
+  **`{id, display_name}` 对象**，不是 `[id, name]` 数组——`record.data.product_id.id`；
+  写 `[0]` / `[1]` 会静默拿到 `undefined`。另：`record.data` 只含列表视图的
+  `activeFields`（含 `column_invisible` 的），取字段前先确认它在视图 arch 里声明过。
+  > 历史包袱：`19.0.1.5.0` 之前新行还要带走表单里的数量 / 单价 / 单位 / 币种，其中
+  > `currency_id` 可能还没从 onchange 回来，需要退回 `record.evalContext?.parent?.currency_id`
+  > （订单币种），且要兼容「`{id, display_name}` 对象 vs 已被 `_computeDataContext()`
+  > 压成 id 数字」两种形态。现在卡片只展示产品侧信息，**这段逻辑已整体删除**；
+  > 若将来又要读行上的取值，记得把这套形态兼容一并考虑进去。
 
 **陷阱 15：「已请求过」标记在响应缺数据时不回退 → 该行永久失效（`19.0.1.3.1` 修复）**
 - 现象：选了产品后悬停新行，控制台只有
@@ -290,10 +290,12 @@
   的方案（包括曾经把新行伪装成 `drafts` 发给接口的做法）都无从下手；而且那种方案还要求
   服务端先 `-u` 升级，恰好撞上本项目「前端已更新、后端没升级」的老问题
 - 正确做法：**新行直接从产品取数**——`_getProductHoverContext()` 只提供
-  `{key, product_id, quantity, uom_name, price_unit, currency_id}`，由
-  `product_hover_cache.js` 用**标准 ORM**（`orm.searchRead("product.product", ...)`）读产品，
-  行的数量 / 单价用表单当前值，`formatFloat` / `formatMonetary` 与后端 `formatLang` 等价
-- 好处：不依赖自研接口 / 服务端升级，`?debug=assets` 下改完 JS 立刻生效
+  `{key, product_id}`（`19.0.1.5.0` 起；此前还带表单里的数量 / 单位 / 单价 / 币种，后因
+  卡片不再展示这些本单数据而整体删除），由 `product_hover_cache.js` 用**标准 ORM**
+  （`orm.searchRead("product.product", ...)`）读产品，`formatFloat` / `formatMonetary`
+  与后端 `formatLang` 等价
+- 好处：不依赖自研接口 / 服务端升级，`?debug=assets` 下改完 JS 立刻生效；
+  卡片字段全在产品侧，**新行与已保存行天然同源**
 - 边界：产品数据按 `product_id` 缓存（同一产品多行共用）；`searchRead` 天然剔除读不到的产品，
   不会因个别 id 让整批失败；新增字段时**两条路径都要改**（后端 `_build_hover_payload()` 与
   前端 `buildProductHoverPayload()`），否则新行与已保存行的卡片会不一致
@@ -333,8 +335,8 @@
 **触发条件**：改 `models/sale_order_line.py` / `controllers/product_hover_controller.py` 时必读
 
 - **陷阱 1**：在控制器里 `sudo()` 图省事
-  - 后果：越权返回其他用户订单行的单价
-  - 正确做法：以当前用户身份 browse；只返回产品展示字段与本行单价
+  - 后果：越权返回其他用户本无权查看的产品信息（名称 / 价格 / 库存）
+  - 正确做法：以当前用户身份 browse；只返回产品的展示字段（`19.0.1.5.0` 起已不含行上的数量 / 单价）
 - **陷阱 2**：逐行访问 `line.product_id.xxx` 构造 payload
   - 后果：每行触发一次 read，行多时明显变慢
   - 正确做法：`products.read(fields)` 一次批量读，按 id 建映射后再逐行组装
@@ -376,10 +378,10 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 版本 / 依赖（`sale` + `stock`）/ 前端 assets 登记（**固定 5 项，不要新增文件**，见陷阱 17）；无 `data` 文件 |
-| `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 批量装配（含价格 / 数量 / 库存格式化）；`_get_hover_specifications()` 批量拼变体规格 |
+| `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 批量装配（入参 `{key: product_id}`，含价格 / 库存格式化）；`_get_hover_specifications()` 批量拼变体规格 |
 | `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（只接受 `line_ids`，按行 id 批量返回；当前用户身份）；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**，它回显在保留键 `__server_version` 上供前端做版本自证 |
-| `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在本文件，**刻意不拆文件**，见陷阱 17）：已保存行走接口（按行 id 去重）；**未保存新行按 `product_id` 用标准 ORM（`searchRead`）读产品**（含变体规格 / 可用库存），行的数量 / 单价用表单当前值，`formatFloat` / `formatMonetary` 装配（见陷阱 16）；模块级非 reactive 缓存、失败重试 / 上限保护、服务端版本探测与自证告警 |
-| `static/src/js/product_hover_card.js` | 浮层组件：图片降级、数量与库存文案 `_t`、指针离开浮层的关闭判断 |
+| `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在本文件，**刻意不拆文件**，见陷阱 17）：已保存行走接口（按行 id 去重）；**未保存新行按 `product_id` 用标准 ORM（`searchRead`）读产品**（含变体规格 / 可用库存），上下文只有 `{key, product_id}`，`formatFloat` / `formatMonetary` 装配（见陷阱 16）；模块级非 reactive 缓存、失败重试 / 上限保护、服务端版本探测与自证告警 |
+| `static/src/js/product_hover_card.js` | 浮层组件：图片降级、库存文案 `_t`、指针离开浮层的关闭判断 |
 | `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、新行取数上下文（`_getProductHoverContext` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
 | `static/src/scss/product_hover.scss` | 浮层样式（选择器统一 `.o_sph_` 前缀，含窄屏媒体查询） |
@@ -401,8 +403,9 @@
 2. `static/src/xml/product_hover_templates.xml`：在 `dl.o_sph_fields` 里加 `dt` / `dd`；
    新标签文本会被抽取，需在 `i18n/zh_CN.po` 补条目（`code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0`），
    标签必须写成**单行文本节点**（夹了子元素就会被切碎）。
-3. 需要「数量 + 单位」这类拼接时：在 `product_hover_card.js` 加 getter，用
-   `_t("%(qty)s %(uom)s", { qty, uom })`；能复用已有 `_quantityText()` 就复用。
+3. 需要「数量 + 单位」这类拼接时（已有的「可用库存」就是这么做的）：在
+   `product_hover_card.js` 加 getter，用 `_t("%(qty)s %(uom)s", { qty, uom })`；
+   能复用已有 `_quantityText()` 就复用。
 4. 纯透传的字段无需改 JS：组件把 `props.payload` 直接给模板。
 
 ### 支持采购订单行（`purchase.order.line`）
