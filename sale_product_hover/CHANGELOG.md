@@ -3,6 +3,35 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能 +y，修复/文档 +z。
 
+## [19.0.1.3.2] - 2026-09-15（待验证）
+
+### 变更
+
+- **修复 `19.0.1.3.1` 引入的回归：`Uncaught TypeError: getLineHoverPayload is not a function`**
+  （悬停任意订单行时抛出，浮层完全不可用）：
+  - 根因：`19.0.1.3.1` 为了加版本自证**整份重写了 `product_hover_cache.js`**，重写时漏掉了
+    `export function getLineHoverPayload()`。同一次 import 里的 `setClientVersion` 还在，
+    所以模块能正常加载、`prefetch` 也照常发请求，**只有真正读缓存那一步炸**——
+    表现为悬停时的 `Uncaught Promise > TypeError`，而不是加载期报错。
+  - 修复：补回 `getLineHoverPayload` 的导出。
+  - **防回归**：`product_hover_list_patch.js` 增加**加载期自检**，逐个检查从缓存模块命名导入的
+    4 个 helper 是否真的是函数，缺失就 `console.error` 明确报出「assets 不一致 + 该怎么做」，
+    不再等到悬停才抛难懂的 TypeError。
+- 附带把「命名导入 vs 导出」的静态自查加进规范（见 `AGENTS.md`），本次已对**全部模块**跑过，
+  当前无其它同类问题。
+
+### 影响
+
+- 不涉及数据库结构变更，**无需迁移脚本**；接口与 payload 无变化。
+- 版本三处同步升为 `19.0.1.3.2`（`__manifest__.py` / JS / 控制器）。
+
+### 文档
+
+- 同步 `__manifest__.py`、`README.md`（排障）、`AGENTS.md`（新增 JS 导出自查、调试建议）、
+  根 `AGENTS.md`（前端规范增加该自查）、根 `README.md` 的版本引用。
+
+---
+
 ## [19.0.1.3.1] - 2026-09-15（待验证）
 
 ### 变更

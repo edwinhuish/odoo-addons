@@ -255,6 +255,34 @@ msgstr ""
 - 静态资源放 `static/src/{js,xml,scss}/`（如 `web_image_paste` 为此结构，迁移时保持一致）。
 - 事件处理要判 `props.readonly`，只读态不得触发写操作。
 - 复用原生上传 / 校验链路（如 `onFileUploaded`、`checkFileSize`），不重复实现。
+- **改完 JS 必须跑一次「命名导入 vs 导出」自查**：整份重写一个模块时很容易漏掉某个
+  `export`，而 `node --check` 只验语法、查不出「少了一个导出」，浏览器里表现为
+  运行到那行才抛 `xxx is not a function`，排查代价很高（`sale_product_hover`
+  `19.0.1.3.1` 就因此回归过）：
+
+  ```python
+  # 在仓库根目录执行：报出所有「import 了但目标文件没导出」的名字
+  import re, pathlib
+  EXPORT_RE = re.compile(r'^export\s+(?:async\s+)?(?:function|const|let|var|class)\s+(\w+)', re.M)
+  EXPORT_LIST_RE = re.compile(r'^export\s*\{([^}]*)\}', re.M)
+  IMPORT_RE = re.compile(r'import\s*\{([^}]*)\}\s*from\s*"(\.[^"]+)"', re.S)
+  for js in sorted(pathlib.Path(".").glob("*/static/src/**/*.js")):
+      for names, target in IMPORT_RE.findall(js.read_text(encoding="utf-8")):
+          tpath = (js.parent / target).with_suffix(".js")
+          if not tpath.exists():
+              print(f"{js}: 目标文件不存在 {target}"); continue
+          ttext = tpath.read_text(encoding="utf-8")
+          have = set(EXPORT_RE.findall(ttext))
+          for grp in EXPORT_LIST_RE.findall(ttext):
+              have |= {n.strip().split(" as ")[-1].strip() for n in grp.split(",") if n.strip()}
+          want = {n.strip().split(" as ")[0].strip() for n in names.split(",") if n.strip()}
+          if want - have:
+              print(f"{js} ← {target}: 未导出 {sorted(want - have)}")
+  ```
+
+  跨模块复用的 helper 还应在**加载期**做一次 `typeof !== "function"` 兜底自检
+  （见 `sale_product_hover/static/src/js/product_hover_list_patch.js` 的 `hoverHelpers`），
+  让不一致在页面加载时就以明确的 `console.error` 暴露。
 
 ## 7. 文档与变更规范
 
@@ -288,7 +316,7 @@ msgstr ""
 | `product_packing` | 19.0.1.1.3 | 为产品 Inventory 标签页增加产品自身尺寸（尺寸变化时自动同步原生 Volume）与外贸纸箱字段：装箱数、长宽高、毛重、净重、自动计算 CBM；产品列表增加纸箱规格与 CBM 可选列 | 已交付（T-009，2026-09-08），目标环境已验证；`19.0.1.1.3`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」）并修掉 `Dimension Unit` 重复 `msgid`，目标环境已验收通过 |
 | `product_card_view` | 19.0.2.0.1 | 产品列表卡片视图（瀑布流）：注册新 view type `card`，为官方 Products 视图切换器新增 Card 按钮（库存 / 销售 / 采购入口）；卡片多图轮播（模板 / 变体两层图源不叠加）+ title / reference / on hand + 多变体按钮切换；后端每页一次批量 `/product_card/payload`；`product_image` / `sale` / `purchase` 为可选依赖（运行时判断） | 已交付（T-012，2026-09-09）：Card 入口已确认，其余项待复验；依赖 Odoo 内部 `session.view_info` 的 JS patch，Odoo 升级需回归（见模块 `AGENTS.md` → L2 P2）；`19.0.2.0.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」），目标环境已验收通过（Card 其余项仍待复验） |
 | `web_multi_tabs` | 19.0.2.0.0 | 后台内部多标签页：每次打开视图生成一个可切换 / 可关闭的标签，溢出折叠为下拉菜单，URL 归一化 + 首页重定向合并避免重复标签；PWA / Window Controls Overlay 适配（标签栏按 CSS `env(titlebar-area-*)` 铺满标题栏）；`WebManifestMultiTabs` 控制器继承注入 `display_override` | 2026-09-09 在 `19.0.1.0.0` 基础上升级优化：补 `/** @odoo-module **/` 与 `static/src/{js,scss}` 路径、控制器继承替 monkey-patch、源语言改英文 + `i18n/zh_CN.po` 中英双语、修调试开关与 ResizeObserver 重绑；功能与交互不变，待目标环境验证；本模块文档见 `web_multi_tabs/AGENTS.md` |
-| `sale_product_hover` | 19.0.1.3.1 | 报价单 / 销售订单订单行悬停（触屏长按）展示产品详情浮层（图片 / 名称 / 型号 / 规格 / 描述 / 订单数量 / 单价 / 产品售价 / 可用库存）：patch `ListRenderer` + popover 服务，document 捕获阶段事件委托、以行 `data-id` 反查归属（**按字符串比较**）、浮层跟随鼠标并屏蔽行内原生 tooltip、**新增（未保存）的产品行也能预览**（草稿规格取数 + 取值签名去重），每页一次批量 payload 与浏览器缓存，仅 `sale.order.line` 生效，不新增模型 / 字段 / 权限 / 视图 | 已开发（T-014，2026-09-12），**待目标环境验证**；`19.0.1.0.1` / `19.0.1.0.2` 曾尝试修复悬停不触发，`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价、新增触屏长按与响应式，`19.0.1.1.1` 修掉真正根因（`data-id` 是字符串却被 `Number()` 化），`19.0.1.2.0` 浮层跟随鼠标 + 屏蔽行内原生 tooltip，`19.0.1.3.1` 支持新增产品行预览（`Record.isInEdition` 对 `!resId` 恒为真导致新行被编辑态守卫挡掉）；排障链路见模块 `README.md`，技术约束与踩坑见模块 `AGENTS.md` |
+| `sale_product_hover` | 19.0.1.3.2 | 报价单 / 销售订单订单行悬停（触屏长按）展示产品详情浮层（图片 / 名称 / 型号 / 规格 / 描述 / 订单数量 / 单价 / 产品售价 / 可用库存）：patch `ListRenderer` + popover 服务，document 捕获阶段事件委托、以行 `data-id` 反查归属（**按字符串比较**）、浮层跟随鼠标并屏蔽行内原生 tooltip、**新增（未保存）的产品行也能预览**（草稿规格取数 + 取值签名去重），每页一次批量 payload 与浏览器缓存，仅 `sale.order.line` 生效，不新增模型 / 字段 / 权限 / 视图 | 已开发（T-014，2026-09-12），**待目标环境验证**；`19.0.1.0.1` / `19.0.1.0.2` 曾尝试修复悬停不触发，`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价、新增触屏长按与响应式，`19.0.1.1.1` 修掉真正根因（`data-id` 是字符串却被 `Number()` 化），`19.0.1.2.0` 浮层跟随鼠标 + 屏蔽行内原生 tooltip，`19.0.1.3.0` 支持新增产品行预览（`Record.isInEdition` 对 `!resId` 恒为真导致新行被编辑态守卫挡掉），`19.0.1.3.1` 修复缺数据行永久失效 + 版本自证，`19.0.1.3.2` 修复缓存模块漏导出 `getLineHoverPayload` 的回归；排障链路见模块 `README.md`，技术约束与踩坑见模块 `AGENTS.md` |
 
 ## 10. 验证流程
 

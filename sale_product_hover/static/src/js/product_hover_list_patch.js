@@ -38,7 +38,7 @@ const VIEWPORT_MARGIN = 8;
 // controllers/product_hover_controller.py 的 MODULE_VERSION）。
 // 排查「无浮层」时先看控制台的 assets 日志确认版本；接口还会回显服务端版本，
 // 两者不一致时缓存层会直接告警（见 product_hover_cache.js 的 checkServerVersion）。
-const MODULE_VERSION = "19.0.1.3.1";
+const MODULE_VERSION = "19.0.1.3.2";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
@@ -53,6 +53,28 @@ function debugInfo(...args) {
 
 // 资源加载自证（始终输出一条）：确认前端资源已加载，括号内为当前运行版本。
 // 若控制台看不到这一行，说明浏览器仍在用旧缓存 / assets 未重建 → `-u` 升级后强刷。
+// 加载期自检：命名导入在「源码漏改 / 资源与代码不同步」时可能拿到 undefined，那样只会
+// 等到悬停时才抛 `xxx is not a function`，排查代价很高——`19.0.1.3.1` 就真踩过：
+// 整份重写缓存模块时漏掉了 `getLineHoverPayload` 的导出，表现是悬停时
+// `Uncaught TypeError: getLineHoverPayload is not a function`。这里在加载时就一次性查明并报出来。
+const hoverHelpers = {
+    getLineHoverPayload,
+    prefetchDraftHoverPayload,
+    prefetchLineHoverPayload,
+    setClientVersion,
+};
+const missingHoverHelpers = Object.keys(hoverHelpers).filter(
+    (name) => typeof hoverHelpers[name] !== "function"
+);
+if (missingHoverHelpers.length) {
+    console.error(
+        `[sale_product_hover] assets are inconsistent: ${missingHoverHelpers.join(", ")} ` +
+            "missing from product_hover_cache.js exports — the hover card will not work. " +
+            "Hard refresh (Ctrl+Shift+R) and run `-u sale_product_hover`; if it persists, " +
+            "compare the named imports with the cache module's exports."
+    );
+}
+
 setClientVersion(MODULE_VERSION);
 console.info(`[sale_product_hover] assets loaded (${MODULE_VERSION})`);
 

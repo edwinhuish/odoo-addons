@@ -195,6 +195,11 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 ### 异常情况与处理
 
 - 浮层不出现：确认浏览器控制台是否有 `/sale_product_hover/payload` 报错；若 403，检查当前用户对产品 / 该订单行的读权限。
+- **`Uncaught TypeError: getLineHoverPayload is not a function`**（`19.0.1.3.1` 的回归，已在
+  `19.0.1.3.2` 修复）：页面加载时会有配套的
+  `assets are inconsistent: … missing from product_hover_cache.js exports`。
+  升级到 `19.0.1.3.2` + 强刷即可；若在自研改动后又出现，说明 JS 的命名导入与导出不一致
+  （自查脚本见根 `AGENTS.md` 第 6 节）。
 - **新增的行不弹浮层**（控制台有 `skip: 接口没有返回这一行的数据 … datapoint_N`）：
   按下面顺序看控制台里**第一条**相关告警即可定位：
   1. `server module version is X while the loaded assets are Y` → **服务端 Python 没升级**
@@ -219,7 +224,7 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 - 关闭触屏长按：删掉 `product_hover_list_patch.js` 里 `touchstart` / `touchmove` / `touchend` / `touchcancel` 四个监听与对应方法即可（互不影响）。
 - 扩大适用范围（如采购订单行）：需把 `sale.order.line` 的 payload 方法抽象到共用模型，并在补丁里扩展目标模型清单。
 - 悬停无浮层时的排查顺序（用 `?debug=1` 或 `?debug=assets` 打开页面；日志为 `info` 级别，控制台默认可见）：
-  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.3.1)` —— **看不到这行**说明浏览器
+  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.3.2)` —— **看不到这行**说明浏览器
      仍在用旧缓存 / assets 未重建：`-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）。
      括号内版本应与 `__manifest__.py` 的 `version` 一致；
   2. 列表加载 / 翻页 / 表单改动时应有

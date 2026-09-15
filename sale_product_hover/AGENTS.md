@@ -420,6 +420,11 @@
   停止跟随（`el.contains(ev.target)`），这是预期行为，不要当成 bug 改掉。
 - **黑色原生 tooltip 又冒出来**：`mouseenter` 拦截是否还在（见 P1 陷阱 12）；
   注意它依赖「预取已完成」——列表刚打开、`payload` 还没到时不拦截（避免无谓地屏蔽 tooltip）。
+- **`Uncaught TypeError: xxx is not a function`**（例如 `getLineHoverPayload is not a function`）：
+  先看页面加载时有没有 `assets are inconsistent: … missing from product_hover_cache.js exports`
+  ——有就是**源码里少了一个导出**（`19.0.1.3.1` 真踩过：整份重写缓存模块时漏掉
+  `getLineHoverPayload`），按根 `AGENTS.md` 第 6 节的脚本跑一遍「命名导入 vs 导出」自查即可定位；
+  没有这行再怀疑资源与代码不同步（强刷 / `-u`）。
 - **升级后无变化**：前端资源有缓存，必须强刷浏览器（`Ctrl+Shift+R`）。
 - **Odoo 升级后回归**：重点复核 `web/views/list/list_renderer` 的
   `props.list`（`resModel` / `records` / `editedRecord`）、行模板上的
@@ -437,6 +442,10 @@
   `controllers/product_hover_controller.py` 的 `MODULE_VERSION`——漏改任何一处，
   前端版本自证都会误报（或该报不报），而版本自证正是本项目排查「资源/后端不同步」的主要手段。
   改完可用 `grep -rn "19\.0\." __manifest__.py static/src/js/product_hover_list_patch.js controllers/product_hover_controller.py` 自查。
+- **改完 JS 必跑「命名导入 vs 导出」自查**（脚本见根 `AGENTS.md` 第 6 节）：
+  本模块 `product_hover_list_patch.js` 从 `product_hover_cache.js` 命名导入 4 个 helper，
+  整份重写缓存模块时漏掉一个导出就会在悬停时抛 `xxx is not a function`
+  （`19.0.1.3.1` 的回归），而 `node --check` 查不出来。
 - `CHANGELOG.md` 的版本说明（变更 / 影响 / 文档）
 - 本 `AGENTS.md` 的相关约束（若涉及行为变更）
 - `README.md` 的功能说明（若涉及用户可见功能）

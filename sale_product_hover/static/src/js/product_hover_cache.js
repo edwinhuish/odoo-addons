@@ -72,6 +72,11 @@ function checkServerVersion(payload) {
     );
 }
 
+/** 取某一行的展示数据（未预取到则返回 undefined）。 */
+export function getLineHoverPayload(key) {
+    return payloadByKey.get(key);
+}
+
 /**
  * 批量预取**已保存**订单行的展示数据（自动去重 + 增量）。
  *
