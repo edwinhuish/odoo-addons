@@ -2,24 +2,41 @@
 
 import { rpc } from "@web/core/network/rpc";
 
+import { buildProductHoverPayload, fetchProducts, getUnitDigits } from "./product_hover_product";
+
 /**
- * 订单行悬浮卡片的数据缓存。
+ * 订单行悬浮卡片的数据层。
+ *
+ * **两条取数路径**（对外都只暴露 `getLineHoverPayload(key)`，卡片组件不关心数据从哪来）：
+ *
+ * 1. **已保存行**：行已在库里，走自研接口 `/sale_product_hover/payload`（按行 id 批量，
+ *    服务端用 `formatLang` 一次装配，含产品售价 / 可用库存等）；
+ * 2. **未保存的新行**：行还没落库，服务端根本没有这条记录，**按行 id 反查必然查不到**。
+ *    所以改用**直接从产品取数**：按 `product_id` 用标准 ORM 读 `product.product`
+ *    （任何后端版本都可用，不依赖自研接口），行上的数量 / 单价 / 单位 / 币种直接用
+ *    表单里正在编辑的值，数字用 Odoo 前端格式化工具渲染。
  *
  * key 的取法见 `product_hover_list_patch.js` 的 `_getProductHoverKey()`：
  * **已保存行用数据库 id（数字）**，**未保存的新行用 Owl datapoint id（字符串
- * `"datapoint_N"`）**——两者不会冲突，也不依赖记录是否已入库。
+ * `"datapoint_N"`）**——两者不会冲突，新行也不必等落库才能预览。
  *
  * 缓存与「已请求」集合都是**模块级非 reactive 容器**：挂到 reactive 对象上会触发
  * Owl 的重渲染 / 重载循环（同 product_card_view 的 P1 踩坑），故此处不做响应式处理。
+ *
+ * 本模块对外导出 `getLineHoverPayload` / `prefetchLineHoverPayload` / `prefetchDraftHoverPayload` /
+ * `setClientVersion` / `ensureServerDiagnostics`。**整份重写本文件时务必逐个确认导出还在**
+ * ——`19.0.1.3.1` 曾漏掉 `getLineHoverPayload`，表现为悬停时
+ * `Uncaught TypeError: getLineHoverPayload is not a function`；改完请按根 `AGENTS.md`
+ * 第 6 节的脚本跑一次「命名导入 vs 导出」自查。
  */
 const payloadByKey = new Map();
 /** 已请求过的**已保存**订单行（数据库 id）。 */
 const requestedLineIds = new Set();
-/**
- * 已请求过的**未保存**新行：`key -> 上次请求时的取值签名`。
- * 数量 / 单价 / 单位一变签名就变，会重新取数——这就是「新增产品实时预览」的实现方式。
- */
-const requestedDraftSignatures = new Map();
+/** 未保存新行的取值签名：`key -> 上次装配时的取值`，变了才重新装配。 */
+const draftSignatureByKey = new Map();
+
+/** 产品数据缓存（未保存新行走它）：`productId -> 产品数据 | null`（null = 读不到，不再重试）。 */
+const productById = new Map();
 
 /**
  * 缓存上限：只在一次会话里翻过非常大量订单行时才会触发（清空后按需重新预取），
@@ -33,8 +50,11 @@ const SERVER_VERSION_KEY = "__server_version";
 /** 前端资源版本，由 product_hover_list_patch.js 注入（避免两处各写一份）。 */
 let clientVersion = "";
 let versionChecked = false;
-/** 「接口没返回数据」只告警一次，避免悬停时反复刷屏（重试逻辑照常执行）。 */
-let noDataWarned = false;
+let selfChecked = false;
+/** 服务端版本探测的 Promise（每会话只发一次请求，结果缓存）。 */
+let serverVersionProbe = null;
+/** 只告警一次，避免悬停时反复刷屏（重试逻辑照常执行）。 */
+let serverReported = false;
 
 /** 由 list 补丁在启动时调用，登记当前前端资源版本。 */
 export function setClientVersion(version) {
@@ -47,13 +67,73 @@ function debugInfo(...args) {
     }
 }
 
+/** 取某一行的展示数据（未预取到则返回 undefined）。 */
+export function getLineHoverPayload(key) {
+    return payloadByKey.get(key);
+}
+
+// ----------------------------------------------------------------------------
+// 已保存行：走自研接口
+// ----------------------------------------------------------------------------
+
 /**
- * 版本自证：比对服务端回显的模块版本与前端资源版本。
+ * 探测服务端模块版本（每个会话只发一次请求，结果缓存）。
  *
- * 二者不一致（或服务端没有回显 = Python 还是旧版本）时给出可执行的提示——
- * 本模块踩过多次「静态资源已更新、Python 没升级」的坑，而这在界面上只表现为
- * 「浮层不弹 / 字段缺失」，很难自己看出来。只在第一次发现不一致时告警一次。
+ * 用**空 `line_ids`** 请求：接口在新旧两种后端上都**会成功返回**——旧后端返回 `{}`，
+ * 新后端多一个保留键 `__server_version`。所以它能在不依赖任何新参数的前提下，
+ * 干净地区分「服务端 Python 没升级」与「业务上确实没有数据」。
+ *
+ * 注意：**绝不能带 `drafts` / `version` 这类新参数**——旧后端的处理函数不认识它们会直接
+ * 抛 TypeError，整个请求失败，那样连「旧后端」这个结论都拿不到，还会连带把已保存行的
+ * 预览一起打没。
+ *
+ * @returns {Promise<string|null>} 服务端模块版本；旧后端 / 请求失败时为 null
  */
+function probeServerVersion() {
+    if (!serverVersionProbe) {
+        serverVersionProbe = rpc("/sale_product_hover/payload", { line_ids: [] })
+            .then((payload) => (payload && payload[SERVER_VERSION_KEY]) || null)
+            .catch(() => null);
+    }
+    return serverVersionProbe;
+}
+
+const NOT_UPGRADED_HINT =
+    "the server does NOT report __server_version, i.e. its Python code is not upgraded. " +
+    "Run `odoo -d <db> -u sale_product_hover --stop-after-init` and RESTART the server process " +
+    "(a running process keeps the old Python in memory), then hard refresh (Ctrl+Shift+R). " +
+    "Note: in `?debug=assets` mode JS/SCSS are rebuilt from files on the fly, so the front-end can be " +
+    "up to date while the back-end is not — that is why this happens.";
+
+/**
+ * 启动自检（每个会话一次，只在订单行列表出现时调用）。
+ *
+ * 结论汇总成**一行** `console.info`，排查时先看这一行：
+ * `self-check: assets X, server Y` → 两端一致；`server NOT UPGRADED …` → 服务端没升级。
+ * 它只影响**已保存行**的取数（未保存行是前端直接查产品，与服务端版本无关）。
+ */
+export function ensureServerDiagnostics() {
+    if (selfChecked) {
+        return Promise.resolve(null);
+    }
+    selfChecked = true;
+    return probeServerVersion().then((serverVersion) => {
+        if (serverVersion === clientVersion) {
+            console.info(
+                `[sale_product_hover] self-check: assets ${clientVersion}, server ${serverVersion} (ok)`
+            );
+        } else {
+            console.error(
+                `[sale_product_hover] self-check: assets ${clientVersion}, server ${
+                    serverVersion || "NOT UPGRADED"
+                } → ${NOT_UPGRADED_HINT}`,
+            );
+        }
+        return serverVersion;
+    });
+}
+
+/** 成功路径的版本自证（只在第一次发现不一致时告警一次）。 */
 function checkServerVersion(payload) {
     const serverVersion = payload && payload[SERVER_VERSION_KEY];
     if (!clientVersion || serverVersion === clientVersion) {
@@ -64,17 +144,31 @@ function checkServerVersion(payload) {
         return;
     }
     versionChecked = true;
-    console.warn(
-        `sale_product_hover: server module version is ${serverVersion || "unknown"} ` +
-            `while the loaded assets are ${clientVersion}. ` +
-            "Run `-u sale_product_hover`, restart the server and hard refresh " +
-            "(Ctrl+Shift+R) — the hover card cannot work with mismatched versions."
+    console.error(
+        `sale_product_hover: server module version is ${serverVersion || "unknown"} while the ` +
+            `loaded assets are ${clientVersion}. Run \`-u sale_product_hover\`, RESTART the server ` +
+            "and hard refresh (Ctrl+Shift+R) — the hover card cannot work with mismatched versions."
     );
 }
 
-/** 取某一行的展示数据（未预取到则返回 undefined）。 */
-export function getLineHoverPayload(key) {
-    return payloadByKey.get(key);
+/** 已保存行取数失败时的统一诊断（只报一次）：现象 + 服务端版本结论。 */
+function reportServerFailure(message, detail) {
+    if (serverReported) {
+        return;
+    }
+    serverReported = true;
+    console.error(`[sale_product_hover] ${message}`, detail);
+    probeServerVersion().then((serverVersion) => {
+        if (serverVersion) {
+            console.error(
+                `sale_product_hover: the server runs ${serverVersion} (upgraded) — so this is a ` +
+                    "**data/permission** problem, not a deployment one. Check the server log for " +
+                    "`sale_product_hover: product … not found or not readable`."
+            );
+        } else {
+            console.error(`sale_product_hover: ${NOT_UPGRADED_HINT}`);
+        }
+    });
 }
 
 /**
@@ -84,12 +178,7 @@ export function getLineHoverPayload(key) {
  * 新出现的行，悬停时不再发起任何请求。请求失败会回退「已请求」标记以便重试。
  */
 export async function prefetchLineHoverPayload(lineIds) {
-    // 超过上限先整体清空（含「已请求」标记），随后按本次 ids 重新建立缓存
-    if (payloadByKey.size > MAX_CACHED_LINES) {
-        payloadByKey.clear();
-        requestedLineIds.clear();
-        requestedDraftSignatures.clear();
-    }
+    clearCacheIfTooLarge();
     const ids = [];
     for (const lineId of lineIds || []) {
         if (lineId && !requestedLineIds.has(lineId)) {
@@ -101,10 +190,7 @@ export async function prefetchLineHoverPayload(lineIds) {
         return;
     }
     try {
-        const payload = await rpc("/sale_product_hover/payload", {
-            line_ids: ids,
-            version: clientVersion,
-        });
+        const payload = await rpc("/sale_product_hover/payload", { line_ids: ids });
         checkServerVersion(payload);
         let received = 0;
         for (const lineId of ids) {
@@ -115,18 +201,13 @@ export async function prefetchLineHoverPayload(lineIds) {
             }
         }
         if (!received) {
-            // 一条都没回来：多半是后端未升级 / 接口报错，回退标记让下次能重试
+            // 一条都没回来：回退标记让下次能重试，并给出诊断结论
             for (const lineId of ids) {
                 requestedLineIds.delete(lineId);
             }
-            if (!noDataWarned) {
-                noDataWarned = true;
-                console.warn(
-                    `sale_product_hover: no preview data returned for ${ids.length} order line(s); ` +
-                        "the hover card will retry on next list update. Check that the module was " +
-                        "upgraded (-u sale_product_hover) and see the server log."
-                );
-            }
+            reportServerFailure(
+                `no preview data returned for ${ids.length} saved order line(s) (${ids.join(", ")})`
+            );
         }
         debugInfo(
             `[sale_product_hover] payload: requested ${ids.length} saved line(s), received ${received}`
@@ -135,86 +216,94 @@ export async function prefetchLineHoverPayload(lineIds) {
         for (const lineId of ids) {
             requestedLineIds.delete(lineId);
         }
-        console.warn("sale_product_hover: unable to load product preview data", error);
+        reportServerFailure("unable to load product preview data (saved lines)", error);
     }
 }
 
-/** 未保存新行的取值签名：任一与展示相关的取值变化都要重新取数。 */
-function draftSignature(draft) {
+// ----------------------------------------------------------------------------
+// 未保存的新行：直接从产品取数（标准 ORM）
+// ----------------------------------------------------------------------------
+
+/** 未保存新行的取值签名：任一与展示相关的取值变化都要重新装配。 */
+function draftSignature(context) {
     return [
-        draft.product_id,
-        draft.quantity,
-        draft.uom_name,
-        draft.price_unit,
-        draft.currency_id,
+        context.product_id,
+        context.quantity,
+        context.uom_name,
+        context.price_unit,
+        context.currency_id,
     ].join("|");
 }
 
 /**
  * 预取**尚未保存**的新行（刚新增的产品行）展示数据。
  *
- * 新行没有数据库 id，只能把表单里正在编辑的值交给后端格式化；签名未变（用户没改数量 /
- * 单价 / 单位）时直接命中上一次结果、**不发请求**，所以悬停通常依然不发请求。
- * 只有「改了数量 / 单价之后再悬停」才会补一次请求，从而做到实时预览。
+ * 不从订单里查（订单行还没落库，服务端查不到），而是**按 `product_id` 读产品**：
+ * 产品数据一次批量读入 `productById` 缓存（同一产品的多行共用），
+ * 行的数量 / 单价等取值变化时重新装配。
+ *
+ * @param {object} orm `this.orm`（ListRenderer 已有）
+ * @param {object[]} contexts `{key, product_id, quantity, uom_name, price_unit, currency_id}`
  */
-export async function prefetchDraftHoverPayload(drafts) {
-    const pending = [];
-    for (const draft of drafts || []) {
-        if (!draft || !draft.key || !draft.product_id) {
-            continue;
+export async function prefetchDraftHoverPayload(orm, contexts) {
+    clearCacheIfTooLarge();
+    const pending = (contexts || []).filter((context) => {
+        if (!context || !context.key || !context.product_id) {
+            // 静默跳过会让「为什么没预览」更难查，故留下 debug 线索
+            debugInfo("[sale_product_hover] skip draft without key / product:", context);
+            return false;
         }
-        const signature = draftSignature(draft);
-        if (requestedDraftSignatures.get(draft.key) === signature) {
-            continue;
-        }
-        requestedDraftSignatures.set(draft.key, signature);
-        pending.push(draft);
-    }
+        return true;
+    });
     if (!pending.length) {
         return;
     }
     try {
-        const payload = await rpc("/sale_product_hover/payload", {
-            drafts: pending,
-            version: clientVersion,
-        });
-        checkServerVersion(payload);
-        const missing = [];
-        let received = 0;
-        for (const draft of pending) {
-            const data = payload && payload[draft.key];
-            if (data) {
-                payloadByKey.set(draft.key, data);
-                received += 1;
-            } else {
-                missing.push(draft.key);
-            }
-        }
-        if (missing.length) {
-            // 请求成功但这一行没有数据：**必须**回退签名，否则该行会被永久判为
-            // 「已请求过」，之后每次悬停都被静默跳过、再也取不到数据。
-            for (const key of missing) {
-                requestedDraftSignatures.delete(key);
-            }
-            if (!noDataWarned) {
-                noDataWarned = true;
-                console.warn(
-                    `sale_product_hover: no preview data returned for ${missing.length} newly ` +
-                        `added line(s) (${missing.join(", ")}). If the module was just updated, ` +
-                        "check that the server runs the new Python code (-u sale_product_hover " +
-                        "+ restart) and that /sale_product_hover/payload accepts 'drafts'; " +
-                        "otherwise check the server log for `sale_product_hover: product ... " +
-                        "not found or not readable`."
+        const [unitDigits] = await Promise.all([
+            getUnitDigits(orm),
+            fetchProducts(
+                orm,
+                pending.map((context) => context.product_id),
+                productById
+            ),
+        ]);
+        let assembled = 0;
+        for (const context of pending) {
+            const signature = draftSignature(context);
+            const product = productById.get(context.product_id);
+            if (!product) {
+                // 产品不存在 / 当前用户读不到：不装配（前端表现为不弹浮层）
+                draftSignatureByKey.delete(context.key);
+                payloadByKey.delete(context.key);
+                debugInfo(
+                    "[sale_product_hover] skip: product",
+                    context.product_id,
+                    "not found or not readable"
                 );
+                continue;
             }
+            if (draftSignatureByKey.get(context.key) === signature && payloadByKey.has(context.key)) {
+                continue;
+            }
+            payloadByKey.set(
+                context.key,
+                buildProductHoverPayload(product, context, unitDigits)
+            );
+            draftSignatureByKey.set(context.key, signature);
+            assembled += 1;
         }
         debugInfo(
-            `[sale_product_hover] payload: requested ${pending.length} draft line(s), received ${received}`
+            `[sale_product_hover] payload: requested ${pending.length} draft line(s), assembled ${assembled}`
         );
     } catch (error) {
-        for (const draft of pending) {
-            requestedDraftSignatures.delete(draft.key);
-        }
-        console.warn("sale_product_hover: unable to load product preview data", error);
+        console.warn("sale_product_hover: unable to build preview data from the product", error);
+    }
+}
+
+function clearCacheIfTooLarge() {
+    if (payloadByKey.size > MAX_CACHED_LINES) {
+        payloadByKey.clear();
+        requestedLineIds.clear();
+        draftSignatureByKey.clear();
     }
 }

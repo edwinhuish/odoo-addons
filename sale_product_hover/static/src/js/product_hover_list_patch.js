@@ -9,6 +9,7 @@ import { ListRenderer } from "@web/views/list/list_renderer";
 
 import { ProductHoverCard } from "./product_hover_card";
 import {
+    ensureServerDiagnostics,
     getLineHoverPayload,
     prefetchDraftHoverPayload,
     prefetchLineHoverPayload,
@@ -38,7 +39,7 @@ const VIEWPORT_MARGIN = 8;
 // controllers/product_hover_controller.py 的 MODULE_VERSION）。
 // 排查「无浮层」时先看控制台的 assets 日志确认版本；接口还会回显服务端版本，
 // 两者不一致时缓存层会直接告警（见 product_hover_cache.js 的 checkServerVersion）。
-const MODULE_VERSION = "19.0.1.3.2";
+const MODULE_VERSION = "19.0.1.4.0";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
@@ -58,6 +59,7 @@ function debugInfo(...args) {
 // 整份重写缓存模块时漏掉了 `getLineHoverPayload` 的导出，表现是悬停时
 // `Uncaught TypeError: getLineHoverPayload is not a function`。这里在加载时就一次性查明并报出来。
 const hoverHelpers = {
+    ensureServerDiagnostics,
     getLineHoverPayload,
     prefetchDraftHoverPayload,
     prefetchLineHoverPayload,
@@ -99,8 +101,11 @@ console.info(`[sale_product_hover] assets loaded (${MODULE_VERSION})`);
  *
  * 已保存行与**尚未保存的新行**（刚新增的产品行）都能预览：
  * - 缓存键 `_getProductHoverKey()`：已保存行用数据库 id，新行用 datapoint id；
- * - 新行由 `_getProductHoverDraft()` 把表单里正在编辑的值交给后端格式化，
- *   取值一变签名就变、`onPatched` 会重新预取，所以数量 / 单价改完立刻反映到浮层；
+ * - **已保存行**走自研接口（按行 id 批量取，服务端 `formatLang` 装配）；
+ * - **新行**不碰订单——订单行还没落库，服务端按行 id 反查必然查不到——
+ *   而是由 `_getProductHoverContext()` 给出「产品 + 行上正在编辑的值」，
+ *   交给 `prefetchDraftHoverPayload()` **按 `product_id` 读产品**（标准 ORM）后在前端装配；
+ *   取值一变签名就变、`onPatched` 会重新取数，所以数量 / 单价改完立刻反映到浮层；
  * - 编辑态避让只针对「正在被内联编辑的**已保存**行」（`_isProductHoverBlockedByEdit()`）——
  *   Odoo 里 `Record.isInEdition` 对 `!resId` 恒为真，新行一加进来就是 `editedRecord`，
  *   旧版一刀切导致新增产品永远没有预览。
@@ -196,27 +201,32 @@ patch(ListRenderer.prototype, {
         if (!this._isProductHoverList()) {
             return;
         }
+        // 启动自检（每个会话一次，只在订单行列表上触发）：输出一行
+        // `self-check: assets X, server Y`，服务端未升级时直接给出升级命令，
+        // 避免又回到「前端还是后端没更新」的猜测上。
+        ensureServerDiagnostics();
         const lineIds = [];
-        const drafts = [];
+        const draftContexts = [];
         for (const record of this.props.list.records || []) {
             if (record.resId) {
                 lineIds.push(record.resId);
                 continue;
             }
-            const draft = this._getProductHoverDraft(record);
-            if (draft) {
-                drafts.push(draft);
+            // 尚未保存的新行：不走订单接口，改为按产品取数（见 _getProductHoverContext 注释）
+            const context = this._getProductHoverContext(record);
+            if (context) {
+                draftContexts.push(context);
             }
         }
         debugInfo(
             `[sale_product_hover] prefetch ${TARGET_MODEL}: ` +
-                `${lineIds.length} saved / ${drafts.length} draft line(s)`
+                `${lineIds.length} saved / ${draftContexts.length} new line(s)`
         );
         if (lineIds.length) {
             prefetchLineHoverPayload(lineIds);
         }
-        if (drafts.length) {
-            prefetchDraftHoverPayload(drafts);
+        if (draftContexts.length) {
+            prefetchDraftHoverPayload(this.orm, draftContexts);
         }
     },
 
@@ -253,14 +263,14 @@ patch(ListRenderer.prototype, {
     },
 
     /**
-     * 未保存新行交给后端的「草稿规格」；还没选产品（或分节 / 备注行）时返回 null。
+     * 未保存新行的取数上下文：**产品 id + 行上正在编辑的值**；还没选产品（或分节 / 备注行）时返回 null。
      *
-     * 新行没有数据库 id，展示数据只能由前端把表单里正在编辑的值传上去，后端按同样口径
-     * 读产品并格式化——所以新行与已保存行的浮层内容完全一致。
+     * 新行没有数据库 id、服务端也没有这条记录，所以卡片数据只能「按产品 id 查产品」
+     * 再加上表单里当前的取值（数量 / 单位 / 单价 / 币种），由 `product_hover_product.js` 装配。
      * 取值的形态见 `model/relational_model/record.js`：many2one 是 `{id, display_name}`
      * 对象（不是 `[id, name]` 数组）。
      */
-    _getProductHoverDraft(record) {
+    _getProductHoverContext(record) {
         const data = record.data || {};
         const product = data.product_id;
         if (!product || !product.id || data.display_type) {
@@ -571,14 +581,14 @@ patch(ListRenderer.prototype, {
                 await prefetchLineHoverPayload([record.resId]);
             }
         } else {
-            // 未保存的新行：按当前取值重算签名——取值没变就是空操作（不发请求），
-            // 变了才补一次，保证浮层里的数量 / 单价跟着刚输入的内容走
-            const draft = this._getProductHoverDraft(record);
-            if (!draft) {
+            // 未保存的新行：按产品取数（产品数据已缓存时这一步是同步装配、不发请求）；
+            // 取值没变就命中缓存，变了才重新装配，保证浮层里的数量 / 单价跟着刚输入的内容走
+            const context = this._getProductHoverContext(record);
+            if (!context) {
                 debugInfo("[sale_product_hover] skip: 新行还没选产品（或为分节 / 备注行）");
                 return;
             }
-            await prefetchDraftHoverPayload([draft]);
+            await prefetchDraftHoverPayload(this.orm, [context]);
         }
         const payload = getLineHoverPayload(key);
         // 异步返回后需再次确认指针仍在同一行，且行元素仍在文档中

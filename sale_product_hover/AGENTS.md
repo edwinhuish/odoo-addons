@@ -10,11 +10,12 @@
 - 模块名：订单行产品悬浮卡（Sale Product Hover）
 - 技术目录：`sale_product_hover`
 - 新建模型：无；无 `security/ir.model.access.csv`
-- 继承模型：`sale.order.line`（新增方法 `_get_product_hover_payload()` / `_get_hover_specifications()`，不新增字段）
-- 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`）
+- 继承模型：`sale.order.line`（新增方法 `_get_product_hover_payload()` / `_build_hover_payload()` / `_get_hover_specifications()`，不新增字段；**只服务已保存行**）
+- 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`；**只接受 `line_ids`**，另回显 `__server_version`）
+- 未保存的新行：**不走后端**，前端 `product_hover_product.js` 按 `product_id` 用标准 ORM 读产品后装配（见陷阱 16）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按；浮层位置由补丁自己接管（跟随鼠标）
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.3.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层改为跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.0` 新增（未保存）的产品行也能预览，见陷阱 14；均待目标环境验证）
+- 当前版本：`19.0.1.4.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**，见陷阱 16；均待目标环境验证）
 
 ---
 
@@ -53,11 +54,11 @@
 
 5. **控制器不提权**
    - 不 `sudo`；以当前用户身份读取（前端只传当前列表页可见的行，记录规则照常生效）
-   - 未保存新行走 `drafts`：产品 id 来自前端，必须用
-     `with_context(active_test=False).search([("id", "in", ids)])` 而不是 `browse().read()`
-     ——`search` 会应用记录规则并剔除读不到的产品，否则一个越权 id 会让 `read()` 整批抛
-     `AccessError`，把所有行的浮层一起打没；`drafts` 里的数量 / 单价只用于展示、不写库
-   - 违反后果：越权暴露其他用户订单行的产品与单价信息；或一个伪造的产品 id 让整个接口失效
+   - 产品集合一律用 `search` 而不是 `browse().read()`：
+     `with_context(active_test=False).search([("id", "in", ids)])`——`search` 会应用记录规则并
+     剔除读不到的产品，否则一个越权 / 失效的 id 会让 `read()` 整批抛 `AccessError`，把所有行的
+     浮层一起打没。前端读产品（未保存的新行）同理：用 `orm.searchRead` 而不是 `orm.read`
+   - 违反后果：越权暴露其他用户订单行的产品与单价信息；或一个异常的产品 id 让整批取数失效
 
 6. **所有用户可见文本源语言为英文（`en_US`）**
    - Python / JS / QWeb 模板不写中文界面文案；中文只在 `i18n/zh_CN.po` 的 `msgstr`
@@ -252,10 +253,10 @@
   - 避让条件收敛成 `_isProductHoverBlockedByEdit(record)`：
     `editedRecord === record && record.resId`——只有「正在被内联编辑的**已保存**行」才不弹；
   - 缓存键换成 `_getProductHoverKey(record)`：`record.resId || record.id`（数字 / `"datapoint_N"` 不冲突）；
-  - 新行的展示数据由 `_getProductHoverDraft(record)` 把表单里正在编辑的值交给后端
-    （`drafts` 入参 → `_get_product_hover_draft_payload()` → 与已保存行共用 `_build_hover_payload()`）；
-  - 实时性：草稿按 `产品|数量|单位|单价|币种` 生成签名，签名未变即命中缓存
-    （**悬停依然不发请求**），变了才重新取数（`onPatched` 刷新 + 悬停时兜一次）
+  - 新行的展示数据由 `_getProductHoverContext(record)` 给出「产品 + 表单里正在编辑的值」，
+    再**按 `product_id` 读产品**装配（实现见陷阱 16）；
+  - 实时性：新行按 `产品|数量|单位|单价|币种` 生成签名，产品已缓存且签名未变即命中缓存
+    （**悬停不发请求**），变了才重新装配（`onPatched` 刷新 + 悬停时兜一次）
 - **顺带的坑（读 `record.data` 时必看）**：Odoo 19 里 many2one 的取值是
   **`{id, display_name}` 对象**，不是 `[id, name]` 数组——`record.data.product_id.id`、
   `record.data.product_uom_id.display_name`；写 `[0]` / `[1]` 会静默拿到 `undefined`。
@@ -271,15 +272,31 @@
 - 现象：选了产品后悬停新行，控制台只有
   `skip: 接口没有返回这一行的数据（无产品 / 分节行 / 无权限 / 服务端未升级） datapoint_165`，
   **没有报错、没有网络请求**，之后每次悬停都一样
-- 根因：`prefetchDraftHoverPayload()` 在**发请求之前**就把「取值签名」写进
-  `requestedDraftSignatures`（已保存行的 `requestedLineIds` 同理）。一旦这次响应里
-  **没有**该行的数据（服务端异常被 controller 的 try/except 吞掉、或服务端 Python 未升级
-  导致草稿被跳过），标记会一直留着 → 之后每次悬停都被 `if (signature 未变) continue`
-  挡掉 → **不再发请求、也永远拿不到数据**，而且完全不报错
-- 正确做法：响应里没拿到数据的 key **必须回退标记**，下次重试；同时对
-  「整批一条都没回来」与「新行没拿到数据」各给一条可操作的 `console.warn`（只告警一次）
-- 教训：任何「先记已请求、后发请求」的去重缓存，都要考虑**请求成功但结果为空**的分支；
+- 根因（当时新行走服务端 `drafts`）：`prefetchDraftHoverPayload()` 在**发请求之前**就把
+  「取值签名」记进 `requestedDraftSignatures`。一旦这次响应里**没有**该行的数据
+  （服务端异常被 controller 的 try/except 吞掉、或服务端 Python 未升级导致草稿被跳过），
+  标记会一直留着 → 之后每次悬停都被 `if (signature 未变) continue` 挡掉 →
+  **不再发请求、也永远拿不到数据**，而且完全不报错
+- 正确做法：没拿到数据的 key **必须回退标记**，下次重试；并对失败给出可操作的
+  `console.error`（只告警一次）。**`19.0.1.4.0` 改成前端直接查产品后**，产品数据缓存在
+  `productById`（读不到记 `null`，不再重复请求），未装配成功的行会清掉签名、下次重算，
+  因此不存在「永久卡死」这一态
+- 教训：任何「先记已请求、后取数」的去重缓存，都要考虑**取数成功但结果为空**的分支；
   否则一次异常就会变成永久性静默失效（比报错更难查）
+
+**陷阱 16：未保存的新行绝不能再去查订单（`19.0.1.4.0` 起）**
+- 现象：新行悬停无浮层，服务端日志 / 控制台只能看到「没有数据」，怎么改取数参数都没用
+- 根因：订单还没保存，**服务端根本没有这条 `sale.order.line`**——任何「按行 id 反查」
+  的方案（包括曾经把新行伪装成 `drafts` 发给接口的做法）都无从下手；而且那种方案还要求
+  服务端先 `-u` 升级，恰好撞上本项目「前端已更新、后端没升级」的老问题
+- 正确做法：**新行直接从产品取数**——`_getProductHoverContext()` 只提供
+  `{key, product_id, quantity, uom_name, price_unit, currency_id}`，由
+  `product_hover_product.js` 用**标准 ORM**（`orm.searchRead("product.product", ...)`）读产品，
+  行的数量 / 单价用表单当前值，`formatFloat` / `formatMonetary` 与后端 `formatLang` 等价
+- 好处：不依赖自研接口 / 服务端升级，`?debug=assets` 下改完 JS 立刻生效
+- 边界：产品数据按 `product_id` 缓存（同一产品多行共用）；`searchRead` 天然剔除读不到的产品，
+  不会因个别 id 让整批失败；新增字段时**两条路径都要改**（后端 `_build_hover_payload()` 与
+  前端 `buildProductHoverPayload()`），否则新行与已保存行的卡片会不一致
 
 ### P2：reactive 缓存导致的渲染循环
 
@@ -339,11 +356,12 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 版本 / 依赖（`sale` + `stock`）/ 前端 assets 登记；无 `data` 文件 |
-| `models/sale_order_line.py` | `_get_product_hover_payload()`（已保存行）/ `_get_product_hover_draft_payload()`（未保存的新行）→ 共用 `_build_hover_payload()`：批量装配浮层展示数据（含价格 / 数量 / 库存格式化）；`_get_hover_specifications()`：批量拼变体规格 |
-| `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（按行 id + `drafts` 草稿规格批量返回，当前用户身份）；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**，它回显在响应的保留键 `__server_version` 上供前端做版本自证 |
-| `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（已保存行按 id 去重、新行按取值签名去重；**响应缺数据时回退标记以便重试**、失败重试 / 上限保护）；比对后端回显版本做自证告警 |
+| `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 批量装配（含价格 / 数量 / 库存格式化）；`_get_hover_specifications()` 批量拼变体规格 |
+| `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（只接受 `line_ids`，按行 id 批量返回；当前用户身份）；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**，它回显在保留键 `__server_version` 上供前端做版本自证 |
+| `static/src/js/product_hover_product.js` | **未保存新行的取数与装配**：按 `product_id` 用标准 ORM（`searchRead`）读产品（含变体规格 / 可用库存），行的数量 / 单价用表单当前值，`formatFloat` / `formatMonetary` 装配（见陷阱 16） |
+| `static/src/js/product_hover_cache.js` | 数据层：已保存行走接口（按行 id 去重）、新行走产品缓存 + 取值签名装配；模块级非 reactive 缓存、失败重试 / 上限保护、服务端版本探测与自证告警 |
 | `static/src/js/product_hover_card.js` | 浮层组件：图片降级、数量与库存文案 `_t`、指针离开浮层的关闭判断 |
-| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、未保存新行的草稿取数（`_getProductHoverDraft` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
+| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、新行取数上下文（`_getProductHoverContext` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
 | `static/src/scss/product_hover.scss` | 浮层样式（选择器统一 `.o_sph_` 前缀，含窄屏媒体查询） |
 | `i18n/zh_CN.po` | 简体中文译文；含应用列表元数据条目（`base.module_sale_product_hover`），见根 `AGENTS.md` 4.8 |
@@ -355,9 +373,12 @@
 
 ### 增加浮层字段（例如产品分类、品牌）
 
-1. `models/sale_order_line.py`：把字段加入 `read_fields`，并在 payload 字典里追加；
-   需要格式化的（日期 / 货币 / 数量）在方法内格式化后返回字符串（**不要在 JS 里格式化**，
-   也不要在 Python 里拼可翻译句子——用 `%(name)s` 占位符交给 JS `_t`）。
+1. **两条取数路径都要改**（否则「新增行」与「已保存行」的卡片会不一致）：
+   - 已保存行：`models/sale_order_line.py` 的 `_build_hover_payload()`（字段加入 `read_fields`，
+     在 payload 字典里追加；格式化在方法内做，用 `formatLang`）；
+   - 新行：`static/src/js/product_hover_product.js` 的 `buildProductHoverPayload()`
+     （字段加入 `PRODUCT_FIELDS`，用 `formatFloat` / `formatMonetary` 格式化）。
+   - 都**不要拼可翻译句子**——用 `%(name)s` 占位符交给 JS `_t`。
 2. `static/src/xml/product_hover_templates.xml`：在 `dl.o_sph_fields` 里加 `dt` / `dd`；
    新标签文本会被抽取，需在 `i18n/zh_CN.po` 补条目（`code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0`），
    标签必须写成**单行文本节点**（夹了子元素就会被切碎）。
@@ -388,21 +409,31 @@
 ## 调试建议
 
 - **浮层不出现**：用 `?debug=1` / `?debug=assets` 打开，按 info 日志链路定位：
-  `assets loaded (版本号)` → `prefetch … N saved / M draft line(s)`
-  → `payload: requested N saved line(s), received M`（新行则是
-  `requested N draft line(s), received M`）→ `hover row` → `popover opened`
+  `assets loaded (版本号)` → `prefetch … N saved / M new line(s)`
+  → `payload: requested N saved line(s), received M`（新行是
+  `requested N new line(s), assembled M`）→ `hover row` → `popover opened`
   （中间若有 `skip: …` 会说明跳过原因）。
   没有 `assets loaded` = 资源未加载（缓存 / 未升级）；没有 `prefetch` = 列表判断未命中；
   `received 0` = 接口无数据；没有 `hover row` = 悬停事件未命中（行不在本渲染器的
   `props.list.records` 里，或鼠标事件被别的浮层遮挡）；有 `popover opened` 却看不到浮层 =
   样式 / DOM 问题。控制台无任何 `[sale_product_hover]` 输出时，先确认 `MODULE_VERSION` 与
   `__manifest__.py` 的 `version` 是否一致（资源确实重新打包了）。
-- **`received 0` / 「接口没有返回这一行的数据」**：先看有没有版本自证告警
-  （`server module version is X while the loaded assets are Y`）——有就是**服务端 Python 没升级**，
-  `-u sale_product_hover` + 重启 + 强刷即可；没有告警再查服务端日志里的
-  `sale_product_hover: product … not found or not readable`（产品读不到）或
-  `unable to build hover payload`（装配异常）。**注意 `19.0.1.3.1` 之前这种情况会静默永久失效**，
-  见 P1 陷阱 15。
+- **`received 0` / 「接口没有返回这一行的数据」**（只可能是**已保存行**，新行不走接口）：
+  **先看 `self-check` 那一行**（打开订单页时输出一次）：
+  - `self-check: assets X, server X (ok)` → 两端一致，是数据 / 权限问题，查服务端日志的
+    `sale_product_hover: product … not found or not readable`（产品读不到）或
+    `unable to build hover payload`（装配异常）；
+  - `server NOT UPGRADED` → **服务端 Python 没升级**，`-u sale_product_hover` **并重启进程**
+    （运行中的进程 `sys.modules` 里还是旧代码）+ 强刷。
+  - 该结论来自「空 `line_ids` 探测」：旧后端也**会成功返回** `{}`，新后端多一个
+    `__server_version`，所以**不带任何新参数**就能判断版本（带新参数会让旧后端整个请求失败，
+    连已保存行的预览一起打没）。
+  - **为什么总出现「前端新、后端旧」**：`?debug=assets` 下 JS/SCSS 会按文件 mtime 参与
+    assets 校验和、改完自动重建，**不需要 `-u`**；Python 必须 `-u` **且必须重启进程**。
+  - **注意 `19.0.1.3.1` 之前这种情况会静默永久失效**，见 P1 陷阱 15。
+- **新行不弹浮层**：该路径不经过接口（陷阱 16），看 `skip:` 的具体原因：
+  `新行还没选产品（或为分节 / 备注行）` / `product <id> not found or not readable`；
+  ORM 读取失败会打印 `unable to build preview data from the product`。
 - **有请求但从不弹浮层**：优先怀疑监听注册阶段——监听必须是 `document` + `{capture: true}`
   （见 P1 陷阱 6），且归属判定只能走 `_getProductHoverRecord(row)`（陷阱 7）。
   不要再加第二套监听「兜底」（陷阱 8）。
