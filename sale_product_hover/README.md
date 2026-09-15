@@ -60,14 +60,17 @@
 
 ### 接口 payload 字段（`/sale_product_hover/payload`）
 
-入参（两者可同时传，结果合并；都为空则直接返回 `{}`）：
+入参（可同时传，结果合并；都为空则只返回版本自证）：
 
 - `line_ids`：当前列表页可见的**已保存** `sale.order.line` id 数组；
 - `drafts`：**尚未保存**的新行数组，每项 `{key, product_id, quantity, uom_name, price_unit, currency_id}`
   ——`key` 是前端的缓存键（未保存行的 Owl datapoint id），其余是表单里正在编辑的值；
-  数量与单价**只用于展示、不写库**，`currency_id` 取不到时退回公司币种。
+  数量与单价**只用于展示、不写库**，`currency_id` 取不到时退回公司币种；
+- `version`：前端资源版本（仅用于服务端侧日志比对，不一致时提示重跑 `-u`）。
 
-返回：`{key: {…}}`。已保存行用**行 id**作键，`drafts` 用传入的 `key` 作键（字符串），每个值为：
+返回：`{key: {…}}`，另含**保留键** `__server_version`（服务端模块版本，前端据此做版本自证——
+缺失或不一致即说明后端 Python 未升级，控制台会给出明确提示）。已保存行用**行 id**作键，
+`drafts` 用传入的 `key` 作键（字符串），每个值为：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -192,6 +195,17 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 ### 异常情况与处理
 
 - 浮层不出现：确认浏览器控制台是否有 `/sale_product_hover/payload` 报错；若 403，检查当前用户对产品 / 该订单行的读权限。
+- **新增的行不弹浮层**（控制台有 `skip: 接口没有返回这一行的数据 … datapoint_N`）：
+  按下面顺序看控制台里**第一条**相关告警即可定位：
+  1. `server module version is X while the loaded assets are Y` → **服务端 Python 没升级**
+     （静态资源与 Python 是两套东西）：`odoo -d <db> -u sale_product_hover --stop-after-init`
+     并**重启服务**，再强刷浏览器；
+  2. `no preview data returned for N newly added line(s)` → 后端确实收到请求但跳过了这一行，
+     查服务端日志：`sale_product_hover: product … not found or not readable`（产品读不到）
+     或 `unable to build hover payload`（装配异常）；
+  3. `unable to load product preview data` + 一条 RPC 错误 → 接口本身报错，同时看服务端日志。
+  > `19.0.1.3.1` 之前，第 2 种情况会让该行**永久失效**（不会重试、也不报错），升级后已修：
+  > 缺数据的行会回退标记并在下次悬停重试。
 - 预取正常（有 `prefetch` / `payload` 日志）但悬停毫无反应、连 `hover row` 都没有：
   说明行归属判定没命中。先在控制台选中订单行元素，看 `$0.dataset.id`（形如 `datapoint_42`）
   与 `record.id` —— 两者都是**字符串**，绝不能用 `Number()` 转换（详见 `AGENTS.md` → P1 陷阱 11）。
@@ -205,7 +219,7 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 - 关闭触屏长按：删掉 `product_hover_list_patch.js` 里 `touchstart` / `touchmove` / `touchend` / `touchcancel` 四个监听与对应方法即可（互不影响）。
 - 扩大适用范围（如采购订单行）：需把 `sale.order.line` 的 payload 方法抽象到共用模型，并在补丁里扩展目标模型清单。
 - 悬停无浮层时的排查顺序（用 `?debug=1` 或 `?debug=assets` 打开页面；日志为 `info` 级别，控制台默认可见）：
-  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.3.0)` —— **看不到这行**说明浏览器
+  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.3.1)` —— **看不到这行**说明浏览器
      仍在用旧缓存 / assets 未重建：`-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）。
      括号内版本应与 `__manifest__.py` 的 `version` 一致；
   2. 列表加载 / 翻页 / 表单改动时应有

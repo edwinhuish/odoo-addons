@@ -24,8 +24,12 @@
 （``search`` 走记录规则，``read`` 再校验一次访问权），记录规则天然过滤越权访问。
 """
 
+import logging
+
 from odoo import models
 from odoo.tools.misc import formatLang
+
+_logger = logging.getLogger(__name__)
 
 
 class SaleOrderLine(models.Model):
@@ -72,7 +76,18 @@ class SaleOrderLine(models.Model):
                 continue
             key = str(draft.get("key") or "").strip()
             product_id = draft.get("product_id")
+            if isinstance(product_id, str) and product_id.isdigit():
+                # 前端万一把 id 序列化成了字符串，这里兜一下，不要静默丢掉整行
+                product_id = int(product_id)
             if not key or not isinstance(product_id, int) or isinstance(product_id, bool):
+                # 静默丢弃会让前端「永远拿不到数据」且难以定位，故记一条服务端日志
+                _logger.warning(
+                    "sale_product_hover: dropping draft line %r "
+                    "(key=%r, product_id=%r is not a valid product id)",
+                    draft,
+                    key,
+                    draft.get("product_id"),
+                )
                 continue
             currency_id = draft.get("currency_id")
             if isinstance(currency_id, int) and not isinstance(currency_id, bool):
@@ -146,6 +161,11 @@ class SaleOrderLine(models.Model):
             data = product_data.get(spec["product_id"])
             if not data:
                 # 产品不存在 / 当前用户无权读取 → 不生成（前端表现为不弹浮层）
+                _logger.info(
+                    "sale_product_hover: product %s not found or not readable "
+                    "for the current user, skipped",
+                    spec["product_id"],
+                )
                 continue
 
             list_price = data.get("list_price") or 0.0

@@ -267,6 +267,20 @@
   `record.js._computeDataContext()` 压成 **id 数字**，取值要兼容两种（本模块用
   `typeof currency === "number" ? currency : currency?.id`）
 
+**陷阱 15：「已请求过」标记在响应缺数据时不回退 → 该行永久失效（`19.0.1.3.1` 修复）**
+- 现象：选了产品后悬停新行，控制台只有
+  `skip: 接口没有返回这一行的数据（无产品 / 分节行 / 无权限 / 服务端未升级） datapoint_165`，
+  **没有报错、没有网络请求**，之后每次悬停都一样
+- 根因：`prefetchDraftHoverPayload()` 在**发请求之前**就把「取值签名」写进
+  `requestedDraftSignatures`（已保存行的 `requestedLineIds` 同理）。一旦这次响应里
+  **没有**该行的数据（服务端异常被 controller 的 try/except 吞掉、或服务端 Python 未升级
+  导致草稿被跳过），标记会一直留着 → 之后每次悬停都被 `if (signature 未变) continue`
+  挡掉 → **不再发请求、也永远拿不到数据**，而且完全不报错
+- 正确做法：响应里没拿到数据的 key **必须回退标记**，下次重试；同时对
+  「整批一条都没回来」与「新行没拿到数据」各给一条可操作的 `console.warn`（只告警一次）
+- 教训：任何「先记已请求、后发请求」的去重缓存，都要考虑**请求成功但结果为空**的分支；
+  否则一次异常就会变成永久性静默失效（比报错更难查）
+
 ### P2：reactive 缓存导致的渲染循环
 
 **触发条件**：改 `product_hover_cache.js` 时必读
@@ -326,8 +340,8 @@
 |------|------|
 | `__manifest__.py` | 版本 / 依赖（`sale` + `stock`）/ 前端 assets 登记；无 `data` 文件 |
 | `models/sale_order_line.py` | `_get_product_hover_payload()`（已保存行）/ `_get_product_hover_draft_payload()`（未保存的新行）→ 共用 `_build_hover_payload()`：批量装配浮层展示数据（含价格 / 数量 / 库存格式化）；`_get_hover_specifications()`：批量拼变体规格 |
-| `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（按行 id + `drafts` 草稿规格批量返回，当前用户身份） |
-| `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（已保存行按 id 去重、新行按取值签名去重 / 失败重试 / 上限保护） |
+| `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（按行 id + `drafts` 草稿规格批量返回，当前用户身份）；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**，它回显在响应的保留键 `__server_version` 上供前端做版本自证 |
+| `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（已保存行按 id 去重、新行按取值签名去重；**响应缺数据时回退标记以便重试**、失败重试 / 上限保护）；比对后端回显版本做自证告警 |
 | `static/src/js/product_hover_card.js` | 浮层组件：图片降级、数量与库存文案 `_t`、指针离开浮层的关闭判断 |
 | `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、未保存新行的草稿取数（`_getProductHoverDraft` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
@@ -383,6 +397,12 @@
   `props.list.records` 里，或鼠标事件被别的浮层遮挡）；有 `popover opened` 却看不到浮层 =
   样式 / DOM 问题。控制台无任何 `[sale_product_hover]` 输出时，先确认 `MODULE_VERSION` 与
   `__manifest__.py` 的 `version` 是否一致（资源确实重新打包了）。
+- **`received 0` / 「接口没有返回这一行的数据」**：先看有没有版本自证告警
+  （`server module version is X while the loaded assets are Y`）——有就是**服务端 Python 没升级**，
+  `-u sale_product_hover` + 重启 + 强刷即可；没有告警再查服务端日志里的
+  `sale_product_hover: product … not found or not readable`（产品读不到）或
+  `unable to build hover payload`（装配异常）。**注意 `19.0.1.3.1` 之前这种情况会静默永久失效**，
+  见 P1 陷阱 15。
 - **有请求但从不弹浮层**：优先怀疑监听注册阶段——监听必须是 `document` + `{capture: true}`
   （见 P1 陷阱 6），且归属判定只能走 `_getProductHoverRecord(row)`（陷阱 7）。
   不要再加第二套监听「兜底」（陷阱 8）。
@@ -412,6 +432,11 @@
 
 每次功能修改后必须更新：
 - `__manifest__.py` 的 `version`（遵循 `19.0.x.y.z`）
+- **`MODULE_VERSION` 三处同步**：`__manifest__.py` 的 `version`、
+  `static/src/js/product_hover_list_patch.js` 的 `MODULE_VERSION`、
+  `controllers/product_hover_controller.py` 的 `MODULE_VERSION`——漏改任何一处，
+  前端版本自证都会误报（或该报不报），而版本自证正是本项目排查「资源/后端不同步」的主要手段。
+  改完可用 `grep -rn "19\.0\." __manifest__.py static/src/js/product_hover_list_patch.js controllers/product_hover_controller.py` 自查。
 - `CHANGELOG.md` 的版本说明（变更 / 影响 / 文档）
 - 本 `AGENTS.md` 的相关约束（若涉及行为变更）
 - `README.md` 的功能说明（若涉及用户可见功能）

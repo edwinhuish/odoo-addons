@@ -12,6 +12,7 @@ import {
     getLineHoverPayload,
     prefetchDraftHoverPayload,
     prefetchLineHoverPayload,
+    setClientVersion,
 } from "./product_hover_cache";
 
 // 只对销售订单行生效：报价单与销售订单共用 sale.order.line 模型与视图，故一并覆盖
@@ -33,8 +34,11 @@ const POINTER_OFFSET_X = 16;
 const POINTER_OFFSET_Y = 12;
 // 与视口边缘的最小间距（像素）：跟随鼠标时也不让浮层被屏幕裁切
 const VIEWPORT_MARGIN = 8;
-// 与 __manifest__.py 的 version 保持一致：排查「无浮层」时，先看控制台的 assets 日志确认版本
-const MODULE_VERSION = "19.0.1.3.0";
+// 与 __manifest__.py 的 version 保持一致（**三处同步**：manifest / 本文件 /
+// controllers/product_hover_controller.py 的 MODULE_VERSION）。
+// 排查「无浮层」时先看控制台的 assets 日志确认版本；接口还会回显服务端版本，
+// 两者不一致时缓存层会直接告警（见 product_hover_cache.js 的 checkServerVersion）。
+const MODULE_VERSION = "19.0.1.3.1";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
@@ -49,6 +53,7 @@ function debugInfo(...args) {
 
 // 资源加载自证（始终输出一条）：确认前端资源已加载，括号内为当前运行版本。
 // 若控制台看不到这一行，说明浏览器仍在用旧缓存 / assets 未重建 → `-u` 升级后强刷。
+setClientVersion(MODULE_VERSION);
 console.info(`[sale_product_hover] assets loaded (${MODULE_VERSION})`);
 
 /**
@@ -558,7 +563,9 @@ patch(ListRenderer.prototype, {
         if (!payload || this._productHoverRowEl !== row || !row.isConnected) {
             debugInfo(
                 "[sale_product_hover] skip:",
-                payload ? "指针已移开" : "该行没有可展示数据（无产品 / 分节行 / 无权限）",
+                payload
+                    ? "指针已移开"
+                    : "接口没有返回这一行的数据（无产品 / 分节行 / 无权限 / 服务端未升级）",
                 key
             );
             return;

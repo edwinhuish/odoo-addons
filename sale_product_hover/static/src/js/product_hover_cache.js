@@ -27,15 +27,49 @@ const requestedDraftSignatures = new Map();
  */
 const MAX_CACHED_LINES = 2000;
 
+/** 接口回显的服务端版本保留键（见 controllers/product_hover_controller.py）。 */
+const SERVER_VERSION_KEY = "__server_version";
+
+/** 前端资源版本，由 product_hover_list_patch.js 注入（避免两处各写一份）。 */
+let clientVersion = "";
+let versionChecked = false;
+/** 「接口没返回数据」只告警一次，避免悬停时反复刷屏（重试逻辑照常执行）。 */
+let noDataWarned = false;
+
+/** 由 list 补丁在启动时调用，登记当前前端资源版本。 */
+export function setClientVersion(version) {
+    clientVersion = version;
+}
+
 function debugInfo(...args) {
     if (typeof odoo !== "undefined" && odoo.debug) {
         console.info(...args);
     }
 }
 
-/** 取某一行的展示数据（未预取到则返回 undefined）。 */
-export function getLineHoverPayload(key) {
-    return payloadByKey.get(key);
+/**
+ * 版本自证：比对服务端回显的模块版本与前端资源版本。
+ *
+ * 二者不一致（或服务端没有回显 = Python 还是旧版本）时给出可执行的提示——
+ * 本模块踩过多次「静态资源已更新、Python 没升级」的坑，而这在界面上只表现为
+ * 「浮层不弹 / 字段缺失」，很难自己看出来。只在第一次发现不一致时告警一次。
+ */
+function checkServerVersion(payload) {
+    const serverVersion = payload && payload[SERVER_VERSION_KEY];
+    if (!clientVersion || serverVersion === clientVersion) {
+        versionChecked = true;
+        return;
+    }
+    if (versionChecked) {
+        return;
+    }
+    versionChecked = true;
+    console.warn(
+        `sale_product_hover: server module version is ${serverVersion || "unknown"} ` +
+            `while the loaded assets are ${clientVersion}. ` +
+            "Run `-u sale_product_hover`, restart the server and hard refresh " +
+            "(Ctrl+Shift+R) — the hover card cannot work with mismatched versions."
+    );
 }
 
 /**
@@ -62,13 +96,31 @@ export async function prefetchLineHoverPayload(lineIds) {
         return;
     }
     try {
-        const payload = await rpc("/sale_product_hover/payload", { line_ids: ids });
+        const payload = await rpc("/sale_product_hover/payload", {
+            line_ids: ids,
+            version: clientVersion,
+        });
+        checkServerVersion(payload);
         let received = 0;
         for (const lineId of ids) {
             const data = payload && payload[lineId];
             if (data) {
                 payloadByKey.set(lineId, data);
                 received += 1;
+            }
+        }
+        if (!received) {
+            // 一条都没回来：多半是后端未升级 / 接口报错，回退标记让下次能重试
+            for (const lineId of ids) {
+                requestedLineIds.delete(lineId);
+            }
+            if (!noDataWarned) {
+                noDataWarned = true;
+                console.warn(
+                    `sale_product_hover: no preview data returned for ${ids.length} order line(s); ` +
+                        "the hover card will retry on next list update. Check that the module was " +
+                        "upgraded (-u sale_product_hover) and see the server log."
+                );
             }
         }
         debugInfo(
@@ -117,13 +169,38 @@ export async function prefetchDraftHoverPayload(drafts) {
         return;
     }
     try {
-        const payload = await rpc("/sale_product_hover/payload", { drafts: pending });
+        const payload = await rpc("/sale_product_hover/payload", {
+            drafts: pending,
+            version: clientVersion,
+        });
+        checkServerVersion(payload);
+        const missing = [];
         let received = 0;
         for (const draft of pending) {
             const data = payload && payload[draft.key];
             if (data) {
                 payloadByKey.set(draft.key, data);
                 received += 1;
+            } else {
+                missing.push(draft.key);
+            }
+        }
+        if (missing.length) {
+            // 请求成功但这一行没有数据：**必须**回退签名，否则该行会被永久判为
+            // 「已请求过」，之后每次悬停都被静默跳过、再也取不到数据。
+            for (const key of missing) {
+                requestedDraftSignatures.delete(key);
+            }
+            if (!noDataWarned) {
+                noDataWarned = true;
+                console.warn(
+                    `sale_product_hover: no preview data returned for ${missing.length} newly ` +
+                        `added line(s) (${missing.join(", ")}). If the module was just updated, ` +
+                        "check that the server runs the new Python code (-u sale_product_hover " +
+                        "+ restart) and that /sale_product_hover/payload accepts 'drafts'; " +
+                        "otherwise check the server log for `sale_product_hover: product ... " +
+                        "not found or not readable`."
+                );
             }
         }
         debugInfo(
