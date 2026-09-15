@@ -14,7 +14,7 @@
 - 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按；浮层位置由补丁自己接管（跟随鼠标）
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.2.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层改为跟随鼠标并屏蔽行内原生 tooltip，见 P1 陷阱 12 / 13；均待目标环境验证）
+- 当前版本：`19.0.1.3.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层改为跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.0` 新增（未保存）的产品行也能预览，见陷阱 14；均待目标环境验证）
 
 ---
 
@@ -33,7 +33,11 @@
 3. **不影响原有行交互**
    - 浮层必须由 popover 服务渲染在 overlay 容器，不改变列表 DOM；
      `mouseover` / `mouseout` / `touch*` 监听一律只读，不得 `preventDefault` / 停止传播；
-     编辑态（`props.list.editedRecord`）不弹浮层；popover 必须传 `setActiveElement: false`
+     编辑态避让**只针对正在被内联编辑的「已保存行」**（`_isProductHoverBlockedByEdit()`）；
+     popover 必须传 `setActiveElement: false`
+   - **不得**改回「`props.list.editedRecord` 非空就不弹」：Odoo 里 `Record.isInEdition` 对
+     `!resId` 恒为真，未保存的新行一加进列表就是 `editedRecord`，那样写会让新增产品永远没有
+     预览，还会连带挡掉同列表里的已保存行（见 P1 陷阱 14）
    - **唯一例外**：触屏长按弹出浮层后，用一次性 `click` 捕获监听吃掉紧随的那一次点击
      （长按语义是"看详情"而非"打开记录"），该监听不命中任何其它事件，用完即摘；
      不得把它扩大成常驻监听
@@ -49,7 +53,11 @@
 
 5. **控制器不提权**
    - 不 `sudo`；以当前用户身份读取（前端只传当前列表页可见的行，记录规则照常生效）
-   - 违反后果：越权暴露其他用户订单行的产品与单价信息
+   - 未保存新行走 `drafts`：产品 id 来自前端，必须用
+     `with_context(active_test=False).search([("id", "in", ids)])` 而不是 `browse().read()`
+     ——`search` 会应用记录规则并剔除读不到的产品，否则一个越权 id 会让 `read()` 整批抛
+     `AccessError`，把所有行的浮层一起打没；`drafts` 里的数量 / 单价只用于展示、不写库
+   - 违反后果：越权暴露其他用户订单行的产品与单价信息；或一个伪造的产品 id 让整个接口失效
 
 6. **所有用户可见文本源语言为英文（`en_US`）**
    - Python / JS / QWeb 模板不写中文界面文案；中文只在 `i18n/zh_CN.po` 的 `msgstr`
@@ -224,6 +232,41 @@
   - 务必保留 `open()` 之后把 `_productHoverRowEl` **和** `_productHoverPointer` 一起补回
     （见陷阱 10）：光标丢了，浮层挂载时的 `onPositioned` 就无从定位，会先闪在行旁边
 
+**陷阱 14：新增（未保存）的产品行没有预览（`19.0.1.3.0` 修复）**
+- 现象：已保存的订单行悬停能看详情；**刚新增、还没保存的产品行怎么悬停都没反应**
+- 根因有两条，缺一不可：
+  1. **编辑态守卫一刀切**：Odoo 的
+     ```js
+     // model/relational_model/record.js
+     get isInEdition() {
+         if (this.config.mode === "readonly") return false;
+         return this.config.mode === "edit" || !this.resId;
+     }
+     ```
+     对**没有 `resId` 的记录恒为真** → 新行一加进列表就已经是 `list.editedRecord`
+     （`editedRecord` = `records.find((r) => r.isInEdition)`），于是
+     `if (this.props.list.editedRecord) return;` 把新行全部挡掉；更糟的是
+     `editedRecord` 只有一条，列表里只要**存在**一条新行，**其它已保存行也会被一起挡住**
+  2. **取数只认数据库 id**：预取 `if (record.resId)` 直接跳过新行，打开浮层也要求 `record.resId`
+- 正确做法：
+  - 避让条件收敛成 `_isProductHoverBlockedByEdit(record)`：
+    `editedRecord === record && record.resId`——只有「正在被内联编辑的**已保存**行」才不弹；
+  - 缓存键换成 `_getProductHoverKey(record)`：`record.resId || record.id`（数字 / `"datapoint_N"` 不冲突）；
+  - 新行的展示数据由 `_getProductHoverDraft(record)` 把表单里正在编辑的值交给后端
+    （`drafts` 入参 → `_get_product_hover_draft_payload()` → 与已保存行共用 `_build_hover_payload()`）；
+  - 实时性：草稿按 `产品|数量|单位|单价|币种` 生成签名，签名未变即命中缓存
+    （**悬停依然不发请求**），变了才重新取数（`onPatched` 刷新 + 悬停时兜一次）
+- **顺带的坑（读 `record.data` 时必看）**：Odoo 19 里 many2one 的取值是
+  **`{id, display_name}` 对象**，不是 `[id, name]` 数组——`record.data.product_id.id`、
+  `record.data.product_uom_id.display_name`；写 `[0]` / `[1]` 会静默拿到 `undefined`。
+  另：`record.data` 只含列表视图的 `activeFields`（含 `column_invisible` 的），
+  `sale.order.line` 列表里 `currency_id` / `product_uom_qty` / `product_uom_id` / `price_unit`
+  都有声明，所以新行这几个值取得到；`currency_id` 万一还没从 onchange 回来，
+  退回 `record.evalContext?.parent?.currency_id`（订单币种）——注意**两个来源的形态不同**：
+  `record.data` 是 `{id, display_name}`，而 `evalContext` 里 many2one 已被
+  `record.js._computeDataContext()` 压成 **id 数字**，取值要兼容两种（本模块用
+  `typeof currency === "number" ? currency : currency?.id`）
+
 ### P2：reactive 缓存导致的渲染循环
 
 **触发条件**：改 `product_hover_cache.js` 时必读
@@ -282,11 +325,11 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 版本 / 依赖（`sale` + `stock`）/ 前端 assets 登记；无 `data` 文件 |
-| `models/sale_order_line.py` | `_get_product_hover_payload()`：批量装配浮层展示数据（含价格 / 数量 / 库存格式化）；`_get_hover_specifications()`：批量拼变体规格 |
-| `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（按行 id 批量返回，当前用户身份） |
-| `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（去重 / 增量 / 失败重试 / 上限保护） |
+| `models/sale_order_line.py` | `_get_product_hover_payload()`（已保存行）/ `_get_product_hover_draft_payload()`（未保存的新行）→ 共用 `_build_hover_payload()`：批量装配浮层展示数据（含价格 / 数量 / 库存格式化）；`_get_hover_specifications()`：批量拼变体规格 |
+| `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（按行 id + `drafts` 草稿规格批量返回，当前用户身份） |
+| `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（已保存行按 id 去重、新行按取值签名去重 / 失败重试 / 上限保护） |
 | `static/src/js/product_hover_card.js` | 浮层组件：图片降级、数量与库存文案 `_t`、指针离开浮层的关闭判断 |
-| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、延迟开 / 关、目标模型与编辑态判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
+| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、未保存新行的草稿取数（`_getProductHoverDraft` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
 | `static/src/scss/product_hover.scss` | 浮层样式（选择器统一 `.o_sph_` 前缀，含窄屏媒体查询） |
 | `i18n/zh_CN.po` | 简体中文译文；含应用列表元数据条目（`base.module_sale_product_hover`），见根 `AGENTS.md` 4.8 |
@@ -331,8 +374,10 @@
 ## 调试建议
 
 - **浮层不出现**：用 `?debug=1` / `?debug=assets` 打开，按 info 日志链路定位：
-  `assets loaded (版本号)` → `prefetch … N saved line(s)` → `payload: requested N, received M`
-  → `hover row` → `popover opened`（中间若有 `skip: …` 会说明跳过原因）。
+  `assets loaded (版本号)` → `prefetch … N saved / M draft line(s)`
+  → `payload: requested N saved line(s), received M`（新行则是
+  `requested N draft line(s), received M`）→ `hover row` → `popover opened`
+  （中间若有 `skip: …` 会说明跳过原因）。
   没有 `assets loaded` = 资源未加载（缓存 / 未升级）；没有 `prefetch` = 列表判断未命中；
   `received 0` = 接口无数据；没有 `hover row` = 悬停事件未命中（行不在本渲染器的
   `props.list.records` 里，或鼠标事件被别的浮层遮挡）；有 `popover opened` 却看不到浮层 =

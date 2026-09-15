@@ -8,7 +8,11 @@ import { patch } from "@web/core/utils/patch";
 import { ListRenderer } from "@web/views/list/list_renderer";
 
 import { ProductHoverCard } from "./product_hover_card";
-import { getLineHoverPayload, prefetchLineHoverPayload } from "./product_hover_cache";
+import {
+    getLineHoverPayload,
+    prefetchDraftHoverPayload,
+    prefetchLineHoverPayload,
+} from "./product_hover_cache";
 
 // 只对销售订单行生效：报价单与销售订单共用 sale.order.line 模型与视图，故一并覆盖
 const TARGET_MODEL = "sale.order.line";
@@ -30,7 +34,7 @@ const POINTER_OFFSET_Y = 12;
 // 与视口边缘的最小间距（像素）：跟随鼠标时也不让浮层被屏幕裁切
 const VIEWPORT_MARGIN = 8;
 // 与 __manifest__.py 的 version 保持一致：排查「无浮层」时，先看控制台的 assets 日志确认版本
-const MODULE_VERSION = "19.0.1.2.0";
+const MODULE_VERSION = "19.0.1.3.0";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
@@ -65,6 +69,14 @@ console.info(`[sale_product_hover] assets loaded (${MODULE_VERSION})`);
  * 「这一行是否属于本渲染器」不靠 `this.el.contains()` 判断，而是用行的 `data-id`
  * （Owl datapoint id）反查 `props.list.records`：查得到就是本渲染器的行。这样既不依赖
  * 根元素结构，也天然排除其他模型的列表。
+ *
+ * 已保存行与**尚未保存的新行**（刚新增的产品行）都能预览：
+ * - 缓存键 `_getProductHoverKey()`：已保存行用数据库 id，新行用 datapoint id；
+ * - 新行由 `_getProductHoverDraft()` 把表单里正在编辑的值交给后端格式化，
+ *   取值一变签名就变、`onPatched` 会重新预取，所以数量 / 单价改完立刻反映到浮层；
+ * - 编辑态避让只针对「正在被内联编辑的**已保存**行」（`_isProductHoverBlockedByEdit()`）——
+ *   Odoo 里 `Record.isInEdition` 对 `!resId` 恒为真，新行一加进来就是 `editedRecord`，
+ *   旧版一刀切导致新增产品永远没有预览。
  *
  * 浮层由 popover 服务渲染在 overlay 容器，不改变列表 DOM，因此不影响行的
  * 点击、内联编辑、勾选与删除等原有操作。
@@ -146,23 +158,38 @@ patch(ListRenderer.prototype, {
     },
 
     /**
-     * 预取当前页订单行的展示数据：模块级缓存按行 id 去重，翻页 / 筛选后只请求新增行。
+     * 预取当前页订单行的展示数据：模块级缓存按键去重，翻页 / 筛选后只请求新增行。
      * 悬停时只读缓存，因此不会为每次悬停发请求。
+     *
+     * 已保存行按数据库 id 批量取；**尚未保存的新行**（刚新增的产品行）改送「草稿规格」，
+     * 让它在落库之前也能预览——新行数量 / 单价一变，签名就变，`onPatched` 会重新预取，
+     * 所以浮层内容始终跟着表单里的输入走。
      */
     _prefetchProductHover() {
         if (!this._isProductHoverList()) {
             return;
         }
         const lineIds = [];
+        const drafts = [];
         for (const record of this.props.list.records || []) {
-            // 尚未保存的新行没有数据库 id，跳过（无浮层数据可展示）
             if (record.resId) {
                 lineIds.push(record.resId);
+                continue;
+            }
+            const draft = this._getProductHoverDraft(record);
+            if (draft) {
+                drafts.push(draft);
             }
         }
-        debugInfo(`[sale_product_hover] prefetch ${TARGET_MODEL}: ${lineIds.length} saved line(s)`);
+        debugInfo(
+            `[sale_product_hover] prefetch ${TARGET_MODEL}: ` +
+                `${lineIds.length} saved / ${drafts.length} draft line(s)`
+        );
         if (lineIds.length) {
             prefetchLineHoverPayload(lineIds);
+        }
+        if (drafts.length) {
+            prefetchDraftHoverPayload(drafts);
         }
     },
 
@@ -187,6 +214,59 @@ patch(ListRenderer.prototype, {
                 (record) => String(record.id) === datapointId
             ) || null
         );
+    },
+
+    /**
+     * 缓存 / payload 的键：**已保存行用数据库 id（数字）**，**未保存的新行用 Owl datapoint id**
+     * （字符串，形如 `"datapoint_42"`）。两者不会冲突，而且新行从加入列表那一刻起就有键，
+     * 不必等落库才能预览。
+     */
+    _getProductHoverKey(record) {
+        return record.resId || record.id;
+    },
+
+    /**
+     * 未保存新行交给后端的「草稿规格」；还没选产品（或分节 / 备注行）时返回 null。
+     *
+     * 新行没有数据库 id，展示数据只能由前端把表单里正在编辑的值传上去，后端按同样口径
+     * 读产品并格式化——所以新行与已保存行的浮层内容完全一致。
+     * 取值的形态见 `model/relational_model/record.js`：many2one 是 `{id, display_name}`
+     * 对象（不是 `[id, name]` 数组）。
+     */
+    _getProductHoverDraft(record) {
+        const data = record.data || {};
+        const product = data.product_id;
+        if (!product || !product.id || data.display_type) {
+            return null;
+        }
+        const uom = data.product_uom_id;
+        // 新行的 currency_id 可能还没从 onchange 回来，退回订单（父记录）的币种。
+        // 两种来源的形态不同：`record.data` 里是 `{id, display_name}` 对象，
+        // 而 `evalContext` 里（`record.js._computeDataContext()`）many2one 已经被压成 id 数字。
+        const currency = data.currency_id || record.evalContext?.parent?.currency_id;
+        const currencyId = typeof currency === "number" ? currency : currency?.id;
+        return {
+            key: record.id,
+            product_id: product.id,
+            quantity: data.product_uom_qty,
+            uom_name: uom ? uom.display_name : "",
+            price_unit: data.price_unit,
+            currency_id: currencyId || null,
+        };
+    },
+
+    /**
+     * 编辑态是否需要避让浮层。
+     *
+     * 已保存的行在内联编辑时不弹（避免遮住正在改的字段）；**未保存的新行例外**：
+     * Odoo 的 `Record.isInEdition` 对 `!resId` 恒为真
+     * （`model/relational_model/record.js`：`this.config.mode === "edit" || !this.resId`），
+     * 新行一加进列表就已经是 `editedRecord`——照旧一刀切的话，新增的产品行永远没有预览；
+     * 而且只要列表里存在一条新行，其它**已保存行**也会被一起挡掉。
+     */
+    _isProductHoverBlockedByEdit(record) {
+        const editedRecord = this.props.list.editedRecord;
+        return Boolean(editedRecord && editedRecord === record && record.resId);
     },
 
     /**
@@ -224,8 +304,8 @@ patch(ListRenderer.prototype, {
             this._productHoverRowEl = row;
             return;
         }
-        // 编辑态不弹浮层，避免遮挡正在输入的单元格
-        if (this.props.list.editedRecord) {
+        // 编辑态避让：正在内联编辑的**已保存行**不弹（未保存的新行不受限，见该方法注释）
+        if (this._isProductHoverBlockedByEdit(this._getProductHoverRecord(row))) {
             return;
         }
         debugInfo("[sale_product_hover] hover row", row.dataset.id);
@@ -270,13 +350,13 @@ patch(ListRenderer.prototype, {
         ev.stopPropagation();
     },
 
-    /** 该行是否确实有可展示的浮层数据（无产品 / 分节行 / 未保存的新行为假）。 */
+    /** 该行是否确实有可展示的浮层数据（无产品 / 分节行 / 尚未预取到为假）。 */
     _isProductHoverCardReady(row) {
-        if (this.props.list.editedRecord) {
+        const record = this._getProductHoverRecord(row);
+        if (!record || this._isProductHoverBlockedByEdit(record)) {
             return false;
         }
-        const record = this._getProductHoverRecord(row);
-        return Boolean(record && record.resId && getLineHoverPayload(record.resId));
+        return Boolean(getLineHoverPayload(this._getProductHoverKey(record)));
     },
 
     // ------------------------------------------------------------------
@@ -366,7 +446,7 @@ patch(ListRenderer.prototype, {
         clearTimeout(this._productHoverTouchGraceTimer);
         this._clearProductHoverTouchTimer();
         const row = this._getProductHoverRowFromEvent(ev);
-        if (!row || this.props.list.editedRecord) {
+        if (!row || this._isProductHoverBlockedByEdit(this._getProductHoverRecord(row))) {
             return;
         }
         if (this._productHoverRowEl === row && this._productHoverPopover.isOpen) {
@@ -448,27 +528,38 @@ patch(ListRenderer.prototype, {
         }, CLOSE_DELAY);
     },
 
-    /** 延迟结束且指针仍在行上时，取缓存数据打开浮层；缓存缺失则补一次单行请求。 */
+    /** 延迟结束且指针仍在行上时，取缓存数据打开浮层；缓存缺失则补一次请求。 */
     async _openProductHover(row) {
         if (this._productHoverRowEl !== row) {
             return;
         }
         const record = this._getProductHoverRecord(row);
-        if (!record || !record.resId) {
-            debugInfo("[sale_product_hover] skip: 行尚无数据库 id（未保存的新行）");
+        if (!record) {
             return;
         }
-        let payload = getLineHoverPayload(record.resId);
-        if (!payload) {
-            await prefetchLineHoverPayload([record.resId]);
-            payload = getLineHoverPayload(record.resId);
+        const key = this._getProductHoverKey(record);
+        if (record.resId) {
+            // 已保存行：按行 id 补一次（缓存里已有则完全不发请求）
+            if (!getLineHoverPayload(key)) {
+                await prefetchLineHoverPayload([record.resId]);
+            }
+        } else {
+            // 未保存的新行：按当前取值重算签名——取值没变就是空操作（不发请求），
+            // 变了才补一次，保证浮层里的数量 / 单价跟着刚输入的内容走
+            const draft = this._getProductHoverDraft(record);
+            if (!draft) {
+                debugInfo("[sale_product_hover] skip: 新行还没选产品（或为分节 / 备注行）");
+                return;
+            }
+            await prefetchDraftHoverPayload([draft]);
         }
+        const payload = getLineHoverPayload(key);
         // 异步返回后需再次确认指针仍在同一行，且行元素仍在文档中
         if (!payload || this._productHoverRowEl !== row || !row.isConnected) {
             debugInfo(
                 "[sale_product_hover] skip:",
-                payload ? "指针已移开" : "该行没有可展示数据（无产品 / 分节行）",
-                record.resId
+                payload ? "指针已移开" : "该行没有可展示数据（无产品 / 分节行 / 无权限）",
+                key
             );
             return;
         }
@@ -481,7 +572,7 @@ patch(ListRenderer.prototype, {
         // - 光标丢失会让浮层挂载时的 `onPositioned` 无从定位，先闪在行旁边才跳到光标处。
         this._productHoverRowEl = row;
         this._productHoverPointer = pointer;
-        debugInfo("[sale_product_hover] popover opened for line", record.resId);
+        debugInfo("[sale_product_hover] popover opened for line", key);
     },
 
     _clearProductHoverTouchTimer() {

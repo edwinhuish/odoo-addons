@@ -15,9 +15,14 @@
   文档中出现的 `<addons-path>`、`<db>`、`<module>`、`<version>` 均为占位符，按实际部署值替换，不要写死本机路径。
 - **本仓库不含 Odoo 源码与数据库**，模块无法在仓库内独立运行；改动需挂到目标 Odoo 环境安装/升级后验证，
   交付时给出「待验证清单」。
-- **查阅 Odoo 源码**：应前往 `/tmp/odoo` 目录进行查阅；若该目录不存在，则需重新执行
-  `cd /tmp && git clone --depth 1 -b 19.0 git@github.com:odoo/odoo.git` 命令进行克隆，
-  不要每次都 curl GitHub 以免触发限流。
+- **查阅 Odoo 源码（按优先级顺序查找，命中即停）**：
+  1. **本项目同级目录下的 `odoo`**：即 `<本仓库父目录>/odoo`（本机为 `../odoo`，绝对路径示例
+     `/home/edwin/Code/odoo`）。这是首选位置，通常由开发者手动克隆，**优先用它**。
+  2. `/tmp/odoo`：临时克隆位置，作为第二选择。
+  3. 以上都不存在时，再自行克隆到 `/tmp/odoo`：
+     `cd /tmp && git clone --depth 1 -b 19.0 git@github.com:odoo/odoo.git`。
+  > 每个会话开始查阅源码前，先按上述顺序 `ls` 确认一次；**不要**每次都直连 GitHub / curl，
+  > 以免触发限流，也不要重复克隆已经存在的目录。
 - 模块目录骨架：
 
 ```text
@@ -241,7 +246,7 @@ msgstr ""
 - `_sql_constraints` 已废弃，改用模型属性：`_xxx_unique = models.Constraint("UNIQUE(field)", "提示")`、`models.Index(...)`、`models.UniqueIndex(...)`。
 - `web_search_read(domain, specification, offset, limit, order, count_limit)` 定义在 `web` 模块的 `_inherit='base'` 上，所有模型可用。
 - 视图继承：扩展祖先视图（extension）对其所有 primary 子视图生效，改列表要继承基础列表而非某个 primary 子视图。
-- 改动前先核对目标结构：查阅 Odoo 源码时，应前往 `/tmp/odoo` 目录进行查阅；若该目录不存在，则需重新执行 `cd /tmp && git clone --depth 1 -b 19.0 git@github.com:odoo/odoo.git` 命令进行克隆，避免每次直连 GitHub 触发限流。
+- 改动前先核对目标结构：查阅 Odoo 源码按优先级 `../odoo`（本项目同级目录，首选）→ `/tmp/odoo`（次选）→ 都不存在时克隆到 `/tmp/odoo`（`cd /tmp && git clone --depth 1 -b 19.0 git@github.com:odoo/odoo.git`），避免每次直连 GitHub 触发限流、也避免重复克隆。详见第 2 节「查阅 Odoo 源码」。
 
 ## 6. 前端规范
 
@@ -283,7 +288,7 @@ msgstr ""
 | `product_packing` | 19.0.1.1.3 | 为产品 Inventory 标签页增加产品自身尺寸（尺寸变化时自动同步原生 Volume）与外贸纸箱字段：装箱数、长宽高、毛重、净重、自动计算 CBM；产品列表增加纸箱规格与 CBM 可选列 | 已交付（T-009，2026-09-08），目标环境已验证；`19.0.1.1.3`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」）并修掉 `Dimension Unit` 重复 `msgid`，目标环境已验收通过 |
 | `product_card_view` | 19.0.2.0.1 | 产品列表卡片视图（瀑布流）：注册新 view type `card`，为官方 Products 视图切换器新增 Card 按钮（库存 / 销售 / 采购入口）；卡片多图轮播（模板 / 变体两层图源不叠加）+ title / reference / on hand + 多变体按钮切换；后端每页一次批量 `/product_card/payload`；`product_image` / `sale` / `purchase` 为可选依赖（运行时判断） | 已交付（T-012，2026-09-09）：Card 入口已确认，其余项待复验；依赖 Odoo 内部 `session.view_info` 的 JS patch，Odoo 升级需回归（见模块 `AGENTS.md` → L2 P2）；`19.0.2.0.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 / 分类「产品」），目标环境已验收通过（Card 其余项仍待复验） |
 | `web_multi_tabs` | 19.0.2.0.0 | 后台内部多标签页：每次打开视图生成一个可切换 / 可关闭的标签，溢出折叠为下拉菜单，URL 归一化 + 首页重定向合并避免重复标签；PWA / Window Controls Overlay 适配（标签栏按 CSS `env(titlebar-area-*)` 铺满标题栏）；`WebManifestMultiTabs` 控制器继承注入 `display_override` | 2026-09-09 在 `19.0.1.0.0` 基础上升级优化：补 `/** @odoo-module **/` 与 `static/src/{js,scss}` 路径、控制器继承替 monkey-patch、源语言改英文 + `i18n/zh_CN.po` 中英双语、修调试开关与 ResizeObserver 重绑；功能与交互不变，待目标环境验证；本模块文档见 `web_multi_tabs/AGENTS.md` |
-| `sale_product_hover` | 19.0.1.2.0 | 报价单 / 销售订单订单行悬停（触屏长按）展示产品详情浮层（图片 / 名称 / 型号 / 规格 / 描述 / 订单数量 / 单价 / 产品售价 / 可用库存）：patch `ListRenderer` + popover 服务，document 捕获阶段事件委托、以行 `data-id` 反查归属（**按字符串比较**）、浮层跟随鼠标并屏蔽行内原生 tooltip，每页一次批量 payload 与浏览器缓存，仅 `sale.order.line` 生效，不新增模型 / 字段 / 权限 / 视图 | 已开发（T-014，2026-09-12），**待目标环境验证**；`19.0.1.0.1` / `19.0.1.0.2` 曾尝试修复悬停不触发（document 级委托 + 事件双绑定 + 诊断日志），`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价、新增触屏长按与响应式，`19.0.1.1.1` 修掉真正根因（`data-id` 是字符串 `"datapoint_N"` 却被 `Number()` 化，行归属反查恒失败），`19.0.1.2.0` 浮层跟随鼠标（自行接管 popover 定位）并屏蔽行内原生 tooltip；排障链路见模块 `README.md`，技术约束与踩坑见模块 `AGENTS.md` |
+| `sale_product_hover` | 19.0.1.3.0 | 报价单 / 销售订单订单行悬停（触屏长按）展示产品详情浮层（图片 / 名称 / 型号 / 规格 / 描述 / 订单数量 / 单价 / 产品售价 / 可用库存）：patch `ListRenderer` + popover 服务，document 捕获阶段事件委托、以行 `data-id` 反查归属（**按字符串比较**）、浮层跟随鼠标并屏蔽行内原生 tooltip、**新增（未保存）的产品行也能预览**（草稿规格取数 + 取值签名去重），每页一次批量 payload 与浏览器缓存，仅 `sale.order.line` 生效，不新增模型 / 字段 / 权限 / 视图 | 已开发（T-014，2026-09-12），**待目标环境验证**；`19.0.1.0.1` / `19.0.1.0.2` 曾尝试修复悬停不触发，`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价、新增触屏长按与响应式，`19.0.1.1.1` 修掉真正根因（`data-id` 是字符串却被 `Number()` 化），`19.0.1.2.0` 浮层跟随鼠标 + 屏蔽行内原生 tooltip，`19.0.1.3.0` 支持新增产品行预览（`Record.isInEdition` 对 `!resId` 恒为真导致新行被编辑态守卫挡掉）；排障链路见模块 `README.md`，技术约束与踩坑见模块 `AGENTS.md` |
 
 ## 10. 验证流程
 

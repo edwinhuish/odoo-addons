@@ -2,7 +2,7 @@
 """销售订单行悬浮卡片的后端数据装配。
 
 需求：报价单 / 销售订单的订单行列表上，鼠标悬停某行时展示产品详情浮层。
-前端不解析 any2one 数据格式、也不做货币 / 数量格式化，展示数据由本方法一次装配：
+前端不解析 any2one 数据格式、也不做货币 / 数量格式化，展示数据由本模块一次装配：
 
 - 图片：``/web/image/product.product/<id>/image_256``（无图时前端降级为占位图标）
 - 名称 / 型号 / 规格：产品显示名（``display_default_code=False``，不带
@@ -14,8 +14,14 @@
 - 可用库存：``qty_available``（``stock`` 提供）+ 产品计量单位名；不跟踪库存的
   产品（如服务）不展示该项
 
-本方法不提升权限（不加 ``sudo``）：调用方控制器以当前用户身份 browse，
-前端只会传当前列表页可见的行，记录规则天然过滤越权访问。
+有两条取数入口，最终都走 `_build_hover_payload()`：
+
+- `_get_product_hover_payload()`：**已保存**的订单行，按行 id 批量装配；
+- `_get_product_hover_draft_payload()`：**尚未保存**的新行（刚新增的产品行），
+  没有数据库 id，改为由前端把表单里正在编辑的值传上来。
+
+两条入口都不提升权限（不加 ``sudo``）：产品字段以当前用户身份读取
+（``search`` 走记录规则，``read`` 再校验一次访问权），记录规则天然过滤越权访问。
 """
 
 from odoo import models
@@ -26,17 +32,86 @@ class SaleOrderLine(models.Model):
     _inherit = "sale.order.line"
 
     def _get_product_hover_payload(self):
-        """返回 ``{order_line_id: {…浮层展示数据…}}``。"""
-        if not self:
-            return {}
-        env = self.env
+        """返回 ``{order_line_id: {…浮层展示数据…}}``（已保存的订单行）。"""
         lines = self.exists().filtered("product_id")
         if not lines:
             return {}
+        return self._build_hover_payload(
+            {
+                line.id: {
+                    "product_id": line.product_id.id,
+                    "quantity": line.product_uom_qty,
+                    "uom_name": line.product_uom_id.name,
+                    "price_unit": line.price_unit,
+                    "currency": line.currency_id,
+                }
+                for line in lines
+            }
+        )
 
-        # 产品字段一次批量读取，避免逐行访问触发多次查询；且只读模型上真实存在的
-        # 字段（未装 stock / 字段改名时不会因 "Invalid field" 整批失败）
+    def _get_product_hover_draft_payload(self, drafts):
+        """返回 ``{前端 key: {…浮层展示数据…}}``（**尚未保存**的新订单行）。
+
+        新行还没有数据库 id（`sale.order.line` 记录未落库），浮层数据不可能按 id 反查，
+        因此由前端把表单里**正在编辑**的值传上来：
+
+        - ``key``：前端缓存用的键（未保存行的 Owl datapoint id，形如 ``datapoint_42``）；
+        - ``product_id``：选中的产品；
+        - ``quantity`` / ``uom_name`` / ``price_unit`` / ``currency_id``：行上当前的取值。
+
+        传上来的数量与单价**只用于展示，不写库**；产品字段仍以当前用户身份读取并受记录规则
+        约束，因此不存在越权风险（用户最多只能看到自己刚填的那些数字）。
+        币种取不到时退回公司币种。
+        """
+        env = self.env
+        company_currency = env.company.currency_id
+        specs = {}
+        currency_ids = set()
+        for draft in drafts or []:
+            if not isinstance(draft, dict):
+                continue
+            key = str(draft.get("key") or "").strip()
+            product_id = draft.get("product_id")
+            if not key or not isinstance(product_id, int) or isinstance(product_id, bool):
+                continue
+            currency_id = draft.get("currency_id")
+            if isinstance(currency_id, int) and not isinstance(currency_id, bool):
+                currency_ids.add(currency_id)
+            else:
+                currency_id = None
+            specs[key] = {
+                "product_id": product_id,
+                "quantity": self._hover_float(draft.get("quantity"), 1.0),
+                "uom_name": str(draft.get("uom_name") or ""),
+                "price_unit": self._hover_float(draft.get("price_unit"), 0.0),
+                "currency": None,
+                # 私有键：下面解析成 res.currency 记录集后删掉，避免混进 payload
+                "_currency_id": currency_id,
+            }
+        if not specs:
+            return {}
+        currencies = (
+            {
+                currency.id: currency
+                for currency in env["res.currency"].browse(sorted(currency_ids)).exists()
+            }
+            if currency_ids
+            else {}
+        )
+        for spec in specs.values():
+            spec["currency"] = currencies.get(spec.pop("_currency_id")) or company_currency
+        return self._build_hover_payload(specs)
+
+    def _build_hover_payload(self, specs):
+        """按 ``{key: {product_id, quantity, uom_name, price_unit, currency}}`` 装配展示数据。
+
+        已保存行与未保存的新行共用本方法，保证两种情况下浮层口径完全一致。
+        """
+        if not specs:
+            return {}
+        env = self.env
         product_model = env["product.product"]
+        # 只读模型上真实存在的字段（未装 stock / 字段改名时不会因 "Invalid field" 整批失败）
         wanted_fields = [
             "display_name",
             "default_code",
@@ -50,7 +125,13 @@ class SaleOrderLine(models.Model):
         if "is_storable" in product_model._fields:
             wanted_fields.append("is_storable")
         read_fields = [name for name in wanted_fields if name in product_model._fields]
-        products = lines.product_id
+
+        # 用 search 而不是 browse：产品 id 可能来自前端（未保存的新行），
+        # search 会应用记录规则并自动剔除当前用户读不到的产品，read 就不会整批抛 AccessError；
+        # active_test=False 保证已归档产品（订单行上仍可能引用）也能取到展示数据。
+        products = product_model.with_context(active_test=False).search(
+            [("id", "in", sorted({spec["product_id"] for spec in specs.values()}))]
+        )
         # display_default_code=False：名称里不重复带 "[参考号] " 前缀（型号单独展示）
         product_data = {
             row["id"]: row
@@ -61,40 +142,41 @@ class SaleOrderLine(models.Model):
         has_qty = "qty_available" in product_model._fields
         company_currency = env.company.currency_id
         payload = {}
-        for line in lines:
-            data = product_data.get(line.product_id.id)
+        for key, spec in specs.items():
+            data = product_data.get(spec["product_id"])
             if not data:
+                # 产品不存在 / 当前用户无权读取 → 不生成（前端表现为不弹浮层）
                 continue
 
             list_price = data.get("list_price") or 0.0
             # 本单单价（订单币种）与产品售价（公司币种）不同才单独展示，避免冗余
-            order_currency = line.currency_id
+            order_currency = spec.get("currency") or company_currency
             show_list_price = (
                 order_currency != company_currency
-                or not order_currency.is_zero(line.price_unit - list_price)
+                or not order_currency.is_zero(spec["price_unit"] - list_price)
             )
 
             # 数量用行上的计量单位（订单行允许改单位）；可用库存是产品默认单位口径
             product_uom = data.get("uom_id")
             product_uom_name = product_uom[1] if product_uom else ""
-            line_uom_name = line.product_uom_id.name or product_uom_name
+            line_uom_name = spec.get("uom_name") or product_uom_name
 
             # 可用库存：仅为跟踪库存的产品展示（单位精度取 "Product Unit"）
             qty_text = ""
             if has_qty and data.get("is_storable"):
                 qty_text = formatLang(env, data.get("qty_available") or 0.0, dp="Product Unit")
 
-            payload[line.id] = {
-                "line_id": line.id,
-                "product_id": line.product_id.id,
+            payload[key] = {
+                "line_id": key,
+                "product_id": spec["product_id"],
                 "name": data.get("display_name") or "",
                 "reference": data.get("default_code") or "",
-                "specification": specifications.get(line.product_id.id, ""),
-                "image_url": "/web/image/product.product/%s/image_256" % line.product_id.id,
+                "specification": specifications.get(spec["product_id"], ""),
+                "image_url": "/web/image/product.product/%s/image_256" % spec["product_id"],
                 "description": data.get("description_sale") or "",
-                "qty_ordered_text": formatLang(env, line.product_uom_qty, dp="Product Unit"),
+                "qty_ordered_text": formatLang(env, spec["quantity"], dp="Product Unit"),
                 "uom_name": line_uom_name,
-                "unit_price_text": formatLang(env, line.price_unit, currency_obj=order_currency),
+                "unit_price_text": formatLang(env, spec["price_unit"], currency_obj=order_currency),
                 "list_price_text": formatLang(env, list_price, currency_obj=company_currency),
                 "show_list_price": show_list_price,
                 "qty_available_text": qty_text,
@@ -130,3 +212,11 @@ class SaleOrderLine(models.Model):
             )
             for product_id, data in product_data.items()
         }
+
+    @staticmethod
+    def _hover_float(value, default):
+        """把前端传来的数字收敛成 ``float``（JSON 里可能是 int / float / 字符串 / None）。"""
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default

@@ -11,6 +11,7 @@
 - 悬停订单行 → 延迟 300ms 弹出产品详情浮层，鼠标快速划过不触发
 - 浮层内容：产品图片、名称、型号（`default_code`）、规格（变体属性，如 `颜色: 红, 尺寸: L`）、销售描述、订单数量（含单位）、单价（订单币种）、产品售价（与单价不同时才显示）、可用库存
 - **跟随鼠标**：浮层贴在光标右下随鼠标移动；指针移入浮层后停止跟随（方便阅读），移开后延迟 200ms 关闭
+- **新增产品行也能预览**：刚加进订单、尚未保存的行同样能悬停看详情（不必先保存）；数量 / 单位 / 单价改动后浮层内容随之更新
 - **自适应**：右侧放不下自动翻到光标左侧，下方放不下自动上移贴边，窄屏下浮层随视口收窄、图片与字号收紧
 - **不抢原生 tooltip**：悬停订单行时行内单元格的黑色原生提示会被屏蔽，只显示本模块的浮层
 - **触屏设备**没有 hover，改为**长按订单行 500ms** 弹出同一浮层（不阻止滚动，也不影响原本的点击打开）
@@ -35,8 +36,9 @@
 | 后端一次装配展示数据 | 前端不解析 many2one 数据格式、不做货币 / 数量格式化：`_get_product_hover_payload()` 用 `formatLang` 按用户语言与货币（单位）精度直接返回可展示字符串；规格由 `product.template.attribute.value.display_name` 拼成（属性名与取值都是产品数据，随产品记录语言展示，不进 po） |
 | 每页一次批量请求 + 非 reactive 缓存 | 列表挂载与每次 DOM 更新后按行 id 差集预取；缓存放**模块级 `Map`**（挂到 reactive 对象会触发 Owl 重渲染循环，见 `product_card_view` 的 P1 踩坑），并设上限避免长时间使用后无界增长 |
 | 只读、不提权 | 控制器以当前用户身份读取（不 `sudo`），沿用产品与订单行的既有记录规则与权限 |
-| 编辑态不弹浮层 | `props.list.editedRecord` 存在时不弹，避免遮挡正在输入的单元格 |
-| 未保存的新行跳过 | 新行尚无数据库 id，无展示数据；保存后列表刷新即自动纳入预取（不报错、不弹空浮层） |
+| 编辑态避让只针对已保存行 | 正在内联编辑的**已保存**行不弹（避免遮挡正在改的字段）；**未保存的新行不受限**——Odoo 里 `Record.isInEdition` 对 `!resId` 恒为真（`config.mode === "edit" \|\| !resId`），新行一加进列表就是 `editedRecord`，若照旧一刀切则新增产品永远没有预览，而且只要列表里有一条新行，其它已保存行也会被一起挡掉 |
+| 新增（未保存）行也取数 | 新行没有数据库 id，缓存键改用 Owl datapoint id（`_getProductHoverKey()`）；由前端把表单里正在编辑的值（产品 / 数量 / 单位 / 单价 / 币种）作为「草稿规格」交给后端，后端按与已保存行完全相同的口径读产品并格式化（`_get_product_hover_draft_payload()` → `_build_hover_payload()`），因此两种行的浮层内容一致 |
+| 新行的实时性靠取值签名 | 草稿按 `产品\|数量\|单位\|单价\|币种` 生成签名；签名没变就命中上一次结果（**悬停依然不发请求**），变了才重新取数——`onPatched` 会随表单输入刷新预取，悬停时再兜一次，保证浮层跟着输入走 |
 | 只依赖 `sale` + `stock` | `sale` 提供订单行模型；`stock` 提供 `qty_available`。不依赖 `web`（内建），不为展示图片依赖 `product_image`（用原生主图） |
 
 ---
@@ -47,23 +49,29 @@
 
 | 文件 | 职责 |
 |------|------|
-| `models/sale_order_line.py` | `sale.order.line._get_product_hover_payload()`：一次批量装配全部展示数据；`_get_hover_specifications()` 拼变体规格 |
-| `controllers/product_hover_controller.py` | `POST /sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`）：按行 id 返回展示数据 |
-| `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（去重 / 增量 / 失败可重试 / 上限保护） |
+| `models/sale_order_line.py` | `_get_product_hover_payload()`（已保存行）/ `_get_product_hover_draft_payload()`（未保存的新行）→ 都走 `_build_hover_payload()` 统一装配；`_get_hover_specifications()` 拼变体规格 |
+| `controllers/product_hover_controller.py` | `POST /sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`）：按行 id / 草稿规格返回展示数据 |
+| `static/src/js/product_hover_cache.js` | 模块级非 reactive 缓存 + 批量预取（已保存行按 id 去重、新行按取值签名去重；失败可重试 / 上限保护） |
 | `static/src/js/product_hover_card.js` | 浮层组件（图片失败降级占位、数量文案、指针离开处理） |
-| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：捕获阶段事件委托、触屏长按、延迟开 / 关、仅 `sale.order.line` 生效 |
+| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：捕获阶段事件委托、触屏长按、新行的草稿取数、编辑态避让、延迟开 / 关、仅 `sale.order.line` 生效 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板 |
 | `static/src/scss/product_hover.scss` | 浮层样式（选择器统一 `.o_sph_` 前缀，含窄屏媒体查询） |
 | `i18n/zh_CN.po` | 简体中文译文（含应用列表元数据） |
 
 ### 接口 payload 字段（`/sale_product_hover/payload`）
 
-入参：`line_ids`（当前列表页可见的 `sale.order.line` id 数组）。
-返回：`{order_line_id: {…}}`，每个值为：
+入参（两者可同时传，结果合并；都为空则直接返回 `{}`）：
+
+- `line_ids`：当前列表页可见的**已保存** `sale.order.line` id 数组；
+- `drafts`：**尚未保存**的新行数组，每项 `{key, product_id, quantity, uom_name, price_unit, currency_id}`
+  ——`key` 是前端的缓存键（未保存行的 Owl datapoint id），其余是表单里正在编辑的值；
+  数量与单价**只用于展示、不写库**，`currency_id` 取不到时退回公司币种。
+
+返回：`{key: {…}}`。已保存行用**行 id**作键，`drafts` 用传入的 `key` 作键（字符串），每个值为：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `line_id` | `int` | 订单行 id |
+| `line_id` | `int` \| `char` | 该条数据的键（已保存行 → 行 id；未保存行 → 前端传入的 key） |
 | `product_id` | `int` | 产品 id |
 | `name` | `char` | 产品显示名（`display_default_code=False`，不带 `[参考号]` 前缀） |
 | `reference` | `char` | 型号 / 内部参考号（`default_code`） |
@@ -104,8 +112,10 @@
 | 触屏长按订单行 | 500ms 后弹出浮层，停在手指位置；长按不会同时打开记录 |
 | 触屏滚动列表 | 长按被取消（位移超 10px） |
 | 触屏点按别处 | 浮层关闭（popover 的点击外部关闭） |
-| 行处于编辑态 | 不弹浮层（正在输入时不遮挡） |
-| 未保存的新行 | 悬停 / 长按不弹浮层（无数据库 id），保存后恢复 |
+| 已保存行处于内联编辑 | 不弹浮层（正在改字段时不遮挡） |
+| 新增产品行（未保存） | 正常弹浮层（悬停 / 触屏长按均可）；改数量 / 单位 / 单价后再悬停，浮层内容同步更新 |
+| 新增行还没选产品 | 不弹浮层（没有可展示的产品），选了产品后可预览 |
+| 新增行保存后 | 自动切到「已保存行」的取数路径，表现不变 |
 | 产品无图片 / 图片 404 | 显示占位图标，不出现破图 |
 | 服务类产品（不跟踪库存） | 不展示「可用库存」一行 |
 | 本单单价 = 产品售价 | 不重复展示「产品售价」一行 |
@@ -174,7 +184,8 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 | 窄屏 | 浮层宽度不超出屏幕，空间不足时自动换侧 | 待验 |
 | 原有操作不受影响 | 点击进入、内联编辑、勾选、删除照旧；编辑态不弹浮层 | 待验 |
 | 非目标列表 | 采购订单行、发票行不出现浮层 | 待验 |
-| 边界情况 | 新行不弹；无图显示占位；服务类产品无库存行 | 待验 |
+| 边界情况 | 无图显示占位；服务类产品无库存行；新行未选产品不弹 | 待验 |
+| 新增产品行悬停 | 未保存的新行也能弹浮层，内容与保存后一致；改数量 / 单价后浮层同步更新 | 待验 |
 | 双语 | 默认英文；装 `zh_CN` 并切换后标签为「数量 / 单价 / 产品售价 / 可用库存」 | 待验 |
 | 控制台 | 无 JS 报错、无重复请求 | 待验 |
 
@@ -194,11 +205,13 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 - 关闭触屏长按：删掉 `product_hover_list_patch.js` 里 `touchstart` / `touchmove` / `touchend` / `touchcancel` 四个监听与对应方法即可（互不影响）。
 - 扩大适用范围（如采购订单行）：需把 `sale.order.line` 的 payload 方法抽象到共用模型，并在补丁里扩展目标模型清单。
 - 悬停无浮层时的排查顺序（用 `?debug=1` 或 `?debug=assets` 打开页面；日志为 `info` 级别，控制台默认可见）：
-  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.2.0)` —— **看不到这行**说明浏览器
+  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.3.0)` —— **看不到这行**说明浏览器
      仍在用旧缓存 / assets 未重建：`-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）。
      括号内版本应与 `__manifest__.py` 的 `version` 一致；
-  2. 列表加载 / 翻页时应有 `[sale_product_hover] prefetch sale.order.line: N saved line(s)` 与
-     `[sale_product_hover] payload: requested N, received M`：**没有 prefetch** 说明当前不是
+  2. 列表加载 / 翻页 / 表单改动时应有
+     `[sale_product_hover] prefetch sale.order.line: N saved / M draft line(s)` 与
+     `[sale_product_hover] payload: requested N saved line(s), received M`
+     （新行则打印 `requested N draft line(s), received M`）：**没有 prefetch** 说明当前不是
      `sale.order.line` 列表或补丁未生效；**`received 0`** 说明接口没返回数据，查服务端日志
      `sale_product_hover: unable to build hover payload`；
   3. 悬停订单行时应依次出现 `hover row <id>` → `popover opened for line <id>`：
