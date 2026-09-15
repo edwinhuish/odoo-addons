@@ -12,10 +12,10 @@
 - 新建模型：无；无 `security/ir.model.access.csv`
 - 继承模型：`sale.order.line`（新增方法 `_get_product_hover_payload()` / `_build_hover_payload()` / `_get_hover_specifications()`，不新增字段；**只服务已保存行**）
 - 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`；**只接受 `line_ids`**，另回显 `__server_version`）
-- 未保存的新行：**不走后端**，前端 `product_hover_product.js` 按 `product_id` 用标准 ORM 读产品后装配（见陷阱 16）
+- 未保存的新行：**不走后端**，前端 `product_hover_cache.js` 按 `product_id` 用标准 ORM 读产品后装配（见陷阱 16）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按；浮层位置由补丁自己接管（跟随鼠标）
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.4.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**，见陷阱 16；均待目标环境验证）
+- 当前版本：`19.0.1.4.1`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**（陷阱 16），`19.0.1.4.1` 把该逻辑并入已有文件、避免新增 assets 文件（陷阱 17）；均待目标环境验证）
 
 ---
 
@@ -291,12 +291,32 @@
   服务端先 `-u` 升级，恰好撞上本项目「前端已更新、后端没升级」的老问题
 - 正确做法：**新行直接从产品取数**——`_getProductHoverContext()` 只提供
   `{key, product_id, quantity, uom_name, price_unit, currency_id}`，由
-  `product_hover_product.js` 用**标准 ORM**（`orm.searchRead("product.product", ...)`）读产品，
+  `product_hover_cache.js` 用**标准 ORM**（`orm.searchRead("product.product", ...)`）读产品，
   行的数量 / 单价用表单当前值，`formatFloat` / `formatMonetary` 与后端 `formatLang` 等价
 - 好处：不依赖自研接口 / 服务端升级，`?debug=assets` 下改完 JS 立刻生效
 - 边界：产品数据按 `product_id` 缓存（同一产品多行共用）；`searchRead` 天然剔除读不到的产品，
   不会因个别 id 让整批失败；新增字段时**两条路径都要改**（后端 `_build_hover_payload()` 与
   前端 `buildProductHoverPayload()`），否则新行与已保存行的卡片会不一致
+
+**陷阱 17：往 assets 里新增文件 → bundle 缺模块、整条链路加载失败（`19.0.1.4.1` 修复）**
+- 现象（浏览器控制台，模块完全没加载，连 `assets loaded (版本)` 都没有）：
+  ```
+  The following modules are needed by other modules but have not been defined,
+  they may not be present in the correct asset bundle:
+  ['@sale_product_hover/js/product_hover_product']
+  The following modules could not be loaded because they have unmet dependencies:
+  (2) ['@sale_product_hover/js/product_hover_cache', '@sale_product_hover/js/product_hover_list_patch']
+  ```
+- 根因：`19.0.1.4.0` 把新行取数逻辑写成新文件并加进 `__manifest__.py` 的 `assets`。
+  **assets 清单来自 manifest，而运行中的进程内存里还是旧 manifest**；
+  `?debug=assets` 下 Odoo 只按文件 mtime 重建 bundle 内容、**不会重读 manifest** →
+  bundle 里没有新文件 → `import` 失败 → 依赖它的模块一起挂
+- 正确做法：**代码写进已登记的文件**（本模块就是 4 个 js 文件，见「文件职责」）。
+  只改已有文件的内容时，强刷浏览器即可生效（`?debug=assets` 会按 mtime 重建）；
+  **新增文件则必须 `-u sale_product_hover` / 重启进程**，并在交付说明里写明这一步
+- 教训：本模块一直强调「JS 改动不需要服务端动作」，这个优势只对**改内容**成立；
+  动 manifest 就是动服务端，能不拆文件就不拆（本模块宁可把数据层都放在
+  `product_hover_cache.js` 里，也不新增文件）
 
 ### P2：reactive 缓存导致的渲染循环
 
@@ -355,11 +375,10 @@
 
 | 文件 | 职责 |
 |------|------|
-| `__manifest__.py` | 版本 / 依赖（`sale` + `stock`）/ 前端 assets 登记；无 `data` 文件 |
+| `__manifest__.py` | 版本 / 依赖（`sale` + `stock`）/ 前端 assets 登记（**固定 5 项，不要新增文件**，见陷阱 17）；无 `data` 文件 |
 | `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 批量装配（含价格 / 数量 / 库存格式化）；`_get_hover_specifications()` 批量拼变体规格 |
 | `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（只接受 `line_ids`，按行 id 批量返回；当前用户身份）；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**，它回显在保留键 `__server_version` 上供前端做版本自证 |
-| `static/src/js/product_hover_product.js` | **未保存新行的取数与装配**：按 `product_id` 用标准 ORM（`searchRead`）读产品（含变体规格 / 可用库存），行的数量 / 单价用表单当前值，`formatFloat` / `formatMonetary` 装配（见陷阱 16） |
-| `static/src/js/product_hover_cache.js` | 数据层：已保存行走接口（按行 id 去重）、新行走产品缓存 + 取值签名装配；模块级非 reactive 缓存、失败重试 / 上限保护、服务端版本探测与自证告警 |
+| `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在本文件，**刻意不拆文件**，见陷阱 17）：已保存行走接口（按行 id 去重）；**未保存新行按 `product_id` 用标准 ORM（`searchRead`）读产品**（含变体规格 / 可用库存），行的数量 / 单价用表单当前值，`formatFloat` / `formatMonetary` 装配（见陷阱 16）；模块级非 reactive 缓存、失败重试 / 上限保护、服务端版本探测与自证告警 |
 | `static/src/js/product_hover_card.js` | 浮层组件：图片降级、数量与库存文案 `_t`、指针离开浮层的关闭判断 |
 | `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、新行取数上下文（`_getProductHoverContext` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
@@ -376,7 +395,7 @@
 1. **两条取数路径都要改**（否则「新增行」与「已保存行」的卡片会不一致）：
    - 已保存行：`models/sale_order_line.py` 的 `_build_hover_payload()`（字段加入 `read_fields`，
      在 payload 字典里追加；格式化在方法内做，用 `formatLang`）；
-   - 新行：`static/src/js/product_hover_product.js` 的 `buildProductHoverPayload()`
+   - 新行：`static/src/js/product_hover_cache.js` 的 `buildProductHoverPayload()`
      （字段加入 `PRODUCT_FIELDS`，用 `formatFloat` / `formatMonetary` 格式化）。
    - 都**不要拼可翻译句子**——用 `%(name)s` 占位符交给 JS `_t`。
 2. `static/src/xml/product_hover_templates.xml`：在 `dl.o_sph_fields` 里加 `dt` / `dd`；

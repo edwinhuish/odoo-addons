@@ -17,7 +17,7 @@
 **这里只装配「已保存」的订单行**（`_get_product_hover_payload()`，按行 id 批量）。
 **尚未保存的新行不经过本模块的后端**：订单行还没落库、按行 id 反查必然查不到，
 那种情况由前端**按 `product_id` 用标准 ORM 直接读产品**再装配
-（见 ``static/src/js/product_hover_product.js``），线上无需升级服务端即可生效。
+（见 ``static/src/js/product_hover_cache.js``），线上无需升级服务端即可生效。
 
 不提升权限（不加 ``sudo``）：产品字段以当前用户身份读取
 （``search`` 走记录规则，``read`` 再校验一次访问权），记录规则天然过滤越权访问。
@@ -56,7 +56,7 @@ class SaleOrderLine(models.Model):
         """按 ``{key: {product_id, quantity, uom_name, price_unit, currency}}`` 装配展示数据。
 
         展示数据的口径集中在这里（产品字段 + 价格 / 数量 / 库存格式化）。未保存的新行
-        不走后端，前端 `product_hover_product.js` 按同一口径在前端装配
+        不走后端，前端 `product_hover_cache.js` 按同一口径在前端装配
         （`formatFloat` / `formatMonetary` 与这里的 `formatLang` 等价），改动时请两边同步。
         """
         if not specs:

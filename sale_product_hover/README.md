@@ -34,7 +34,7 @@
 | 浮层位置自己算（跟随鼠标） | popover 的目标仍是**行**（`getPopoverForTarget(row)` 才能查到浮层、移入浮层不关闭），但落点由 `_positionProductHover()` 计算：贴在光标右下，右/下放不下就翻到光标左侧 / 上移贴边，视口装不下再收紧 `maxHeight`。可行性来自 Odoo 的 `reposition()`——它把浮层设成 `position: fixed` 并直接写 `left/top`（视口坐标），所以补丁可以直接改写 `left/top` 跟随 `mousemove`（`requestAnimationFrame` 合帧）；每次 Odoo 重定位后回调 `onPositioned`，在那里再套用一次光标位置即可 |
 | 屏蔽行内原生 tooltip | Odoo 的 tooltip 服务挂在 `document.body` 的**捕获阶段** `mouseenter` 上；补丁在更外层的 `document` 捕获阶段拦截该事件，**只在该行确实有本模块浮层数据时** `stopPropagation()`，原生黑色提示不再弹出，其余行与元素不受影响 |
 | 已保存行的数据由后端一次装配 | 前端不解析 many2one 数据格式、不做货币 / 数量格式化：`_get_product_hover_payload()` 用 `formatLang` 按用户语言与货币（单位）精度直接返回可展示字符串；规格由 `product.template.attribute.value.display_name` 拼成（属性名与取值都是产品数据，随产品记录语言展示，不进 po） |
-| **新行直接从产品取数** | 未保存的订单行在服务端**根本不存在**，按行 id 反查必然失败；它要展示的东西来源其实很干净：**产品侧**（名称 / 型号 / 规格 / 描述 / 图片 / 产品售价 / 可用库存）按 `product_id` 读 `product.product`，**行侧**（数量 / 单位 / 单价 / 币种）就是表单里正在编辑的值。因此由 `product_hover_product.js` 用**标准 ORM**（`searchRead`，任何后端版本可用、应用记录规则）读产品并装配，`formatFloat` / `formatMonetary` 与后端 `formatLang` 等价 —— 不依赖自研接口，也**不需要服务端升级** |
+| **新行直接从产品取数** | 未保存的订单行在服务端**根本不存在**，按行 id 反查必然失败；它要展示的东西来源其实很干净：**产品侧**（名称 / 型号 / 规格 / 描述 / 图片 / 产品售价 / 可用库存）按 `product_id` 读 `product.product`，**行侧**（数量 / 单位 / 单价 / 币种）就是表单里正在编辑的值。因此由 `product_hover_cache.js` 用**标准 ORM**（`searchRead`，任何后端版本可用、应用记录规则）读产品并装配，`formatFloat` / `formatMonetary` 与后端 `formatLang` 等价 —— 不依赖自研接口，也**不需要服务端升级** |
 | 每页一次批量请求 + 非 reactive 缓存 | 列表挂载与每次 DOM 更新后按行 id 差集预取（新行按 `product_id` 批量读产品、同一产品多行共用缓存）；缓存放**模块级 `Map`**（挂到 reactive 对象会触发 Owl 重渲染循环，见 `product_card_view` 的 P1 踩坑），并设上限避免长时间使用后无界增长 |
 | 只读、不提权 | 控制器以当前用户身份读取（不 `sudo`）；新行走标准 ORM（`searchRead` 应用记录规则、自动剔除读不到的产品），均沿用产品与订单行的既有权限 |
 | 编辑态避让只针对已保存行 | 正在内联编辑的**已保存**行不弹（避免遮挡正在改的字段）；**未保存的新行不受限**——Odoo 里 `Record.isInEdition` 对 `!resId` 恒为真（`config.mode === "edit" \|\| !resId`），新行一加进列表就是 `editedRecord`，若照旧一刀切则新增产品永远没有预览，而且只要列表里有一条新行，其它已保存行也会被一起挡掉 |
@@ -46,13 +46,17 @@
 ## 模块资源
 
 > 本模块以前端为主：**无新建模型、无新建字段、无权限文件**，因此没有 `security/`、`data/`、`views/`；已保存行的展示数据由既有模型的扩展方法 + 一个内部 JSON 接口提供，未保存的新行由前端直接查产品。
+>
+> ⚠️ **assets 只登记下面这 5 个静态文件，不要再往 `__manifest__.py` 里新增文件**：新增文件需要服务端
+> 重新读取 manifest（`-u` / 重启进程）才会进入 bundle，否则浏览器会报
+> `modules … have not been defined` 且依赖它的模块一起加载失败（见 `AGENTS.md` P1 陷阱 17）。
+> 新增代码请写进已登记的文件里。
 
 | 文件 | 职责 |
 |------|------|
 | `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 统一装配；`_get_hover_specifications()` 拼变体规格 |
 | `controllers/product_hover_controller.py` | `POST /sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`）：按行 id 返回展示数据，并回显 `__server_version` 供前端做版本自证 |
-| `static/src/js/product_hover_product.js` | **未保存新行的取数与装配**：按 `product_id` 用标准 ORM 读产品（含变体规格、可用库存），行的数量 / 单价由表单当前值提供，用 `formatFloat` / `formatMonetary` 装配 |
-| `static/src/js/product_hover_cache.js` | 数据层：已保存行走接口（按行 id 去重）、新行走产品缓存 + 取值签名；模块级非 reactive 缓存、失败可重试 / 上限保护、服务端版本探测 |
+| `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在这里）：已保存行走接口（按行 id 去重）、**未保存新行按 `product_id` 用标准 ORM 读产品并装配**（`formatFloat` / `formatMonetary`）；模块级非 reactive 缓存、失败可重试 / 上限保护、服务端版本探测 |
 | `static/src/js/product_hover_card.js` | 浮层组件（图片失败降级占位、数量文案、指针离开处理） |
 | `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：捕获阶段事件委托、触屏长按、新行的取数上下文（`_getProductHoverContext`）、编辑态避让、延迟开 / 关、仅 `sale.order.line` 生效 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板 |
@@ -65,7 +69,7 @@
 
 - **已保存行** → 接口 `POST /sale_product_hover/payload`（入参 `line_ids`，返回 `{行id: payload}`
   外加保留键 `__server_version`；空 `line_ids` 只回版本，供前端探测服务端是否已升级）；
-- **未保存的新行** → 前端 `product_hover_product.js` 按 `product_id` 用标准 ORM 读产品后装配
+- **未保存的新行** → 前端 `product_hover_cache.js` 按 `product_id` 用标准 ORM 读产品后装配
   （不经过本模块的接口，**不需要服务端升级**）。
 
 | 字段 | 类型 | 说明 |
@@ -198,8 +202,13 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
   `assets are inconsistent: … missing from product_hover_cache.js exports`。
   升级到 `19.0.1.3.2` + 强刷即可；若在自研改动后又出现，说明 JS 的命名导入与导出不一致
   （自查脚本见根 `AGENTS.md` 第 6 节）。
+- **`The following modules … have not been defined: ['@sale_product_hover/js/…']`**（模块整个没加载、
+  连 `assets loaded` 都没有）：往 `__manifest__.py` 的 assets 里**新增了文件**，而运行中的进程
+  内存里是旧 manifest（`?debug=assets` 只按文件 mtime 重建 bundle 内容，不重读 manifest）。
+  `19.0.1.4.1` 已把新行取数逻辑并入 `product_hover_cache.js`、assets 清单回到原来 5 项，
+  **强刷浏览器**即可；若自行新增过文件，必须 `-u sale_product_hover` 或重启进程（见 `AGENTS.md` P1 陷阱 17）。
 - **排障第一步：看那一行 `self-check`**（打开订单页时输出，每会话一次）：
-  - `[sale_product_hover] self-check: assets 19.0.1.4.0, server 19.0.1.4.0 (ok)` → 两端一致；
+  - `[sale_product_hover] self-check: assets 19.0.1.4.1, server 19.0.1.4.1 (ok)` → 两端一致；
   - `… server NOT UPGRADED → …` → **服务端 Python 没升级**（只影响**已保存行**的取数），
     执行 `odoo -d <db> -u sale_product_hover --stop-after-init` 并**重启服务进程**，再强刷浏览器。
     > 为什么常见「前端新、后端旧」：`?debug=assets` 模式下 JS / SCSS 会用文件 mtime 参与

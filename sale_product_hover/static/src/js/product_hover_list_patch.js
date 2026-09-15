@@ -39,7 +39,7 @@ const VIEWPORT_MARGIN = 8;
 // controllers/product_hover_controller.py 的 MODULE_VERSION）。
 // 排查「无浮层」时先看控制台的 assets 日志确认版本；接口还会回显服务端版本，
 // 两者不一致时缓存层会直接告警（见 product_hover_cache.js 的 checkServerVersion）。
-const MODULE_VERSION = "19.0.1.4.0";
+const MODULE_VERSION = "19.0.1.4.1";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
@@ -266,7 +266,7 @@ patch(ListRenderer.prototype, {
      * 未保存新行的取数上下文：**产品 id + 行上正在编辑的值**；还没选产品（或分节 / 备注行）时返回 null。
      *
      * 新行没有数据库 id、服务端也没有这条记录，所以卡片数据只能「按产品 id 查产品」
-     * 再加上表单里当前的取值（数量 / 单位 / 单价 / 币种），由 `product_hover_product.js` 装配。
+     * 再加上表单里当前的取值（数量 / 单位 / 单价 / 币种），由 `product_hover_cache.js` 装配。
      * 取值的形态见 `model/relational_model/record.js`：many2one 是 `{id, display_name}`
      * 对象（不是 `[id, name]` 数组）。
      */

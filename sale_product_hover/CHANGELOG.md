@@ -3,6 +3,43 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能 +y，修复/文档 +z。
 
+## [19.0.1.4.1] - 2026-09-15（待验证）
+
+### 变更
+
+- **修复 `19.0.1.4.0` 新增前端文件导致模块加载失败**：
+  - 现象（浏览器控制台）：
+    ```
+    The following modules are needed by other modules but have not been defined,
+    they may not be present in the correct asset bundle:
+    ['@sale_product_hover/js/product_hover_product']
+    The following modules could not be loaded because they have unmet dependencies:
+    (2) ['@sale_product_hover/js/product_hover_cache', '@sale_product_hover/js/product_hover_list_patch']
+    ```
+  - 根因：`19.0.1.4.0` 把新行取数逻辑写成**新文件**并加进 `__manifest__.py` 的 `assets`。
+    **assets 的文件清单来自 manifest，而运行中的 Odoo 进程内存里还是旧 manifest**
+    （`?debug=assets` 下 Odoo 只在文件内容变化时按 mtime 重建 bundle，**不会重新读取 manifest**），
+    于是 bundle 里没有这个新文件、`import` 直接失败，连带依赖它的两个模块一起加载不了。
+    `19.0.1.3.x` 及以前只改**已有文件**，所以一直没暴露这个问题。
+  - 修复：把这段代码**并入已登记的 `static/src/js/product_hover_cache.js`**，删除新文件、
+    从 manifest 的 assets 里移除它。Assets 清单回到原来 5 项（与线上进程内的清单一致），
+    因此**只需强刷浏览器**即可生效，不需要 `-u`。
+- 版本文档补充一条硬性约定：**不要往 assets 里新增文件**（新增即需要 `-u` / 重启进程），
+  要加代码就写进已登记的文件里（见 `AGENTS.md` P1 陷阱 17）。
+
+### 影响
+
+- 不涉及数据库结构变更，**无需迁移脚本**；接口与 payload 无变化。
+- 修复后新行预览能力与 `19.0.1.4.0` 设计一致（前端按 `product_id` 用标准 ORM 读产品），
+  只是代码落在 `product_hover_cache.js` 内。
+
+### 文档
+
+- 同步 `__manifest__.py`（`19.0.1.4.1`）、`README.md`（模块资源 / 排障）、`AGENTS.md`
+  （P1 陷阱 17「新增 assets 文件需要 -u」、文件职责），根 `README.md` / `AGENTS.md` 版本引用。
+
+---
+
 ## [19.0.1.4.0] - 2026-09-15（待验证）
 
 ### 变更
@@ -12,7 +49,7 @@
   - 删掉后端 `drafts` 方案（`sale.order.line._get_product_hover_draft_payload()`、接口的
     `drafts` 参数）：它本质仍是「把新行当成订单行来查」，而且要求服务端先升级才能用——
     这正是它一直不生效的原因。
-  - 新增前端模块 **`static/src/js/product_hover_product.js`**：按 `product_id` 用**标准 ORM**
+  - 新增前端取数逻辑（`19.0.1.4.1` 起并入 `static/src/js/product_hover_cache.js`）：按 `product_id` 用**标准 ORM**
     （`searchRead("product.product", [["id","in",ids]], …)`）读产品数据，行的数量 / 单位 /
     单价 / 币种直接用表单里**正在编辑**的值，用 Odoo 前端格式化工具
     （`formatFloat` / `formatMonetary`）装配出与已保存行**完全同形**的 payload。

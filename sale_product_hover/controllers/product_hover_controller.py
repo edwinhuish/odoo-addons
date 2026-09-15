@@ -4,7 +4,7 @@
 **只服务「已保存」的订单行**。未保存的新行（刚新增的产品行）不经过这里：
 订单行还没落库、服务端没有这条记录，按行 id 反查必然查不到——那种情况由前端
 **按 `product_id` 用标准 ORM 直接读产品**再装配卡片数据
-（见 ``static/src/js/product_hover_product.js``）。
+（见 ``static/src/js/product_hover_cache.js``）。
 """
 
 import logging
@@ -18,7 +18,7 @@ _logger = logging.getLogger(__name__)
 # static/src/js/product_hover_list_patch.js 的 MODULE_VERSION）。
 # 接口会把它回显给前端（保留键 ``__server_version``），前端据此判断服务端 Python
 # 是否已升级——本模块踩过多次「静态资源已更新、后端没升级」的坑。
-MODULE_VERSION = "19.0.1.4.0"
+MODULE_VERSION = "19.0.1.4.1"
 
 # 保留键：只在响应里携带服务端版本，不参与任何行的取值（订单行 id 是数字，不会与它冲突）
 SERVER_VERSION_KEY = "__server_version"

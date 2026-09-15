@@ -1,6 +1,6 @@
 {
     "name": "Sale Product Hover",
-    "version": "19.0.1.4.0",
+    "version": "19.0.1.4.1",
     "summary": "Show a product detail popover when hovering order lines in quotations and sales orders",
     "description": """
         Product hover preview for quotation and sales order lines, for foreign
@@ -35,7 +35,6 @@
     "depends": ["sale", "stock"],
     "assets": {
         "web.assets_backend": [
-            "sale_product_hover/static/src/js/product_hover_product.js",
             "sale_product_hover/static/src/js/product_hover_cache.js",
             "sale_product_hover/static/src/js/product_hover_card.js",
             "sale_product_hover/static/src/js/product_hover_list_patch.js",
