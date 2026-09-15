@@ -93,7 +93,11 @@ export async function fetchProducts(orm, productIds, cache) {
  * @returns {object} payload
  */
 export function buildProductHoverPayload(product, context, unitDigits) {
-    const companyCurrencyId = user.activeCompany?.currency_id || null;
+    // `user.activeCompany.currency_id` 是会话里的币种 **id**（`currency.js` 里也是这样直接用的）；
+    // 兼容一下可能出现的 `{id, ...}` 形态，拿不到就退回 null（`formatMonetary` 会省略货币符号）
+    const companyCurrency = user.activeCompany?.currency_id;
+    const companyCurrencyId =
+        typeof companyCurrency === "number" ? companyCurrency : companyCurrency?.id || null;
     const orderCurrencyId = context.currency_id || companyCurrencyId;
     const listPrice = product.list_price || 0;
     const priceUnit = context.price_unit || 0;
