@@ -3,6 +3,43 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能 +y，修复/文档 +z。
 
+## [19.0.1.5.1] - 2026-09-15（待验证）
+
+### 变更
+
+- **后端版本号改为自动读取 `__manifest__.py`**，不再手写第二份常量：
+  ```python
+  from odoo.modules.module import get_manifest
+
+  MODULE_VERSION = get_manifest("sale_product_hover").get("version")
+  ```
+  - 依据（Odoo 19 源码 `odoo/modules/module.py`）：`get_manifest(module)` 按 `addons_path`
+    找到模块并解析清单，返回 `Manifest`（dict-like `Mapping`）；`manifest["version"]` 走
+    `version` cached_property → `adapt_version()`，我们的 `19.0.x.y.z` 已是规范形式，
+    原样返回；模块找不到时返回空 dict（**返回空而非抛错**）。
+  - 加了一层 `try/except` 兜底：读版本失败只退化为 `"unknown"` 并 `warning`，
+    **不会让服务起不来**（版本自证在此情形下会明确报出不一致，便于发现）。
+  - 效果：改版本时**只需动 `__manifest__.py`**，不必再记得同步控制器；
+    版本维护从「三处」降到「两处」。
+- **为什么前端仍留一份 `MODULE_VERSION`**：它是**资源邮戳**（"浏览器实际加载了哪一版 JS"），
+  是版本自证里"前端资源是否刷新过"的对照物——与后端同源就失去了对照意义。
+  因此它必须手动 bump，且与 manifest 版本**故意分开**（不一致即说明前端资源旧了）。
+
+### 影响
+
+- 纯重构，**行为与 payload 完全不变**，不涉及数据库结构变更，无需迁移脚本。
+- 版本号提升到 `19.0.1.5.1`（`__manifest__.py` + JS 邮戳两处；控制器已自动跟随）。
+- 控制器仍在模块导入时读一次清单（`get_manifest` 内部读文件、由 `Manifest` 缓存），
+  对启动耗时无实际影响；`__manifest__.py` 的改动依旧要 `-u` / 重启进程才生效。
+
+### 文档
+
+- 模块 `AGENTS.md`（「变更记录规范」的版本规则改写为「manifest 唯一来源 + JS 资源邮戳」、
+  控制器 / JS 的文件职责、当前版本）、`README.md`（排障步骤的日志文案与版本说明）、
+  `__manifest__.py`（`19.0.1.5.1`），根 `README.md` / `AGENTS.md` 版本引用同步。
+
+---
+
 ## [19.0.1.5.0] - 2026-09-15（待验证）
 
 ### 变更

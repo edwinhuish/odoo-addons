@@ -237,16 +237,17 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 - 关闭触屏长按：删掉 `product_hover_list_patch.js` 里 `touchstart` / `touchmove` / `touchend` / `touchcancel` 四个监听与对应方法即可（互不影响）。
 - 扩大适用范围（如采购订单行）：需把 `sale.order.line` 的 payload 方法抽象到共用模型，并在补丁里扩展目标模型清单。
 - 悬停无浮层时的排查顺序（用 `?debug=1` 或 `?debug=assets` 打开页面；日志为 `info` 级别，控制台默认可见）：
-  1. 页面加载时应有 `[sale_product_hover] assets loaded (19.0.1.3.3)` —— **看不到这行**说明浏览器
-     仍在用旧缓存 / assets 未重建：`-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）。
-     括号内版本应与 `__manifest__.py` 的 `version` 一致；紧接着还会有一行
-     `self-check: assets X, server Y`，**先看这行**判断前后端是否同步；
+  1. 页面加载时应有 `[sale_product_hover] assets loaded (<版本>)` —— **看不到这行**说明浏览器
+    仍在用旧缓存 / assets 未重建：`-u sale_product_hover` 后**强刷浏览器**（`Ctrl+Shift+R`）。
+    括号内是 JS 里的资源邮戳（`product_hover_list_patch.js` 的 `MODULE_VERSION`），应与
+    `__manifest__.py` 的 `version` 一致；紧接着还会有一行
+    `self-check: assets X, server Y`，**先看这行**判断前后端是否同步；
   2. 列表加载 / 翻页 / 表单改动时应有
-     `[sale_product_hover] prefetch sale.order.line: N saved / M draft line(s)` 与
-     `[sale_product_hover] payload: requested N saved line(s), received M`
-     （新行则打印 `requested N draft line(s), received M`）：**没有 prefetch** 说明当前不是
-     `sale.order.line` 列表或补丁未生效；**`received 0`** 说明接口没返回数据，查服务端日志
-     `sale_product_hover: unable to build hover payload`；
+    `[sale_product_hover] prefetch sale.order.line: N saved / M new line(s)` 与
+    `[sale_product_hover] payload: requested N saved line(s), received M`
+    （新行则打印 `requested N new line(s), assembled M`）：**没有 prefetch** 说明当前不是
+    `sale.order.line` 列表或补丁未生效；**`received 0`** 说明接口没返回数据，查服务端日志
+    `sale_product_hover: unable to build hover payload`；
   3. 悬停订单行时应依次出现 `hover row <id>` → `popover opened for line <id>`：
      - 完全没有 `hover row` → 悬停事件未命中（行不在本渲染器的记录里）；
      - 有 `hover row` 但没有 `popover opened` → 会同时输出 `skip: …` 说明跳过原因

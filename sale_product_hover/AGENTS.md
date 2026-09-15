@@ -16,7 +16,7 @@
 - 未保存的新行：**不走后端**，前端 `product_hover_cache.js` 按 `product_id` 用标准 ORM 读产品后装配（上下文只需 `{key, product_id}`，见陷阱 16）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按；浮层位置由补丁自己接管（跟随鼠标）
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.5.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**（陷阱 16），`19.0.1.4.1` 把该逻辑并入已有文件、避免新增 assets 文件（陷阱 17）；`19.0.1.5.0` 按需求**移除浮层里的数量与单价**，两条取数路径同步收窄（陷阱 16 的上下文简化为 `{key, product_id}`）；均待目标环境验证）
+- 当前版本：`19.0.1.5.1`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**（陷阱 16），`19.0.1.4.1` 把该逻辑并入已有文件、避免新增 assets 文件（陷阱 17）；`19.0.1.5.0` 按需求**移除浮层里的数量与单价**，两条取数路径同步收窄（陷阱 16 的上下文简化为 `{key, product_id}`）；`19.0.1.5.1` 后端版本改为**自动读 `__manifest__.py`**，版本只剩 manifest + JS 两处；均待目标环境验证）
 
 ---
 
@@ -379,10 +379,10 @@
 |------|------|
 | `__manifest__.py` | 版本 / 依赖（`sale` + `stock`）/ 前端 assets 登记（**固定 5 项，不要新增文件**，见陷阱 17）；无 `data` 文件 |
 | `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 批量装配（入参 `{key: product_id}`，含价格 / 库存格式化）；`_get_hover_specifications()` 批量拼变体规格 |
-| `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（只接受 `line_ids`，按行 id 批量返回；当前用户身份）；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**，它回显在保留键 `__server_version` 上供前端做版本自证 |
+| `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（只接受 `line_ids`，按行 id 批量返回；当前用户身份）；**版本由 `get_manifest()` 从 `__manifest__.py` 自动读取**（不再手写常量），回显在保留键 `__server_version` 上供前端做版本自证 |
 | `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在本文件，**刻意不拆文件**，见陷阱 17）：已保存行走接口（按行 id 去重）；**未保存新行按 `product_id` 用标准 ORM（`searchRead`）读产品**（含变体规格 / 可用库存），上下文只有 `{key, product_id}`，`formatFloat` / `formatMonetary` 装配（见陷阱 16）；模块级非 reactive 缓存、失败重试 / 上限保护、服务端版本探测与自证告警 |
 | `static/src/js/product_hover_card.js` | 浮层组件：图片降级、库存文案 `_t`、指针离开浮层的关闭判断 |
-| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、新行取数上下文（`_getProductHoverContext` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 必须与 `__manifest__.py` 的 `version` 同步**（用于控制台版本自证）；含 info 级诊断日志 |
+| `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、新行取数上下文（`_getProductHoverContext` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 是一枚「资源邮戳」，必须与 `__manifest__.py` 的 `version` 手动同步**（它是版本自证里"浏览器实际加载了哪一版"的对照物，故意不与后端同源）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
 | `static/src/scss/product_hover.scss` | 浮层样式（选择器统一 `.o_sph_` 前缀，含窄屏媒体查询） |
 | `i18n/zh_CN.po` | 简体中文译文；含应用列表元数据条目（`base.module_sale_product_hover`），见根 `AGENTS.md` 4.8 |
@@ -438,8 +438,9 @@
   没有 `assets loaded` = 资源未加载（缓存 / 未升级）；没有 `prefetch` = 列表判断未命中；
   `received 0` = 接口无数据；没有 `hover row` = 悬停事件未命中（行不在本渲染器的
   `props.list.records` 里，或鼠标事件被别的浮层遮挡）；有 `popover opened` 却看不到浮层 =
-  样式 / DOM 问题。控制台无任何 `[sale_product_hover]` 输出时，先确认 `MODULE_VERSION` 与
-  `__manifest__.py` 的 `version` 是否一致（资源确实重新打包了）。
+  样式 / DOM 问题。控制台无任何 `[sale_product_hover]` 输出时，先确认 JS 里的资源邮戳
+  （`product_hover_list_patch.js` 的 `MODULE_VERSION`）与 `__manifest__.py` 的 `version`
+  是否一致——**这一份是手写的，改版本时最容易漏**（后端那份已由 `get_manifest()` 自动读取）。
 - **`received 0` / 「接口没有返回这一行的数据」**（只可能是**已保存行**，新行不走接口）：
   **先看 `self-check` 那一行**（打开订单页时输出一次）：
   - `self-check: assets X, server X (ok)` → 两端一致，是数据 / 权限问题，查服务端日志的
@@ -489,12 +490,16 @@
 ## 变更记录规范
 
 每次功能修改后必须更新：
-- `__manifest__.py` 的 `version`（遵循 `19.0.x.y.z`）
-- **`MODULE_VERSION` 三处同步**：`__manifest__.py` 的 `version`、
-  `static/src/js/product_hover_list_patch.js` 的 `MODULE_VERSION`、
-  `controllers/product_hover_controller.py` 的 `MODULE_VERSION`——漏改任何一处，
-  前端版本自证都会误报（或该报不报），而版本自证正是本项目排查「资源/后端不同步」的主要手段。
-  改完可用 `grep -rn "19\.0\." __manifest__.py static/src/js/product_hover_list_patch.js controllers/product_hover_controller.py` 自查。
+- `__manifest__.py` 的 `version`（遵循 `19.0.x.y.z`）——**这是版本的唯一来源**：
+  - **后端自动读它**：`controllers/product_hover_controller.py` 用
+    `get_manifest("sale_product_hover").get("version")` 取版本（`19.0.1.5.1` 起），
+    不再手写常量；改版本时**不需要**动控制器。
+  - **前端必须手动同步** `static/src/js/product_hover_list_patch.js` 的 `MODULE_VERSION`：
+    它是一枚**资源邮戳**（"浏览器实际加载的是哪一版 JS"），故意不与后端同源——
+    正因如此，它和后端回显的 `__server_version` 不一致时才能说明「前端资源旧了」。
+    两处版本是版本自证的两个对照物，**漏改 JS 那一份会让自证误报**。
+  - 自查：`grep -rn "19\.0\." __manifest__.py static/src/js/product_hover_list_patch.js`
+    应只剩这两处（控制器已无需 grep）。
 - **改完 JS 必跑「命名导入 vs 导出」自查**（脚本见根 `AGENTS.md` 第 6 节）：
   本模块 `product_hover_list_patch.js` 从 `product_hover_cache.js` 命名导入 4 个 helper，
   整份重写缓存模块时漏掉一个导出就会在悬停时抛 `xxx is not a function`

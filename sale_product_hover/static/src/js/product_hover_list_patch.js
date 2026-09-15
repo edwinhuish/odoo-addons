@@ -39,7 +39,7 @@ const VIEWPORT_MARGIN = 8;
 // controllers/product_hover_controller.py 的 MODULE_VERSION）。
 // 排查「无浮层」时先看控制台的 assets 日志确认版本；接口还会回显服务端版本，
 // 两者不一致时缓存层会直接告警（见 product_hover_cache.js 的 checkServerVersion）。
-const MODULE_VERSION = "19.0.1.5.0";
+const MODULE_VERSION = "19.0.1.5.1";
 
 // document 级监听一律用捕获阶段：行内可能有业务自己的 `stopPropagation`
 // （如列表在触屏选择模式下会拦截 mouseover），捕获阶段先于它们触发，不受影响。
