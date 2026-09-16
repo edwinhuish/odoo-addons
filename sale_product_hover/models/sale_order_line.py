@@ -2,20 +2,21 @@
 """销售订单行悬浮卡片的后端数据装配。
 
 需求：报价单 / 销售订单的订单行列表上，鼠标悬停某行时展示产品详情浮层。
-前端不解析 any2one 数据格式、也不做货币 / 数量格式化，展示数据由本模块一次装配：
+前端不解析 any2one 数据格式、也不做数量格式化，展示数据由本模块一次装配：
 
 - 图片：``/web/image/product.product/<id>/image_256``（无图时前端降级为占位图标）
 - 名称 / 型号 / 规格：产品显示名（``display_default_code=False``，不带
   ``[参考号]`` 前缀）、``default_code``、变体属性值（``display_name`` 形如
   ``颜色: 红``，即"规格"）
 - 描述：``description_sale``
-- 产品售价：``list_price``（公司币种）
 - 可用库存：``qty_available``（``stock`` 提供）+ 产品计量单位名；不跟踪库存的
   产品（如服务）不展示该项
 
-卡片只展示**产品自身**的信息：**不含订单行上的数量（``product_uom_qty``）与本单单价
-（``price_unit``）**——浮层的定位是"产品详情"，本单数据在订单行上本来就看得见。
-因此这里既不需要读行的数量 / 单价 / 单位 / 币种，前端新行路径也只需要 ``product_id``。
+卡片只展示**产品自身**的信息，**不含任何价格**：既没有订单行上的数量
+（``product_uom_qty``）与本单单价（``price_unit``），也没有产品售价（``list_price``）
+——浮层的定位是"产品详情"，价格信息在订单行与产品表单上本来就看得见。
+因此这里既不需要读行的数量 / 单价 / 单位 / 币种，也不需要读产品价格；
+前端新行路径同样只需要 ``product_id``。
 
 **这里只装配「已保存」的订单行**（`_get_product_hover_payload()`，按行 id 批量）。
 **尚未保存的新行不经过本模块的后端**：订单行还没落库、按行 id 反查必然查不到，
@@ -47,9 +48,10 @@ class SaleOrderLine(models.Model):
     def _build_hover_payload(self, specs):
         """按 ``{key: product_id}`` 装配展示数据（卡片只展示产品侧信息，不用行上的取值）。
 
-        展示数据的口径集中在这里（产品字段 + 价格 / 库存格式化）。未保存的新行不走后端，
+        展示数据的口径集中在这里（产品字段 + 库存格式化，**不含任何价格**）。未保存的新行不走后端，
         前端 `product_hover_cache.js` 按同一口径在前端装配
-        （`formatFloat` / `formatMonetary` 与这里的 `formatLang` 等价），改动时请两边同步。
+        （前端 `formatFloat` 与这里的 `formatLang` 等价；**无价格，故不再涉及货币格式化**），
+        改动时请两边同步。
         """
         if not specs:
             return {}
@@ -60,7 +62,6 @@ class SaleOrderLine(models.Model):
             "display_name",
             "default_code",
             "description_sale",
-            "list_price",
             "uom_id",
             "product_template_attribute_value_ids",
         ]
@@ -84,7 +85,6 @@ class SaleOrderLine(models.Model):
         specifications = self._get_hover_specifications(product_data)
 
         has_qty = "qty_available" in product_model._fields
-        company_currency = env.company.currency_id
         payload = {}
         for key, product_id in specs.items():
             data = product_data.get(product_id)
@@ -112,9 +112,6 @@ class SaleOrderLine(models.Model):
                 "specification": specifications.get(product_id, ""),
                 "image_url": "/web/image/product.product/%s/image_256" % product_id,
                 "description": data.get("description_sale") or "",
-                "list_price_text": formatLang(
-                    env, data.get("list_price") or 0.0, currency_obj=company_currency
-                ),
                 "qty_available_text": qty_text,
                 "available_uom_name": product_uom[1] if product_uom else "",
             }

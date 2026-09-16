@@ -1,6 +1,6 @@
 # 订单行产品悬浮卡
 
-在报价单 / 销售订单的订单行列表上，鼠标悬停某一行（触屏设备为长按）时弹出浮层，展示该行产品的图片、名称、型号、规格、描述、售价与可用库存；面向外贸 SOHO 场景，报价时不必离开单据去翻产品资料。
+在报价单 / 销售订单的订单行列表上，鼠标悬停某一行（触屏设备为长按）时弹出浮层，展示该行产品的图片、名称、型号、规格、描述与可用库存；面向外贸 SOHO 场景，报价时不必离开单据去翻产品资料。
 
 > 模块技术名：`sale_product_hover`（无前身模块，直接全新安装）
 
@@ -9,8 +9,8 @@
 ## 功能概述
 
 - 悬停订单行 → 延迟 300ms 弹出产品详情浮层，鼠标快速划过不触发
-- 浮层内容（**只有产品详情**）：产品图片、名称、型号（`default_code`）、规格（变体属性，如 `颜色: 红, 尺寸: L`）、销售描述、产品售价、可用库存
-  - **不含订单行的数量（Quantity）与本单单价（Unit Price）**：浮层的定位是"产品详情"，本单数据在订单行上本来就看得见，重复展示只会让卡片变长
+- 浮层内容（**只有产品详情**）：产品图片、名称、型号（`default_code`）、规格（变体属性，如 `颜色: 红, 尺寸: L`）、销售描述、可用库存
+  - **不含任何价格**：既没有订单行的数量（Quantity）与本单单价（Unit Price），也没有产品售价（Sales Price）——浮层的定位是"产品详情"（看这个产品长什么样、什么规格），价格信息在订单行与产品表单上本来就看得见，重复展示只会让卡片变长
 - **跟随鼠标**：浮层贴在光标右下随鼠标移动；指针移入浮层后停止跟随（方便阅读），移开后延迟 200ms 关闭
 - **新增产品行也能预览**：刚加进订单、尚未保存的行同样能悬停看详情（不必先保存）。**这条路径直接从产品取数**（订单行还没落库，服务端查不到），因此与服务端版本无关
 - **自适应**：右侧放不下自动翻到光标左侧，下方放不下自动上移贴边，窄屏下浮层随视口收窄、图片与字号收紧
@@ -34,8 +34,8 @@
 | 用 popover 服务渲染浮层 | 浮层挂在 overlay 容器，不改变列表 DOM，因此不干扰原有行交互；`holdOnHover` 让指针进入浮层后位置锁定；`setActiveElement: false` 保证悬停不抢占页面焦点 |
 | 浮层位置自己算（跟随鼠标） | popover 的目标仍是**行**（`getPopoverForTarget(row)` 才能查到浮层、移入浮层不关闭），但落点由 `_positionProductHover()` 计算：贴在光标右下，右/下放不下就翻到光标左侧 / 上移贴边，视口装不下再收紧 `maxHeight`。可行性来自 Odoo 的 `reposition()`——它把浮层设成 `position: fixed` 并直接写 `left/top`（视口坐标），所以补丁可以直接改写 `left/top` 跟随 `mousemove`（`requestAnimationFrame` 合帧）；每次 Odoo 重定位后回调 `onPositioned`，在那里再套用一次光标位置即可 |
 | 屏蔽行内原生 tooltip | Odoo 的 tooltip 服务挂在 `document.body` 的**捕获阶段** `mouseenter` 上；补丁在更外层的 `document` 捕获阶段拦截该事件，**只在该行确实有本模块浮层数据时** `stopPropagation()`，原生黑色提示不再弹出，其余行与元素不受影响 |
-| 已保存行的数据由后端一次装配 | 前端不解析 many2one 数据格式、不做货币 / 库存数量格式化：`_get_product_hover_payload()` 用 `formatLang` 按用户语言与货币（单位）精度直接返回可展示字符串；规格由 `product.template.attribute.value.display_name` 拼成（属性名与取值都是产品数据，随产品记录语言展示，不进 po） |
-| **新行直接从产品取数** | 未保存的订单行在服务端**根本不存在**，按行 id 反查必然失败；而卡片要展示的**全部是产品侧信息**（名称 / 型号 / 规格 / 描述 / 图片 / 产品售价 / 可用库存），与订单没有任何关系。因此由 `product_hover_cache.js` 用**标准 ORM**（`searchRead`，任何后端版本可用、应用记录规则）按 `product_id` 读产品并装配，`formatFloat` / `formatMonetary` 与后端 `formatLang` 等价 —— 不依赖自研接口，也**不需要服务端升级**；取数上下文只需 `{key, product_id}`，连行上的取值都不用读 |
+| 已保存行的数据由后端一次装配 | 前端不解析 many2one 数据格式、不做库存数量格式化：`_get_product_hover_payload()` 用 `formatLang` 按用户语言与单位精度直接返回可展示字符串（**无价格**）；规格由 `product.template.attribute.value.display_name` 拼成（属性名与取值都是产品数据，随产品记录语言展示，不进 po） |
+| **新行直接从产品取数** | 未保存的订单行在服务端**根本不存在**，按行 id 反查必然失败；而卡片要展示的**全部是产品侧信息**（名称 / 型号 / 规格 / 描述 / 图片 / 可用库存），与订单没有任何关系。因此由 `product_hover_cache.js` 用**标准 ORM**（`searchRead`，任何后端版本可用、应用记录规则）按 `product_id` 读产品并装配，`formatFloat` 与后端 `formatLang` 等价（**无价格，故不涉及货币格式化**）—— 不依赖自研接口，也**不需要服务端升级**；取数上下文只需 `{key, product_id}`，连行上的取值都不用读 |
 | 每页一次批量请求 + 非 reactive 缓存 | 列表挂载与每次 DOM 更新后按行 id 差集预取（新行按 `product_id` 批量读产品、同一产品多行共用缓存）；缓存放**模块级 `Map`**（挂到 reactive 对象会触发 Owl 重渲染循环，见 `product_card_view` 的 P1 踩坑），并设上限避免长时间使用后无界增长 |
 | 只读、不提权 | 控制器以当前用户身份读取（不 `sudo`）；新行走标准 ORM（`searchRead` 应用记录规则、自动剔除读不到的产品），均沿用产品与订单行的既有权限 |
 | 编辑态避让只针对已保存行 | 正在内联编辑的**已保存**行不弹（避免遮挡正在改的字段）；**未保存的新行不受限**——Odoo 里 `Record.isInEdition` 对 `!resId` 恒为真（`config.mode === "edit" \|\| !resId`），新行一加进列表就是 `editedRecord`，若照旧一刀切则新增产品永远没有预览，而且只要列表里有一条新行，其它已保存行也会被一起挡掉 |
@@ -57,7 +57,7 @@
 |------|------|
 | `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 统一装配；`_get_hover_specifications()` 拼变体规格 |
 | `controllers/product_hover_controller.py` | `POST /sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`）：按行 id 返回展示数据，并回显 `__server_version` 供前端做版本自证 |
-| `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在这里）：已保存行走接口（按行 id 去重）、**未保存新行按 `product_id` 用标准 ORM 读产品并装配**（`formatFloat` / `formatMonetary`）；模块级非 reactive 缓存、失败可重试 / 上限保护、服务端版本探测 |
+| `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在这里）：已保存行走接口（按行 id 去重）、**未保存新行按 `product_id` 用标准 ORM 读产品并装配**（`formatFloat`，无价格故不再需要 `formatMonetary`）；模块级非 reactive 缓存、失败可重试 / 上限保护、服务端版本探测 |
 | `static/src/js/product_hover_card.js` | 浮层组件（图片失败降级占位、库存文案、指针离开处理） |
 | `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：捕获阶段事件委托、触屏长按、新行的取数上下文（`_getProductHoverContext`）、编辑态避让、延迟开 / 关、仅 `sale.order.line` 生效 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板 |
@@ -82,16 +82,16 @@
 | `specification` | `char` | 规格：变体属性值的 `display_name` 用 `", "` 连接（如 `颜色: 红, 尺寸: L`）；无变体属性为空串 |
 | `image_url` | `char` | `/web/image/product.product/<id>/image_256` |
 | `description` | `text` | 销售描述（`description_sale`），无则为空串 |
-| `list_price_text` | `char` | 产品售价（`list_price`），按公司币种格式化 |
 | `qty_available_text` | `char` | 可用库存数量（`Product Unit` 精度）；不跟踪库存的产品为空串 |
 | `available_uom_name` | `char` | 可用库存的计量单位名（`qty_available` 是产品默认单位口径） |
 
-> **没有** `qty_ordered_text` / `uom_name` / `unit_price_text` / `show_list_price`：
-> 卡片不展示订单行上的数量与本单单价（见「功能概述」），两条取数路径都不再产出这些字段。
+> **没有** `qty_ordered_text` / `uom_name` / `unit_price_text` / `show_list_price` /
+> `list_price_text`：卡片**不展示任何价格**（见「功能概述」），两条取数路径都不再产出这些字段。
 >
-> 价格 / 库存都是**已格式化的字符串**：已保存行由后端 `formatLang` 生成，新行由前端
-> `formatFloat` / `formatMonetary` 生成（同一套用户语言与货币精度，输出一致）。
+> 库存是**已格式化的字符串**：已保存行由后端 `formatLang` 生成，新行由前端 `formatFloat`
+> 生成（同一套用户语言与单位精度，输出一致）。
 > 前端只做「数量 + 单位」的可翻译拼接（`_t("%(qty)s %(uom)s")`，用于可用库存）。
+> 可用库存为空时（服务类等不跟踪库存的产品）模板**整块不渲染** `dl.o_sph_fields`。
 
 ---
 
@@ -131,11 +131,13 @@
 
 - **源语言：英文（`en_US`）**，源码（Python / JS / XML）里一律写英文；中文只出现在 `i18n/zh_CN.po` 的 `msgstr`。
 - 覆盖范围：
-  - 浮层 QWeb 模板文本（`Sales Price` / `On Hand`）→ `code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0`
+  - 浮层 QWeb 模板文本（`On Hand`）→ `code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0`
   - JS 库存文案 `%(qty)s %(uom)s` → `code:addons/sale_product_hover/static/src/js/product_hover_card.js:0`
   - 产品名 / 型号 / 规格 / 描述 / 单位名是**数据**，随产品记录语言展示，不进 po（规格的属性名与取值同样是数据）
-  - `Quantity` / `Unit Price` 两条术语随「浮层移除数量与单价」一并从 po 下线
-- 价格、库存数字由后端 `formatLang` 按用户语言格式化，无需前端 `locale` 处理。
+  - `Quantity` / `Unit Price` 两条术语随「浮层移除数量与单价」（`19.0.1.5.0`）下线；
+    `Sales Price` 随「移除产品售价」（`19.0.1.6.0`）下线——**改动展示字段时务必同步下线对应术语**，
+    否则 po 里会留下永远匹配不到的孤儿条目
+- 库存数字由后端 `formatLang` 按用户语言格式化，无需前端 `locale` 处理。
 - 占位符统一 `%(name)s` 命名形式，禁止按位置拼接。
 - **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_sale_product_hover` 三条提供；分类 `Sales/Sales` 是官方分类，沿用 `base` 自带译文，不重复翻译。改 `__manifest__.py` 的 `name` / `summary` / `description` 时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - 改动流程：改英文源文本 → 同步 `i18n/zh_CN.po` → `-u` 升级 + **强刷浏览器**（前端术语有缓存），英文与中文各验一遍。
@@ -144,7 +146,7 @@
 
 ## 依赖
 
-- `sale`：提供 `sale.order.line`（报价单与销售订单共用）；卡片只读产品侧字段，不再用行上的数量 / 单价。
+- `sale`：提供 `sale.order.line`（报价单与销售订单共用）；卡片只读产品侧字段，不用行上的数量 / 单价，也不读产品价格。
 - `stock`：提供 `qty_available`（可用库存）与 `is_storable`（是否跟踪库存）。
 - 内建 `web`：popover 服务、列表渲染器、`rpc`，无需额外声明。
 - **不依赖** `product_image`（浮层用产品原生主图 `image_256`）、`product_reference`（型号取原生 `default_code`）。
@@ -180,7 +182,7 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 | 验证项 | 期望 | 结果 |
 |--------|------|------|
 | `-u sale_product_hover` 升级 | 无报错，`/sale_product_hover/payload` 可访问 | 待验 |
-| 报价单订单行悬停 | 浮层显示图片 / 名称 / 型号 / 规格 / 描述 / 售价 / 可用库存，**无数量与单价两行** | 待验 |
+| 报价单订单行悬停 | 浮层显示图片 / 名称 / 型号 / 规格 / 描述 / 可用库存，**无任何价格（无数量 / 单价 / 产品售价）** | 待验 |
 | 销售订单订单行悬停 | 同报价单表现一致 | 待验 |
 | 含变体产品 | 规格行显示 `颜色: 红, 尺寸: L` 之类；无变体产品的规格行不显示 | 待验 |
 | 可用库存与单位 | 库存按 `Product Unit` 精度显示，并带产品计量单位名（如 `120 Units`） | 待验 |
@@ -189,9 +191,9 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 | 窄屏 | 浮层宽度不超出屏幕，空间不足时自动换侧 | 待验 |
 | 原有操作不受影响 | 点击进入、内联编辑、勾选、删除照旧；编辑态不弹浮层 | 待验 |
 | 非目标列表 | 采购订单行、发票行不出现浮层 | 待验 |
-| 边界情况 | 无图显示占位；服务类产品无库存行；新行未选产品不弹 | 待验 |
+| 边界情况 | 无图显示占位；服务类产品无库存行（且不留空的分隔线）；新行未选产品不弹 | 待验 |
 | 新增产品行悬停 | 未保存的新行也能弹浮层，内容与保存后一致 | 待验 |
-| 双语 | 默认英文；装 `zh_CN` 并切换后标签为「产品售价 / 可用库存」 | 待验 |
+| 双语 | 默认英文；装 `zh_CN` 并切换后标签为「可用库存」 | 待验 |
 | 控制台 | 无 JS 报错、无重复请求 | 待验 |
 
 ### 异常情况与处理

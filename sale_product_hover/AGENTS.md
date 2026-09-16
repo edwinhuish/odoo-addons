@@ -16,11 +16,11 @@
 - 新建模型：无；无 `security/ir.model.access.csv`
 - 继承模型：`sale.order.line`（新增方法 `_get_product_hover_payload()` / `_build_hover_payload()` / `_get_hover_specifications()`，不新增字段；**只服务已保存行**）
 - 新增 HTTP 控制器：`/sale_product_hover/payload`（`type="jsonrpc"`、`auth="user"`、不 `sudo`；**只接受 `line_ids`**，另回显 `__server_version`）
-- 浮层内容：**只有产品侧信息**（图片 / 名称 / 型号 / 规格 / 描述 / 产品售价 / 可用库存），**不含订单行的数量与本单单价**（`19.0.1.5.0` 起按需求移除）
+- 浮层内容：**只有产品侧信息**（图片 / 名称 / 型号 / 规格 / 描述 / 可用库存），**不含任何价格**：既没有订单行的数量与本单单价（`19.0.1.5.0` 起按需求移除），也没有产品售价（`19.0.1.6.0` 起移除）
 - 未保存的新行：**不走后端**，前端 `product_hover_cache.js` 按 `product_id` 用标准 ORM 读产品后装配（上下文只需 `{key, product_id}`，见陷阱 16）
 - 自定义前端：无自定义组件注册；patch `web/views/list/list_renderer` 的 `ListRenderer` + 一个 popover 展示组件 `ProductHoverCard`；悬停用 document 级**捕获阶段**事件委托，触屏用长按；浮层位置由补丁自己接管（跟随鼠标）
 - 主依赖：`sale`（订单行）、`stock`（`qty_available` / `is_storable`）
-- 当前版本：`19.0.1.5.1`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**（陷阱 16），`19.0.1.4.1` 把该逻辑并入已有文件、避免新增 assets 文件（陷阱 17）；`19.0.1.5.0` 按需求**移除浮层里的数量与单价**，两条取数路径同步收窄（陷阱 16 的上下文简化为 `{key, product_id}`）；`19.0.1.5.1` 后端版本改为**自动读 `__manifest__.py`**，版本只剩 manifest + JS 两处；均待目标环境验证）
+- 当前版本：`19.0.1.6.0`（首版 `19.0.1.0.0`；`19.0.1.0.1` / `19.0.1.0.2` 尝试修复悬停不触发；`19.0.1.1.0` 重做触发链路、补齐规格 / 数量 / 单价展示、新增触屏长按与响应式；`19.0.1.1.1` 修复 `data-id` 类型判错——**这才是悬停一直没反应的真正根因**，见 P1 陷阱 11；`19.0.1.2.0` 浮层跟随鼠标并屏蔽行内原生 tooltip，见陷阱 12 / 13；`19.0.1.3.x` 新增（未保存）行的预览并多次修坑，见陷阱 14 / 15；`19.0.1.4.0` 新行改为**前端直接查产品**（陷阱 16），`19.0.1.4.1` 把该逻辑并入已有文件、避免新增 assets 文件（陷阱 17）；`19.0.1.5.0` 按需求**移除浮层里的数量与单价**，两条取数路径同步收窄（陷阱 16 的上下文简化为 `{key, product_id}`）；`19.0.1.5.1` 后端版本改为**自动读 `__manifest__.py`**，版本只剩 manifest + JS 两处；`19.0.1.6.0` 按需求**移除浮层里的产品售价**（两条取数路径同步收窄，前端不再需要 `formatMonetary` 与公司币种，明细表在库存为空时整块不渲染）；均待目标环境验证）
 
 ---
 
@@ -80,7 +80,7 @@
    - QWeb 模板文本 → `code:addons/sale_product_hover/static/src/xml/product_hover_templates.xml:0`
    - JS `_t()` → `code:addons/sale_product_hover/static/src/js/product_hover_card.js:0`
 3. **禁止拼接句子**：占位符统一 `%(name)s`（如库存文案 `_t("%(qty)s %(uom)s", …)`），禁止按位置 `%s` 或 JS `+` 拼接可翻译句子。
-4. **数字 / 货币不进 po**：价格与库存数字由后端 `formatLang` 按用户语言与货币（单位）精度格式化后直接展示；产品名 / 型号 / 描述 / 单位名是数据，随产品记录语言展示。
+4. **数字不进 po**：库存数字由后端 `formatLang` 按用户语言与单位精度格式化后直接展示（**无价格，故不再涉及货币格式化**）；产品名 / 型号 / 描述 / 单位名是数据，随产品记录语言展示。
 5. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` → 提升版本 → `-u` 升级 + **强刷浏览器**，中英文各验一遍。
 6. **代码注释保持中文**，不为 i18n 改英文。
 7. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description` 后，必须同步 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_sale_product_hover` 三条（`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`，逐字符一致）。分类 `Sales/Sales` 是官方分类，沿用 `base` 译文，**不要**重复翻译。这些记录归属 `base` 且 `noupdate=True`，导入只补缺失语种、不覆盖库里已有值；改译文后的强制刷新方式见根 [`AGENTS.md`](../AGENTS.md) 4.8。违反后果：中文环境「应用」列表显示英文，或译文与英文源文本长期不同步。
@@ -296,8 +296,8 @@
 - 正确做法：**新行直接从产品取数**——`_getProductHoverContext()` 只提供
   `{key, product_id}`（`19.0.1.5.0` 起；此前还带表单里的数量 / 单位 / 单价 / 币种，后因
   卡片不再展示这些本单数据而整体删除），由 `product_hover_cache.js` 用**标准 ORM**
-  （`orm.searchRead("product.product", ...)`）读产品，`formatFloat` / `formatMonetary`
-  与后端 `formatLang` 等价
+  （`orm.searchRead("product.product", ...)`）读产品，`formatFloat` 与后端 `formatLang`
+  等价（`19.0.1.6.0` 起无价格，不再需要 `formatMonetary` 与公司币种）
 - 好处：不依赖自研接口 / 服务端升级，`?debug=assets` 下改完 JS 立刻生效；
   卡片字段全在产品侧，**新行与已保存行天然同源**
 - 边界：产品数据按 `product_id` 缓存（同一产品多行共用）；`searchRead` 天然剔除读不到的产品，
@@ -340,7 +340,7 @@
 
 - **陷阱 1**：在控制器里 `sudo()` 图省事
   - 后果：越权返回其他用户本无权查看的产品信息（名称 / 价格 / 库存）
-  - 正确做法：以当前用户身份 browse；只返回产品的展示字段（`19.0.1.5.0` 起已不含行上的数量 / 单价）
+  - 正确做法：以当前用户身份 browse；只返回产品的展示字段（`19.0.1.5.0` 起已不含行上的数量 / 单价，`19.0.1.6.0` 起也不含产品售价）
 - **陷阱 2**：逐行访问 `line.product_id.xxx` 构造 payload
   - 后果：每行触发一次 read，行多时明显变慢
   - 正确做法：`products.read(fields)` 一次批量读，按 id 建映射后再逐行组装
@@ -382,9 +382,9 @@
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 版本 / 依赖（`sale` + `stock`）/ 前端 assets 登记（**固定 5 项，不要新增文件**，见陷阱 17）；无 `data` 文件 |
-| `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 批量装配（入参 `{key: product_id}`，含价格 / 库存格式化）；`_get_hover_specifications()` 批量拼变体规格 |
+| `models/sale_order_line.py` | **只服务已保存行**：`_get_product_hover_payload()` → `_build_hover_payload()` 批量装配（入参 `{key: product_id}`，含库存格式化，**不含任何价格**）；`_get_hover_specifications()` 批量拼变体规格 |
 | `controllers/product_hover_controller.py` | `/sale_product_hover/payload` JSON 接口（只接受 `line_ids`，按行 id 批量返回；当前用户身份）；**版本由 `get_manifest()` 从 `__manifest__.py` 自动读取**（不再手写常量），回显在保留键 `__server_version` 上供前端做版本自证 |
-| `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在本文件，**刻意不拆文件**，见陷阱 17）：已保存行走接口（按行 id 去重）；**未保存新行按 `product_id` 用标准 ORM（`searchRead`）读产品**（含变体规格 / 可用库存），上下文只有 `{key, product_id}`，`formatFloat` / `formatMonetary` 装配（见陷阱 16）；模块级非 reactive 缓存、失败重试 / 上限保护、服务端版本探测与自证告警 |
+| `static/src/js/product_hover_cache.js` | 数据层（两条取数路径都在本文件，**刻意不拆文件**，见陷阱 17）：已保存行走接口（按行 id 去重）；**未保存新行按 `product_id` 用标准 ORM（`searchRead`）读产品**（含变体规格 / 可用库存），上下文只有 `{key, product_id}`，`formatFloat` 装配（见陷阱 16；`19.0.1.6.0` 起无价格，删掉了 `formatMonetary` 与公司币种取值）；模块级非 reactive 缓存、失败重试 / 上限保护、服务端版本探测与自证告警 |
 | `static/src/js/product_hover_card.js` | 浮层组件：图片降级、库存文案 `_t`、指针离开浮层的关闭判断 |
 | `static/src/js/product_hover_list_patch.js` | patch `ListRenderer`：document 捕获级事件委托 + 触屏长按、`data-id` 反查行归属（**按字符串比较**）、浮层跟随鼠标的定位（`_positionProductHover`）、行内原生 tooltip 拦截、新行取数上下文（`_getProductHoverContext` / `_getProductHoverKey`）与编辑态避让（`_isProductHoverBlockedByEdit`）、延迟开 / 关、目标模型判断；**顶部 `MODULE_VERSION` 是一枚「资源邮戳」，必须与 `__manifest__.py` 的 `version` 手动同步**（它是版本自证里"浏览器实际加载了哪一版"的对照物，故意不与后端同源）；含 info 级诊断日志 |
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |

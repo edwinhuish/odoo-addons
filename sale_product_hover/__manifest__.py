@@ -1,6 +1,6 @@
 {
     "name": "Sale Product Hover",
-    "version": "19.0.1.5.1",
+    "version": "19.0.1.6.0",
     "summary": "Show a product detail popover when hovering order lines in quotations and sales orders",
     "description": """
         Product hover preview for quotation and sales order lines, for foreign
@@ -11,9 +11,10 @@
 
         Key features:
         - Hovering an order line opens a popover with the product image, name,
-          reference, variant specification, sales description, sales price and
-          available quantity; the popover shows product information only, not
-          the ordered quantity or the unit price of the line
+          reference, variant specification, sales description and available
+          quantity; the popover shows product information only, not the
+          ordered quantity, the unit price of the line or the product sales
+          price
         - Newly added order lines are previewed as well, before they are saved
         - On touch devices, where hovering does not exist, a long press on the
           line opens the same popover

@@ -3,6 +3,44 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能 +y，修复/文档 +z。
 
+## [19.0.1.6.0] - 2026-09-16（待验证）
+
+### 变更
+
+- **浮层移除「产品售价」（`Sales Price`）**（按需求）：继 `19.0.1.5.0` 移除订单行的数量与本单单价
+  之后，卡片**不再展示任何价格**。剩余内容即纯产品资料：**图片 / 名称 / 型号 / 规格 / 描述 /
+  可用库存**——价格属于"商务信息"，悬停看的是"这个产品长什么样、是什么规格"。
+- 随之**下线**的部分（两条取数路径同时收窄，不留死代码）：
+
+  | 位置 | 变化 |
+  |------|------|
+  | `models/sale_order_line.py` | `read_fields` 删去 `list_price`；payload 删去 `list_price_text`；公司币种（`env.company.currency_id`）与 `formatLang(..., currency_obj=...)` 的货币格式化一并去掉（价格没了就不需要货币） |
+  | `static/src/js/product_hover_cache.js` | `PRODUCT_FIELDS` 删去 `list_price`；新行装配删去 `list_price_text` 与公司币种取值（`user.activeCompany.currency_id` 的形态兼容）；`formatMonetary` 与 `@web/core/user` 两个 import 随之删除（前端只余 `formatFloat` 处理库存） |
+  | `static/src/xml/product_hover_templates.xml` | 删除 `Sales Price` 一行；`dl.o_sph_fields` 加 `t-if="onHandText"`——服务类等不跟踪库存的产品**整块明细表不渲染**，否则会留下一条空的上分隔线（此前「产品售价」常驻，明细表不会为空） |
+  | `i18n/zh_CN.po` | 下线 `Sales Price`（产品售价）术语；应用列表 `summary` / `description` 的中英文同步 |
+  | `__manifest__.py` | `description` 的功能条目改为"不含任何价格" |
+
+- 版本 `19.0.1.6.0`（表意调整，`+y`；接口 payload 字段减少，属**内部接口**，仅本模块前端消费）。
+
+### 影响
+
+- 不涉及数据库结构变更，**无需迁移脚本**；无视图 / 权限 / 字段改动。
+- 接口 `/sale_product_hover/payload` 返回字段**减少**：`list_price_text` 不再返回
+  （`19.0.1.5.0` 已下线 `qty_ordered_text` / `uom_name` / `unit_price_text` / `show_list_price`）。
+- 已有缓存无需清理（缓存只在浏览器内存里，刷新即重建）。
+- 性能略好：已保存行少读一个字段；新行装配少一次货币格式化。
+- **已安装且已导入过中文译文**的环境：应用列表 `summary` / `description` 的 `msgid` 未变、
+  只改了 `msgstr`，而这两条记录 `noupdate=True`，`-u` 不会覆盖库里已有值——按根 `AGENTS.md`
+  4.8 第 9 条强制刷新（odoo shell `TranslationImporter.save(force_overwrite=True)` 或先清 `zh_CN` key）。
+
+### 文档
+
+- 模块 `README.md`（功能概述 / 核心设计 / payload 字段 / i18n / 验证清单）、`AGENTS.md`
+  （当前版本、浮层内容约束、文件职责）、`RETROSPECTIVE.md`（版本一览与冒烟清单）、
+  `__manifest__.py`（`19.0.1.6.0` + `description`），根 `README.md` / `AGENTS.md` / `TODO.md` 同步。
+
+---
+
 ## [19.0.1.5.1] - 2026-09-15（待验证）
 
 ### 变更

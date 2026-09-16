@@ -2,10 +2,12 @@
 <templates xml:space="preserve">
 
     <!--
-      订单行悬浮卡片：展示**产品详情**——图片 / 名称 / 型号 / 规格 / 描述 / 产品售价 / 可用库存。
-      按需求**不含订单行上的数量（Quantity）与本单单价（Unit Price）**：浮层是"产品详情"，
-      本单数据在订单行上本来就看得见；改动时请同步 models/sale_order_line.py 与
-      static/src/js/product_hover_cache.js（两条取数路径都不再产出这两个字段）。
+      订单行悬浮卡片：展示**产品详情**——图片 / 名称 / 型号 / 规格 / 描述 / 可用库存。
+      按需求**不含任何价格**：既没有订单行上的数量（Quantity）与本单单价（Unit Price），
+      也没有产品售价（Sales Price）——浮层是"产品详情"，价格信息在订单行与产品表单上
+      本来就看得见；改动时请同步 models/sale_order_line.py 与
+      static/src/js/product_hover_cache.js（两条取数路径都不再产出这几个字段）。
+      可用库存为空（服务类等不跟踪库存的产品）时整块明细表不渲染，避免出现空分隔线。
       数据来自 /sale_product_hover/payload（列表页按行 id 一次性预取并缓存），
       本模板只负责展示，不发请求、不改动列表 DOM。
       注意：每个文本节点各自独立成术语，因此所有标签都写成单行、不带子元素。
@@ -37,13 +39,9 @@
                  t-if="props.payload.description"
                  t-esc="props.payload.description"/>
 
-            <dl class="o_sph_fields">
-                <dt>Sales Price</dt>
-                <dd t-esc="props.payload.list_price_text"/>
-                <t t-if="onHandText">
-                    <dt>On Hand</dt>
-                    <dd t-esc="onHandText"/>
-                </t>
+            <dl class="o_sph_fields" t-if="onHandText">
+                <dt>On Hand</dt>
+                <dd t-esc="onHandText"/>
             </dl>
         </div>
     </t>

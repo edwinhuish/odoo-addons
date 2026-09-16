@@ -1,9 +1,7 @@
 /** @odoo-module **/
 
 import { rpc } from "@web/core/network/rpc";
-import { user } from "@web/core/user";
 import { formatFloat } from "@web/core/utils/numbers";
-import { formatMonetary } from "@web/views/fields/formatters";
 
 /**
  * 订单行悬浮卡片的数据层。
@@ -11,13 +9,14 @@ import { formatMonetary } from "@web/views/fields/formatters";
  * **两条取数路径**（对外都只暴露 `getLineHoverPayload(key)`，卡片组件不关心数据从哪来）：
  *
  * 1. **已保存行**：行已在库里，走自研接口 `/sale_product_hover/payload`（按行 id 批量，
- *    服务端用 `formatLang` 一次装配，含产品售价 / 可用库存等）；
+ *    服务端用 `formatLang` 一次装配，含可用库存等）；
  * 2. **未保存的新行**：行还没落库，服务端根本没有这条记录，**按行 id 反查必然查不到**。
  *    所以改用**直接从产品取数**：按 `product_id` 用标准 ORM 读 `product.product`
  *    （任何后端版本都可用，不依赖自研接口），数字用 Odoo 前端格式化工具渲染。
  *
- * **卡片只展示产品侧信息**（图片 / 名称 / 型号 / 规格 / 描述 / 产品售价 / 可用库存），
- * **不含行上的数量与本单单价**（浮层的定位是"产品详情"，本单数据在订单行上本来就看得见）。
+ * **卡片只展示产品侧信息**（图片 / 名称 / 型号 / 规格 / 描述 / 可用库存），
+ * **不含任何价格**（行上的数量 / 单价与产品售价都不展示；浮层的定位是"产品详情"，
+ * 价格信息在订单行与产品表单上本来就看得见）。
  * 因此这里连行的取值都不需要读：`context` 只有 `{key, product_id}`，装配结果只由产品决定。
  *
  * key 的取法见 `product_hover_list_patch.js` 的 `_getProductHoverKey()`：
@@ -234,9 +233,10 @@ export async function prefetchLineHoverPayload(lineIds) {
 // ----------------------------------------------------------------------------
 // 未保存的新行：直接从产品取数（标准 ORM）
 //
-// 展示内容全部来自产品（名称 / 型号 / 规格 / 描述 / 图片 / 产品售价 / 可用库存），与订单
-// 没有任何关系，所以按 `product_id` 读 `product.product` 就够了。数字用 Odoo 前端格式化
-// 工具渲染，与已保存行走后端 `formatLang` 的输出等价。
+// 展示内容全部来自产品（名称 / 型号 / 规格 / 描述 / 图片 / 可用库存），与订单
+// 没有任何关系，所以按 `product_id` 读 `product.product` 就够了。库存数字用 Odoo 前端
+// 格式化工具渲染，与已保存行走后端 `formatLang` 的输出等价（**不含任何价格**，故不再需要
+// 读 `list_price`，也不必处理公司币种）。
 // ----------------------------------------------------------------------------
 
 /** 需要读取的产品字段（`stock` 是本模块的依赖，`qty_available` / `is_storable` 一定存在）。 */
@@ -244,7 +244,6 @@ const PRODUCT_FIELDS = [
     "display_name",
     "default_code",
     "description_sale",
-    "list_price",
     "uom_id",
     "qty_available",
     "is_storable",
@@ -312,12 +311,6 @@ async function fetchProducts(orm, productIds) {
  * @returns {object} payload（字段说明见 README「卡片 payload 字段」）
  */
 function buildProductHoverPayload(product, context, unitDigits) {
-    // 产品售价是 `list_price`，币种口径是**公司币种**；`user.activeCompany.currency_id`
-    // 是会话里的币种 **id**（`currency.js` 里也是这样直接用的），兼容一下可能出现的
-    // `{id, ...}` 形态，拿不到就退回 null（`formatMonetary` 会省略货币符号）
-    const companyCurrency = user.activeCompany?.currency_id;
-    const companyCurrencyId =
-        typeof companyCurrency === "number" ? companyCurrency : companyCurrency?.id || null;
     // 规格：变体属性值在 searchRead 结果里就是 [id, display_name]（如 "颜色: 黑"）
     const specification = (product.product_template_attribute_value_ids || [])
         .map((value) => value[1])
@@ -330,9 +323,6 @@ function buildProductHoverPayload(product, context, unitDigits) {
         specification,
         image_url: `/web/image/product.product/${context.product_id}/image_256`,
         description: product.description_sale || "",
-        list_price_text: formatMonetary(product.list_price || 0, {
-            currencyId: companyCurrencyId,
-        }),
         qty_available_text: product.is_storable
             ? formatFloat(product.qty_available || 0, { digits: [1, unitDigits] })
             : "",
