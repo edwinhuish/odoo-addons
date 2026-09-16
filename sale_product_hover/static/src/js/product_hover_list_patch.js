@@ -35,8 +35,9 @@ const POINTER_OFFSET_X = 16;
 const POINTER_OFFSET_Y = 12;
 // 与视口边缘的最小间距（像素）：跟随鼠标时也不让浮层被屏幕裁切
 const VIEWPORT_MARGIN = 8;
-// 与 __manifest__.py 的 version 保持一致（**三处同步**：manifest / 本文件 /
-// controllers/product_hover_controller.py 的 MODULE_VERSION）。
+// 与 __manifest__.py 的 version 保持一致（**两处同步**：manifest 是唯一来源；本文件保留一枚
+// 资源邮戳，用于自证"浏览器加载的 JS 是新的"。控制器不再手写版本——它用 `get_manifest()`
+// 自动读 manifest，详见 controllers/product_hover_controller.py）。
 // 排查「无浮层」时先看控制台的 assets 日志确认版本；接口还会回显服务端版本，
 // 两者不一致时缓存层会直接告警（见 product_hover_cache.js 的 checkServerVersion）。
 const MODULE_VERSION = "19.0.1.6.0";
@@ -105,7 +106,7 @@ console.info(`[sale_product_hover] assets loaded (${MODULE_VERSION})`);
  * - **新行**不碰订单——订单行还没落库，服务端按行 id 反查必然查不到——
  *   而是由 `_getProductHoverContext()` 给出 `{key, product_id}`，
  *   交给 `prefetchDraftHoverPayload()` **按 `product_id` 读产品**（标准 ORM）后在前端装配
- *   （卡片只展示产品侧信息，不含行上的数量 / 单价，所以不需要读行上的取值）；
+ *   （卡片只展示产品侧信息、不含任何价格，所以不需要读行上的取值）；
  * - 编辑态避让只针对「正在被内联编辑的**已保存**行」（`_isProductHoverBlockedByEdit()`）——
  *   Odoo 里 `Record.isInEdition` 对 `!resId` 恒为真，新行一加进来就是 `editedRecord`，
  *   旧版一刀切导致新增产品永远没有预览。
@@ -193,9 +194,10 @@ patch(ListRenderer.prototype, {
      * 预取当前页订单行的展示数据：模块级缓存按键去重，翻页 / 筛选后只请求新增行。
      * 悬停时只读缓存，因此不会为每次悬停发请求。
      *
-     * 已保存行按数据库 id 批量取；**尚未保存的新行**（刚新增的产品行）改送「草稿规格」，
-     * 让它在落库之前也能预览——新行数量 / 单价一变，签名就变，`onPatched` 会重新预取，
-     * 所以浮层内容始终跟着表单里的输入走。
+     * 已保存行按数据库 id 批量取；**尚未保存的新行**（刚新增的产品行）改送
+     * `_getProductHoverContext()` 给出的 `{key, product_id}`（卡片只展示产品侧信息、
+     * 不含价格，所以签名就是产品 id）：行的产品一换，签名就变，`onPatched` 会重新预取，
+     * 浮层内容始终跟着行里选中的产品走。
      */
     _prefetchProductHover() {
         if (!this._isProductHoverList()) {
@@ -573,7 +575,7 @@ patch(ListRenderer.prototype, {
             }
         } else {
             // 未保存的新行：按产品取数（产品数据已缓存时这一步是同步装配、不发请求）；
-            // 取值没变就命中缓存，变了才重新装配，保证浮层里的数量 / 单价跟着刚输入的内容走
+            // 产品没变就命中缓存，换了产品才重新装配，保证浮层内容跟着行里的产品走
             const context = this._getProductHoverContext(record);
             if (!context) {
                 debugInfo("[sale_product_hover] skip: 新行还没选产品（或为分节 / 备注行）");

@@ -4,6 +4,7 @@
 > L1 约束段每次加载必读；L2 踩坑档案按主题触发条件加载。
 >
 > 三件套之外的补充文档：[`README.md`](README.md)（怎么用）、[`CHANGELOG.md`](CHANGELOG.md)（改了什么）、
+> [`IMPLEMENTATION.md`](IMPLEMENTATION.md)（**实现说明**：架构 / 数据流 / 核心要点 / 难点 / 坑点速查）、
 > [`RETROSPECTIVE.md`](RETROSPECTIVE.md)（**开发复盘**：本次为什么走了弯路、排查方法论、后续优化建议）。
 > 本文只写「不能破坏什么」与「陷阱档案」，过程性结论不重复。
 
@@ -390,7 +391,9 @@
 | `static/src/xml/product_hover_templates.xml` | 浮层 QWeb 模板（字段布局与标签） |
 | `static/src/scss/product_hover.scss` | 浮层样式（选择器统一 `.o_sph_` 前缀，含窄屏媒体查询） |
 | `i18n/zh_CN.po` | 简体中文译文；含应用列表元数据条目（`base.module_sale_product_hover`），见根 `AGENTS.md` 4.8 |
-| `README.md` / `CHANGELOG.md` / `AGENTS.md` | 三件套文档 |
+| `README.md` / `CHANGELOG.md` / `AGENTS.md` | 三件套文档（怎么用 / 改了什么 / 不能破坏什么） |
+| `IMPLEMENTATION.md` | 实现说明：架构、数据流、核心要点、难点、坑点（现象 / 原因 / 规避） |
+| `RETROSPECTIVE.md` | 开发复盘：过程、方法论、自校验脚本与冒烟清单 |
 
 ---
 
@@ -509,8 +512,9 @@
   整份重写缓存模块时漏掉一个导出就会在悬停时抛 `xxx is not a function`
   （`19.0.1.3.1` 的回归），而 `node --check` 查不出来。
 - `CHANGELOG.md` 的版本说明（变更 / 影响 / 文档）
-- 本 `AGENTS.md` 的相关约束（若涉及行为变更）
+- 本 `AGENTS.md` 的相关约束（若涉及行为变更；踩坑档案新增条目）
 - `README.md` 的功能说明（若涉及用户可见功能）
+- `IMPLEMENTATION.md` 的实现说明（若涉及架构 / 数据流 / 核心要点变化；新增坑点要进「坑点档案」表）
 
 版本号建议：
 - 破坏性变更或架构调整：升第二位，如 `19.0.2.0.0`

@@ -234,7 +234,15 @@ odoo -d <db> -u sale_product_hover --stop-after-init   # 代码改动后升级
 
 ### 后续维护
 
-- **开发过程复盘见 [`RETROSPECTIVE.md`](RETROSPECTIVE.md)**：本次开发的重点 / 难点 / 踩坑详录与后续优化建议（含可复用的自校验脚本与冒烟清单）。
+- **文档索引**（四件套，各有分工，改代码前先挑对应的看）：
+
+  | 文档 | 看什么 |
+  |------|--------|
+  | [`README.md`](README.md)（本文） | 怎么用：功能、字段、安装、验证清单 |
+  | [`CHANGELOG.md`](CHANGELOG.md) | 改了什么：逐版本「变更 / 影响 / 文档」 |
+  | [`AGENTS.md`](AGENTS.md) | 不能破坏什么：约束 + 踩坑档案 + 文件职责 |
+  | [`IMPLEMENTATION.md`](IMPLEMENTATION.md) | 为什么这么写：架构、数据流、核心要点、难点、坑点（现象 / 原因 / 规避） |
+  | [`RETROSPECTIVE.md`](RETROSPECTIVE.md) | 走弯路的过程复盘、方法论与自校验 / 冒烟脚本 |
 - 增减浮层字段：改 `models/sale_order_line.py` 的 payload 与 `static/src/xml/product_hover_templates.xml`（必要时同步 po）。
 - 调整延迟 / 位置 / 样式：`static/src/js/product_hover_list_patch.js` 顶部常量与 `static/src/scss/product_hover.scss`。
 - 关闭触屏长按：删掉 `product_hover_list_patch.js` 里 `touchstart` / `touchmove` / `touchend` / `touchcancel` 四个监听与对应方法即可（互不影响）。
