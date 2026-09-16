@@ -16,14 +16,31 @@
   文档中出现的 `<addons-path>`、`<db>`、`<module>`、`<version>` 均为占位符，按实际部署值替换，不要写死本机路径。
 - **本仓库不含 Odoo 源码与数据库**，模块无法在仓库内独立运行；改动需挂到目标 Odoo 环境安装/升级后验证，
   交付时给出「待验证清单」。
-- **查阅 Odoo 源码（按优先级顺序查找，命中即停）**：
-  1. **本项目同级目录下的 `odoo`**：即 `<本仓库父目录>/odoo`（本机为 `../odoo`，绝对路径示例
-     `/home/edwin/Code/odoo`）。这是首选位置，通常由开发者手动克隆，**优先用它**。
-  2. `/tmp/odoo`：临时克隆位置，作为第二选择。
-  3. 以上都不存在时，再自行克隆到 `/tmp/odoo`：
-     `cd /tmp && git clone --depth 1 -b 19.0 git@github.com:odoo/odoo.git`。
-  > 每个会话开始查阅源码前，先按上述顺序 `ls` 确认一次；**不要**每次都直连 GitHub / curl，
-  > 以免触发限流，也不要重复克隆已经存在的目录。
+- **查阅 Odoo 源码：一律在 Odoo 容器里查，不要另外下载或克隆一份**。本地跑的 Odoo 就是官方镜像
+  （`odoo:19.0`），源码就在镜像里，也正是**运行时真正加载的那份**（`odoo.conf` 的 `addons_path` 指向它），
+  版本必然与本地运行/服务器一致：
+  1. 核心框架：`/usr/lib/python3/dist-packages/odoo/`（`orm/`、`fields/`、`http.py`、`cli/`、`tools/`，
+     标准模块在 `odoo/addons/`）。
+  2. 另一份 addons 包：`/usr/lib/python3/dist-packages/addons/`（`account`、`sale` 等）。
+  3. 仓库自己的模块：`/mnt/extra-addons/`（= 本仓库，宿主机上直接看）。
+
+  查法（不必进交互式 shell，一条命令即可）：
+
+  ```bash
+  docker exec odoo19 grep -rn "def _compute_display_name" /usr/lib/python3/dist-packages/odoo/orm/
+  docker exec odoo19 sed -n '1,60p' /usr/lib/python3/dist-packages/odoo/orm/models.py
+  docker exec odoo19 grep -rn "t-inherit" /usr/lib/python3/dist-packages/odoo/addons/sale/views/ | head
+  task bash                      # 要连着看多处 / 用 less 时，进容器里查
+  ```
+
+  想在编辑器里读、跳转、打断点（Pylance / debugpy）：跑一次 `task odoo-src`，它把镜像里的核心 `.py`
+  导到 `.dev/.cache/odoo-src`（约 160MB，从镜像里取、不联网、已 gitignore；`task odoo-src-clean` 删掉），
+  `.vscode/settings.json` 与 `launch.json` 已指向那里；或用
+  `Remote-Containers: Attach to Running Container` 直接浏览容器内目录。
+
+  > 每个会话第一次查源码前，先 `docker exec odoo19 ls /usr/lib/python3/dist-packages/odoo` 确认容器在跑
+  > （没在跑就 `task up`）；**不要**克隆 `../odoo` / `/tmp/odoo`，也不要每次直连 GitHub（限流）。
+  > 要换 Odoo 版本就改 `.dev/compose.yml` 里的镜像 tag，源码随之固定，再 `task rebuild`。
 - 模块目录骨架：
 
 ```text
@@ -239,7 +256,7 @@ msgstr ""
 - 结构变更必须写 `migrations/<version>/pre-migration.py`（改名、改类型、数据回填），并在 CHANGELOG 说明影响。
 - 编号 / 流水类字段：创建时一次性快照写入，后续不因主数据变化而重算；作废、取消、删除不回收已用号。
 
-### 已核实的 Odoo 19 API 事实（对照 `odoo/odoo@19.0` 源码）
+### 已核实的 Odoo 19 API 事实（对照镜像内 `/usr/lib/python3/dist-packages/odoo`，即 `odoo/odoo@19.0`）
 
 - `name_get()` / `name_search()` 已从核心移除，只剩 `_compute_display_name()` 与 `_search_display_name(operator, value)`（后者返回 `Domain` 对象）。
 - 名称搜索走 `_search_display_name()`，可在其中 OR/AND 进自定义字段；否定操作符（`not ilike` 等）必须取交集。
@@ -247,7 +264,7 @@ msgstr ""
 - `_sql_constraints` 已废弃，改用模型属性：`_xxx_unique = models.Constraint("UNIQUE(field)", "提示")`、`models.Index(...)`、`models.UniqueIndex(...)`。
 - `web_search_read(domain, specification, offset, limit, order, count_limit)` 定义在 `web` 模块的 `_inherit='base'` 上，所有模型可用。
 - 视图继承：扩展祖先视图（extension）对其所有 primary 子视图生效，改列表要继承基础列表而非某个 primary 子视图。
-- 改动前先核对目标结构：查阅 Odoo 源码按优先级 `../odoo`（本项目同级目录，首选）→ `/tmp/odoo`（次选）→ 都不存在时克隆到 `/tmp/odoo`（`cd /tmp && git clone --depth 1 -b 19.0 git@github.com:odoo/odoo.git`），避免每次直连 GitHub 触发限流、也避免重复克隆。详见第 2 节「查阅 Odoo 源码」。
+- 改动前先核对目标结构：查 Odoo 源码一律在容器里（`docker exec odoo19 grep -rn … /usr/lib/python3/dist-packages/odoo/…`，或 `task bash` 进去看），**不要**克隆 `../odoo` / `/tmp/odoo`、也不要直连 GitHub。详见第 2 节「查阅 Odoo 源码」。
 
 ## 6. 前端规范
 

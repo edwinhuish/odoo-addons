@@ -33,6 +33,7 @@ GOBIN="$HOME/.local/bin" go install github.com/go-task/task/v3/cmd/task@latest
 .dev/
 |-- compose.yml              # Odoo + PostgreSQL 编排（唯一入口；数据绑定挂载到 .dev/data）
 |-- odoo.conf                # 容器内配置（挂到 /etc/odoo/odoo.conf）
+|-- .gitignore               # 本目录的不入库规则（data/、backups/、.env、.cache/）
 |-- docker/                  # 镜像与容器内入口（构建上下文就是这个子目录）
 |   |-- Dockerfile.odoo      #   odoo 镜像：官方 odoo:19.0 + watchdog / debugpy / 中文字体
 |   |-- Dockerfile.pg        #   pg 镜像：官方 postgres:16 + 共用入口脚本（支持 PUID/PGID）
@@ -42,8 +43,8 @@ GOBIN="$HOME/.local/bin" go install github.com/go-task/task/v3/cmd/task@latest
 |   |-- i18n-reload.sh       #   强制刷新已有译文（-u 不覆盖旧值）
 |   |-- deploy.sh            #   rsync 发布到服务器
 |   `-- check_repo.py        #   仓库自检（也用于 pre-commit）
-|-- data/                    # 运行时数据（gitignore）：data/odoo = filestore、data/postgres = 数据库
-`-- backups/                 # db-sync.sh 的备份 zip（gitignore）
+|-- data/                    # 运行时数据（不入库）：data/odoo = filestore、data/postgres = 数据库
+`-- backups/                 # db-sync.sh 的备份 zip（不入库）
 ```
 
 ---
@@ -79,11 +80,33 @@ GOBIN="$HOME/.local/bin" go install github.com/go-task/task/v3/cmd/task@latest
 | `/var/lib/odoo` | 绑定挂载 **`.dev/data/odoo`** | filestore / sessions（图片、附件） |
 | `/var/lib/postgresql/data` | 绑定挂载 **`.dev/data/postgres`** | 数据库（删掉即重置；initdb 要求目录为空） |
 | `/usr/local/bin/odoo-debug` | 镜像内 | `debugpy` 包装脚本，固定路径省得记 |
+| `/usr/lib/python3/dist-packages/odoo` | 镜像内 | **Odoo 核心源码**（`orm/`、`fields/`、`http.py`、标准模块 `addons/`） |
+| `/usr/lib/python3/dist-packages/addons` | 镜像内 | 另一份 addons 包（`account`、`sale` …） |
 
 **没有任何具名 volume**（`docker volume ls` 里看不到本项目），运行时可持久化的东西都在 `.dev/data/` 下。
 目录由 `task up` 用当前用户创建，容器里的 `run-as.sh` 再把 `CHOWN_SRC` 列出的目录属主对齐到 `PUID:PGID`（属主已对就跳过）。
 
 Odoo 核心 addons 由官方镜像自动加入，`odoo.conf` 里**不用**写；仓库里的模块优先级高于核心。
+
+### 读 Odoo 核心源码：就在容器里，不要另存一份
+
+仓库**不含** Odoo 源码，也不需要 `../odoo` 那样的一份本地克隆——镜像里那份才是运行时真正加载的
+（`odoo.conf` 的 `addons_path` 指向它），版本与本地运行/服务器一致：
+
+```bash
+docker exec odoo19 grep -rn "def _compute_display_name" /usr/lib/python3/dist-packages/odoo/orm/
+docker exec odoo19 sed -n '1,60p' /usr/lib/python3/dist-packages/odoo/orm/models.py
+task bash        # 要连着看多处 / 用 less，就进容器里查
+```
+
+要在**编辑器里跳转、打断点**（Pylance / debugpy）：跑一次 `task odoo-src`，把镜像里的核心 `.py`
+导出到 `.dev/.cache/odoo-src`（约 160MB，从镜像里取、不联网、已 gitignore；不想要了 `task odoo-src-clean`，
+改了镜像 tag 重跑一次即可刷新）。`.vscode/settings.json` 的 `python.analysis.extraPaths` 与
+`launch.json` 的 `pathMappings` 都已指向该目录，所以单步进核心代码会落到本地副本上。
+XML / QWeb 模板与静态资源仍按上面的方式在容器里查。
+
+> 这份副本是**从镜像里拷出来的**，不是下载：它跟本地/服务器运行时用的源码是同一份（同一个 tag），
+> 所以不会再出现「本机 clone 的 odoo 和镜像里的版本对不上」这类问题。
 
 容器进程以 **`PUID` / `PGID`**（默认 1000:1000）运行。`.dev/docker/run-as.sh` 认五个运行时变量
 ——`PUID`、`PGID`、`USER`（目标用户名，默认 `odoo`；要换名字在 `.dev/.env` 里设 **`ODOO_USER`**，
@@ -163,6 +186,7 @@ Odoo 核心 addons 由官方镜像自动加入，`odoo.conf` 里**不用**写；
 | Odoo：安装模块（-i） | `task install -- <模块...>` |
 | Odoo：跑测试 | `task test -- <模块>`（先重建 `test` 库；默认只跑这几个模块的 tag，不跑 base 全套，要自定义就自己传 `--test-tags=`） |
 | Odoo：交互式 shell / 进容器 / psql | `task shell` / `bash` / `psql` |
+| Odoo：导出核心源码（给编辑器跳转） | `task odoo-src`（从镜像取，约 160MB，落在 `.dev/.cache/odoo-src`） |
 | Odoo：调试启动 | `task debug`（挂 5678，再按 F5 attach） |
 | Odoo：任意子命令 | `task odoo -- db dump dev /tmp/x.zip`（**子命令必须写在最前面**，见第 9 节） |
 | 数据：拉服务器数据 | `SSH_HOST=... REMOTE_DB=prod task pull` |
@@ -214,7 +238,7 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 ```
 
 脚本内部走 Odoo 的 zip 备份（含 filestore），装载时 `-n` 做 `neutralize`（禁邮件 / 禁外部凭据），
-备份文件落在 `.dev/backups/`（已 gitignore）。
+备份文件落在 `.dev/backups/`（不入库，规则在 `.dev/.gitignore`）。
 
 ---
 
@@ -224,7 +248,7 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 
 | 维度 | 怎么对齐 |
 |------|----------|
-| Odoo 版本 | 镜像 tag 与服务器一致（当前 `odoo:19.0`）；本地要读源码就用宿主机同级的 `../odoo`（AGENTS.md 源码优先级第 1 条） |
+| Odoo 版本 | 镜像 tag 与服务器一致（当前 `odoo:19.0`）；**源码就在镜像里**，容器内查即可，不用另存 `../odoo`（见第 2 节「读 Odoo 核心源码」） |
 | Python 依赖 | 基础镜像自带 Odoo 官方依赖；服务器额外补过的包，加进 `.dev/docker/Dockerfile.odoo` 再 `task rebuild` |
 | 数据 | `task pull`（zip 含 filestore） |
 | 配置差异 | 容器内刻意不同：`workers = 0`（热重载要求）、`http_interface = 0.0.0.0`（宿主机要访问）。涉及 cron / 多进程行为的改动仍要在服务器复核 |
@@ -248,7 +272,7 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 - 分支 `feat/<模块>-<要点>`、`fix/<模块>-<要点>`；commit 用 `fix(product_image): ...` 作用域前缀，
   与 TODO.md 任务编号对应（AGENTS.md 要求改动同步 CHANGELOG / README）
 - **多版本并行**：`git worktree add ../wt-old <分支>` → 在 worktree 的 `.dev/` 下建一个 `.env`
-  （已 gitignore，不用动被跟踪的 `compose.yml`），换个工程名与端口即可同时跑两份：
+  （`.dev/.env` 不入库，见 `.dev/.gitignore`；不用动被跟踪的 `compose.yml`），换个工程名与端口即可同时跑两份：
 
   ```dotenv
   COMPOSE_PROJECT_NAME=odoo-addons-dev-b   # 工程名变了，容器/网络名跟着独立（已无卷）

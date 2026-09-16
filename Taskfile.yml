@@ -190,6 +190,47 @@ tasks:
       - 'ODOO_CMD="/usr/local/bin/odoo-debug --dev=all -d {{.DEV_DB}}" {{.COMPOSE}} up -d odoo'
       - 'echo "[信息] debugpy 已在 0.0.0.0:5678 监听 → F5 选「Odoo：attach 到容器」"'
 
+  odoo-src:
+    desc: 导出镜像里的 Odoo 核心源码（.py）到 .dev/.cache/odoo-src，给编辑器跳转用（从镜像取，不联网）
+    deps: [docker-check]
+    cmds:
+      - |
+        set -e
+        dest=.dev/.cache/odoo-src
+        # 镜像名由 compose 的工程名推导（odoo 服务的镜像就是 <project>-odoo）；
+        # 注意别用 `config --images odoo`：那个位置的服务名参数会被忽略，返回多行。
+        img=$({{.COMPOSE}} config --format json \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"] + "-odoo")')
+        if ! docker image inspect "$img" >/dev/null 2>&1; then
+            echo "[错误] 镜像 $img 还不存在，先跑 task up（首次会构建）或 task rebuild" >&2
+            exit 1
+        fi
+        mkdir -p .dev/.cache
+        # 清旧副本走一次性容器：宿主机给 rm 挂了「批量删除保护」垫片（本机就有，>500 文件直接拒绝），
+        # 宿主机 rm 删不掉这 1.7 万个文件（与 task reset 同一招）。.dev/.cache 先建好，
+        # 免得 Docker 把不存在的挂载源建成 root 属主、后面宿主机写不进去。
+        docker run --rm -u 0 -v "$PWD/.dev/.cache:/cache" alpine sh -c 'rm -rf /cache/odoo-src'
+        mkdir -p "$dest"
+        # 跑一次性容器从镜像里取（不依赖 stack 是否在跑、也不用先建容器）；
+        # --entrypoint sh 是为了绕开镜像自带的 run-as.sh + 官方 entrypoint，只执行这一条命令。
+        # 只取 .py（约 160MB / 1.7 万个文件）：核心框架 odoo/ 与两个 addons 包都覆盖；
+        # XML / JS / 静态资源留在镜像里按需查（全拷 1.5GB 没必要）
+        docker run --rm --entrypoint sh "$img" -c \
+            'cd /usr/lib/python3/dist-packages && find odoo addons -name "*.py" -not -path "*__pycache__*" -print0 | tar --null -T - -cf -' \
+            | tar -C "$dest" -xf -
+        echo "[信息] 已导出 → $dest（$(find "$dest" -name '*.py' | wc -l) 个 .py，$(du -sh "$dest" | cut -f1)）"
+        echo "[信息] .vscode/settings.json 的 python.analysis.extraPaths 已指向这里；改镜像 tag 后重跑本任务即可刷新"
+        echo "[信息] 不想要这份副本：task odoo-src-clean"
+
+  odoo-src-clean:
+    desc: 删掉 task odoo-src 导出的核心源码副本（.dev/.cache/odoo-src）
+    deps: [docker-check]
+    cmds:
+      - |
+        # 同样走容器删：宿主机 rm 有「批量删除保护」，删不动这 1.7 万个文件
+        docker run --rm -u 0 -v "$PWD/.dev/.cache:/cache" alpine sh -c 'rm -rf /cache/odoo-src'
+        echo "[信息] 已删除 .dev/.cache/odoo-src"
+
   bash:
     desc: 进 odoo 容器（以 PUID/PGID 身份，与 Odoo 进程一致）
     aliases: [sh]

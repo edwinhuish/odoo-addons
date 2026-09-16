@@ -12,6 +12,11 @@
         {
           "localRoot": "${workspaceFolder}",
           "remoteRoot": "/mnt/extra-addons"
+        },
+        // Odoo 核心源码只在镜像里；跑过 `task odoo-src` 后单步进核心会落到本地副本上
+        {
+          "localRoot": "${workspaceFolder}/.dev/.cache/odoo-src",
+          "remoteRoot": "/usr/lib/python3/dist-packages"
         }
       ],
       "justMyCode": false,
