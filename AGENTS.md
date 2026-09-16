@@ -12,7 +12,8 @@
 ## 2. 仓库约定
 
 - 仓库根目录（`<addons-path>`）**即 `addons_path`**：一个模块一个一级目录，根目录只放文档与统一开发入口
-  （`Taskfile.yml`）；本地开发环境（compose + 辅助脚本）在 `.dev/`，用法见 `DEV_WORKFLOW.md`。
+  （`Taskfile.yml`）；本地开发环境（compose + 辅助脚本）在 `.dev/`，用法见 `DEV_WORKFLOW.md`，
+  搭建过程、方案选型与踩坑总结见 `DEV_ENV_SETUP.md`。
   文档中出现的 `<addons-path>`、`<db>`、`<module>`、`<version>` 均为占位符，按实际部署值替换，不要写死本机路径。
 - **本仓库不含 Odoo 源码与数据库**，模块无法在仓库内独立运行；改动需挂到目标 Odoo 环境安装/升级后验证，
   交付时给出「待验证清单」。
