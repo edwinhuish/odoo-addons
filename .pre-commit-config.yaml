@@ -1,0 +1,34 @@
+# ---------------------------------------------------------------------------
+# 提交前质量门禁（本地安装一次即可）
+#
+#   pipx install pre-commit   # 或 uv tool install pre-commit
+#   pre-commit install        # 之后每次 git commit 自动跑
+#   pre-commit run --all-files
+#
+# 复用 AGENTS.md 4.6 的自校验脚本：重复 msgid / 元数据失同步 / XML / JS 语法 / 残留中文
+# 这样「译文写错导致整份 po 导不进去」之类的问题在本地就拦住，不会等到服务器上才发现。
+# ---------------------------------------------------------------------------
+
+repos:
+  - repo: local
+    hooks:
+      - id: repo-self-check
+        name: 仓库自检（po/manifest/XML/JS）
+        entry: python3 .dev/scripts/check_repo.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^.*/i18n/.*\.po$
+      - id: end-of-file-fixer
+        exclude: ^.*/i18n/.*\.po$
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-json
+        exclude: \.vscode/
+      - id: detect-private-key

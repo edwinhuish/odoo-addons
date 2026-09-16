@@ -1,0 +1,27 @@
+# ---------------------------------------------------------------------------
+# PostgreSQL 镜像：官方 postgres:16 + 共用入口脚本
+#
+# 为什么要多这一层：官方镜像以 root 起、内部 gosu 到固定的 postgres(999)，数据目录属主是 999；
+# 而我们要把数据直接挂在 .dev/data/postgres（宿主机当前用户可读写删），所以改成
+# 「root 起 → run-as.sh 把 postgres 用户改成 PUID:PGID、chown 数据目录 → setpriv 降权」。
+#
+# 官方镜像里 /var/lib/postgresql 与 /var/run/postgresql 本来就是 1777/2777 世界可写，
+# 所以 postgres 以任意 uid 运行都没问题（只要 /etc/passwd 里有该 uid —— run-as 负责）。
+#
+# 构建上下文是 .dev/docker/（本文件所在目录，见 compose.yml 的 build.context），
+# 构建与重建：`task rebuild`。
+# 改本文件要 `task rebuild`；改 PUID/PGID 只是运行时行为，`task up` 即可。
+# ---------------------------------------------------------------------------
+
+FROM postgres:16
+
+COPY run-as.sh /run-as.sh
+RUN chmod +x /run-as.sh
+
+# 必须以 root 启动：要改 uid/gid、chown 数据目录，之后由 run-as.sh 降权
+USER root
+
+# 两段 ENTRYPOINT：run-as.sh 降权 → 官方 docker-entrypoint.sh 收尾
+# （initdb / 建用户建库 / 最后 exec postgres）。compose 的 command 就是
+# `postgres -c max_connections=100 ...` 这类真正的启动参数。
+ENTRYPOINT ["/run-as.sh", "/usr/local/bin/docker-entrypoint.sh"]

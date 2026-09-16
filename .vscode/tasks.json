@@ -1,0 +1,115 @@
+{
+  // 命令实现都在根目录 Taskfile.yml（等价于命令行 `task <name>`）；
+  // PATH 里补上 ~/.local/bin，保证 shell rc 没配也能找到 task
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Odoo：启动",
+      "type": "shell",
+      "command": "task up",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "Odoo：停止",
+      "type": "shell",
+      "command": "task down",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Odoo：重启",
+      "type": "shell",
+      "command": "task restart",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Odoo：日志（tail -f）",
+      "type": "shell",
+      "command": "task logs",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Odoo：启动并挂调试端口 5678",
+      "type": "shell",
+      "command": "task debug",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Odoo：升级模块（-u）",
+      "type": "shell",
+      "command": "task update -- ${input:modules}",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Odoo：安装模块（-i）",
+      "type": "shell",
+      "command": "task install -- ${input:modules}",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Odoo：跑测试",
+      "type": "shell",
+      "command": "task test -- ${input:modules}",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Odoo：交互式 shell",
+      "type": "shell",
+      "command": "task shell",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Odoo：进容器（bash）",
+      "type": "shell",
+      "command": "task bash",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "数据：从服务器拉取并装载",
+      "type": "shell",
+      "command": "task pull",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "译文：强制刷新 zh_CN",
+      "type": "shell",
+      "command": "task i18n -- zh_CN ${input:modules}",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "自检：仓库检查",
+      "type": "shell",
+      "command": "task check",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    },
+    {
+      "label": "任务：列出全部（task --list）",
+      "type": "shell",
+      "command": "task --list",
+      "options": { "cwd": "${workspaceFolder}", "env": { "PATH": "${env:PATH}:${env:HOME}/.local/bin" } },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "modules",
+      "type": "promptString",
+      "description": "模块名，多个用空格分隔",
+      "default": "product_image"
+    }
+  ]
+}

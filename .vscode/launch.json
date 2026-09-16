@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // 先跑任务「Odoo：启动并挂调试端口 5678」，再按 F5
+      "name": "Odoo：attach 到容器（推荐）",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "127.0.0.1", "port": 5678 },
+      // 容器里仓库挂在 /mnt/extra-addons，不映射断点不会生效
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "/mnt/extra-addons"
+        }
+      ],
+      "justMyCode": false,
+      "redirectOutput": true
+    }
+  ]
+}

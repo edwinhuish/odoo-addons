@@ -10,14 +10,19 @@
 
 ## 目录结构
 
-仓库根目录**即 Odoo 的 `addons_path`**，一个模块一个一级目录，根目录只放文档。
+仓库根目录**即 Odoo 的 `addons_path`**，一个模块一个一级目录，根目录只放文档与统一开发入口
+（`Taskfile.yml`）；开发环境相关的东西一律收进 `.dev/`，编辑器配置收进 `.vscode/`。
 
 ```text
 odoo-addons/           # 本目录即 addons_path
-|-- README.md          # 本文件：项目说明与上手指南
-|-- AGENTS.md          # AI 助手 / 开发者的行为规范与关键约束
-|-- TODO.md            # 需求唯一入口，任务在这里流转
-|-- sale_order_no/     # 订单编号（已迁入）
+|-- README.md           # 本文件：项目说明与上手指南
+|-- AGENTS.md           # AI 助手 / 开发者的行为规范与关键约束
+|-- TODO.md             # 需求唯一入口，任务在这里流转
+|-- DEV_WORKFLOW.md     # 本地开发与热重载工作流（怎么跑、怎么调、怎么拉数据）
+|-- Taskfile.yml        # 统一开发命令入口（task --list）
+|-- .dev/               # 本地开发环境：compose.yml + odoo.conf + docker/（镜像）+ scripts/（脚本）
+|-- .vscode/            # 调试 / 任务 / 设置 / 推荐扩展配置
+|-- sale_order_no/      # 订单编号（已迁入）
 `-- .../               # 后续模块按同一结构新增
 ```
 
@@ -61,6 +66,23 @@ odoo-addons/           # 本目录即 addons_path
 ---
 
 ## 快速开始
+
+**本地开发（推荐）**：Odoo 与 PostgreSQL 跑在 `.dev/compose.yml` 里，仓库直接挂进容器，
+代码与调试器都留在宿主机——不连远程容器，改完代码即生效（`--dev=all` 负责热重载）。
+
+```bash
+# 首次：装 go-task（单文件二进制，不需要 sudo；装了 go 就是这一行）
+GOBIN="$HOME/.local/bin" go install github.com/go-task/task/v3/cmd/task@latest
+export PATH="$HOME/.local/bin:$PATH"
+
+task up        # 启动 → http://localhost:8069
+task           # 列出所有命令（up / logs / update / test / pull / check / deploy ...）
+```
+
+VS Code 里等价入口是任务面板（`Ctrl+Shift+B`）——它调的是同一个 `Taskfile.yml`。
+完整流程见 [`DEV_WORKFLOW.md`](DEV_WORKFLOW.md)。
+
+下面几节是**服务器侧**的安装 / 升级步骤（本地验收通过后一次性同步过去，见 `task deploy`）。
 
 ### 1. 挂到 Odoo
 

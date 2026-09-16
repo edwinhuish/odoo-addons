@@ -112,6 +112,16 @@ pnpm-debug.log*
 *.cfg.local
 odoo.conf.local
 
+# ----------------------------------------------------------------------------
+# 开发环境（.dev/）
+# compose / 容器内配置 / 脚本入库共享；运行时数据与本地覆盖不入库
+# ----------------------------------------------------------------------------
+.dev/backups/
+.dev/data/
+.dev/.env
+# 上面的 `*.conf` 是为了挡服务器配置；这份容器内配置要入库
+!.dev/odoo.conf
+
 
 # ----------------------------------------------------------------------------
 # 操作系统生成文件
@@ -143,7 +153,7 @@ $RECYCLE.BIN/
 
 # ----------------------------------------------------------------------------
 # 编辑器与 IDE
-# 团队 IDE 不统一，个人配置各自忽略；共享配置（如 .vscode/extensions.json）需显式放行
+# 团队 IDE 不统一，个人配置各自忽略；容器开发用的 .vscode 实际配置需显式放行
 # ----------------------------------------------------------------------------
 .idea/
 *.iml
@@ -151,11 +161,12 @@ $RECYCLE.BIN/
 *.ipr
 out/
 
+# 开发容器用的实际配置需要共享（路径写死为容器内路径）
 .vscode/*
 !.vscode/extensions.json
-!.vscode/settings.default.json
-!.vscode/launch.default.json
-!.vscode/tasks.default.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
 
 *.swp
 *.swo

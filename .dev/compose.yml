@@ -1,0 +1,140 @@
+# ---------------------------------------------------------------------------
+# Odoo 19 扩展开发环境：一个 Odoo 进程 + 一个 PostgreSQL
+#
+# 编辑器**不连容器**：VS Code 直接用本机打开仓库，改代码即时生效（仓库挂进容器了）。
+# 日常走根目录的统一入口（见 Taskfile.yml）：
+#   task up        # 启动 → http://localhost:8069（首次自动建库装 base）
+#   task logs      # 跟日志（Odoo 日志走 stdout）
+#   task down      # 停止（数据保留）；task reset = 停止 + 清空 .dev/data
+#
+# 热重载：容器里装了 watchdog，`--dev=all` 下改 .py 会原地重启进程；
+#         改视图 XML / QWeb 刷浏览器即可（见 DEV_WORKFLOW.md 第 3 节）。
+#
+# **不使用任何具名 volume**：需要持久化的东西全部直接挂在 .dev/ 下，随时可看可删：
+#   .dev/data/odoo      → /var/lib/odoo              filestore / sessions
+#   .dev/data/postgres  → /var/lib/postgresql/data   数据库（删掉即重置）
+#   .dev/backups        → 由 scripts/db-sync.sh 写入  数据库备份 zip
+#   .dev/logs?          没有；Odoo 日志走 stdout，用 `task logs` 看
+# 这些目录由 `task up` 在启动前用**当前用户**创建（所以属主是你），容器里的 run-as.sh
+# 再把 CHOWN_SRC 列出的目录属主对齐到 PUID:PGID（见 docker/run-as.sh）。
+#
+# 路径说明：compose 以本文件所在目录（.dev/）为工程目录，所以 `../` 就是仓库根目录；
+# 镜像与入口脚本都在 .dev/docker/，构建上下文就取那个子目录（只含三个小文件，
+# 数据目录不在里面，rebuild 不需要打包几十 MB 的运行时数据）。
+#
+# `.dev/.env` 会被 compose 自动加载，用来覆盖下面这些值——**并行跑第二份**（worktree /
+# 分支对比）时不必改这个被跟踪的文件，建个 .env 就行（.env 已 gitignore）：
+#   COMPOSE_PROJECT_NAME=odoo-addons-dev-b
+#   ODOO_CONTAINER=odoo19-b
+#   DB_CONTAINER=odoo19-db-b
+#   ODOO_HTTP_PORT=8169
+#   ODOO_DEBUG_PORT=5679
+#   PG_PORT=5433
+#   PUID=1001              # 容器内进程身份，运行时生效（task up 即可，不用 rebuild）
+#   PGID=1001
+#   ODOO_USER=odoo         # 容器内目标用户名（同时也是数据库用户名）。
+#                          # 注意别写 USER=xxx：宿主机 shell 的 USER 会被 compose 读到
+# ---------------------------------------------------------------------------
+
+# 固定工程名，保证容器/网络命名稳定（已无卷依赖，改工程名只影响实例归属）
+name: ${COMPOSE_PROJECT_NAME:-odoo-addons-dev}
+
+services:
+
+  odoo:
+    container_name: ${ODOO_CONTAINER:-odoo19}
+    build:
+      context: docker
+      # 镜像内容见 docker/Dockerfile.odoo（官方 odoo:19.0 + watchdog / debugpy / 中文字体）
+      dockerfile: Dockerfile.odoo
+    # 注意：这里**不能**写 user: —— 容器要以 root 启动，由 run-as.sh 按 PUID/PGID
+    # 改完数据目录属主后降权，进程最终身份才是 PUID:PGID（见 PUID/PGID 环境变量）
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${ODOO_HTTP_PORT:-8069}:8069"      # Odoo HTTP
+      - "${ODOO_DEBUG_PORT:-5678}:5678"     # debugpy（VS Code F5 attach）
+    environment:
+      # 数据库连接参数**不在**这里：官方 entrypoint 只在配置文件没写 db_* 时才补 CLI 参数，
+      # 而 odoo.conf 里已经写了 db_host / db_port / db_user / db_password。
+      # USER 既是数据库用户名，也是 docker/run-as.sh 的目标用户名。
+      # 这里刻意用 ODOO_USER 而不是 ${USER}：宿主机 shell 一般都会导出 USER（本机是 edwin），
+      # 直接 ${USER} 会把你的登录名带进容器（我们踩过：容器里被建了个 edwin 用户）。
+      USER: ${ODOO_USER:-odoo}
+      TZ: Asia/Shanghai
+      # 进程身份（LinuxServer.io 惯例）：run-as.sh 降权到这个 uid，并把 CHOWN_SRC 调成它的属主。
+      # 改这两个值只要 `task up` 重建容器，**不需要** `task rebuild`。
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      # run-as.sh 用：要归到 PUID:PGID 的绑定源目录（默认 $HOME，可写多个，空格分隔）。
+      # 这里就是挂载进来的 ./data/odoo。
+      CHOWN_SRC: /var/lib/odoo
+      # 孩子进程的 HOME（Odoo 会往里写 sessions 等）
+      HOME: /var/lib/odoo
+      # 配置走环境变量而不是命令行 -c：Odoo 的 CLI 分发只看 argv[0]
+      # （odoo/cli/command.py:119），`odoo -c conf db dump ...` 会被当成 server 命令而报
+      # "unrecognized parameters"。用 ODOO_RC 后所有子命令都能写成 `odoo db dump ...`。
+      ODOO_RC: /etc/odoo/odoo.conf
+    volumes:
+      - ../:/mnt/extra-addons              # 本仓库 = addons_path 的一段
+      - ./odoo.conf:/etc/odoo/odoo.conf:ro # 容器内配置（见该文件注释）
+      - ./data/odoo:/var/lib/odoo          # filestore / sessions（宿主机可见可删）
+    # 这条 command 会被镜像 ENTRYPOINT 里的官方 /entrypoint.sh 接住（它负责等库就绪再启动，
+    # 见 docker/Dockerfile.odoo）。调试时用 ODOO_CMD 覆盖（等价于 `task debug`）：
+    #   ODOO_CMD="/usr/local/bin/odoo-debug --dev=all -d dev" docker compose -f .dev/compose.yml up -d
+    command: ${ODOO_CMD:-odoo --dev=all -d dev}
+
+  db:
+    container_name: ${DB_CONTAINER:-odoo19-db}
+    build:
+      context: docker
+      # 镜像内容见 docker/Dockerfile.pg：官方 postgres:16 + 共用入口脚本 run-as.sh（支持 PUID/PGID）
+      dockerfile: Dockerfile.pg
+    # 同上：不能写 user:，由 run-as.sh 降权到 PUID:PGID
+    environment:
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: odoo
+      POSTGRES_DB: dev
+      TZ: Asia/Shanghai
+      # 只有 root 才能改数据目录属主、切身份
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      # 这一层的目标用户名用镜像自带账号（官方镜像里是 postgres，uid 999）
+      USER: postgres
+      # run-as.sh 用：要归到 PUID:PGID 的绑定源目录（默认 $HOME，可写多个，空格分隔）。
+      # 这里写 PGDATA 本身（= 挂载进来的 ./data/postgres）：它的属主存在宿主机磁盘上，
+      # 所以「属主已对就跳过」的判断才成立；写成上一级 /var/lib/postgresql 不行——
+      # 那是镜像层目录，每次重建容器属主都回到 postgres(999)，会次次递归 chown 整个 PGDATA。
+      # /var/run/postgresql 在官方镜像里本来就是 2777，不用管。
+      CHOWN_SRC: /var/lib/postgresql/data
+      # 孩子进程的 HOME
+      HOME: /var/lib/postgresql
+      # 官方 docker-entrypoint.sh 在镜像的 ENTRYPOINT 里（见 docker/Dockerfile.pg），
+      # 不需要在这里指定：这里的 command 就是给它收的参数。
+      # 只能是镜像里已生成的 locale：postgres:16 默认只有 C / C.UTF-8 / en_US.utf8，
+      # 写 zh_CN.UTF-8 会让 initdb 直接失败（invalid locale settings）
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data   # 数据目录（宿主机可见可删）
+    ports:
+      # 本机 psql / DBeaver 想连就留着；和宿主已有 PG 冲突时在 .dev/.env 里换 PG_PORT
+      - "${PG_PORT:-5432}:5432"
+    # 传给镜像 ENTRYPOINT 里那个官方 docker-entrypoint.sh 的参数（initdb / 建库之后再 exec 它）。
+    # 第一个词必须是 postgres：否则它不会把后面的 -c 当成 postgres 的参数。
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - fsync=off                        # 本地开发用：牺牲崩溃安全换导入/写入速度
+      - -c
+      - synchronous_commit=off
+      - -c
+      - log_min_duration_statement=1000  # 慢 SQL → docker compose logs db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo -d dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 12

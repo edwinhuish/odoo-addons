@@ -1,0 +1,46 @@
+# ---------------------------------------------------------------------------
+# Odoo 镜像：官方 odoo:19.0 + 三样开发用补充
+#
+#   watchdog        —— `--dev=all` 的 reload 依赖它（改 .py 自动原地重启）
+#   debugpy         —— VS Code F5 attach 断点；顺带包一个 /usr/local/bin/odoo-debug 固定入口
+#   fonts-noto-cjk  —— 中文 PDF 报表字体（sale_order_no 的报价单预览）
+#
+# 构建上下文是 .dev/docker/（本文件所在目录，见 compose.yml 的 build.context），
+# 构建与重建：`task rebuild`。
+# 改了本文件要 `task rebuild`；compose 只比对配置，不会自动重建镜像。
+#
+# 运行身份由 run-as.sh + PUID/PGID 决定（运行时），改 PUID/PGID 只要 `task up`，不用重建镜像。
+# ---------------------------------------------------------------------------
+
+FROM odoo:19.0
+
+# 容器以 root 启动（必须，此时才改得了属主、切得了身份），紧接着由 run-as.sh
+# 按运行时的 PUID / PGID 降权后再跑 Odoo：进程实际身份是 PUID:PGID（= 宿主机当前用户），
+# 所以容器写进挂载的仓库不会出现 Permission denied、也不会留下 root 属主文件。
+USER root
+
+# watchdog + debugpy。Debian 有 PEP668 保护，要显式 --break-system-packages
+# （官方 odoo 镜像里没有 venv，装到系统站点目录即可）
+RUN pip3 install --no-cache-dir --break-system-packages watchdog debugpy
+
+# 中文 PDF 报表字体（与 wkhtmltopdf 搭配，否则中文报表是方框）
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
+# 调试入口：固定路径，省得记 python / odoo 在镜像里的位置。
+# 监听 5678，对应 compose.yml 里发布的 ${ODOO_DEBUG_PORT:-5678}。
+RUN printf '%s\n' '#!/bin/sh' \
+      'exec python3 -m debugpy --listen 0.0.0.0:5678 odoo "$@"' \
+      > /usr/local/bin/odoo-debug \
+    && chmod +x /usr/local/bin/odoo-debug
+
+COPY run-as.sh /run-as.sh
+RUN chmod +x /run-as.sh
+
+# ENTRYPOINT 分成两段，拼成一条完整命令（不需要任何中转变量）：
+#   run-as.sh   先按 PUID/PGID 调属主、降权（root → 普通用户）
+#   官方 /entrypoint.sh 再收下 compose 的 command 当参数（等库就绪 + 起 odoo）
+# 官方 entrypoint 里的 check_config 只在配置文件没写 db_* 时才补 CLI 参数，
+# 我们的 odoo.conf 已经写了，所以它实际只负责 wait-for-psql + 启动。
+ENTRYPOINT ["/run-as.sh", "/entrypoint.sh"]

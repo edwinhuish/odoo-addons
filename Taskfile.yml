@@ -1,0 +1,272 @@
+# ---------------------------------------------------------------------------
+# 统一开发命令入口（Taskfile，https://taskfile.dev）
+#
+#   task                 # 列出所有命令
+#   task up              # 启动 → http://localhost:8069（首次自动建库装 base）
+#   task update -- product_image product_packing   # 升级模块（-u）
+#   task logs            # 跟日志
+#
+# 注意：带参数的任务必须用 `--` 分隔（task 把裸参数当任务名）：
+#   task update -- product_image      ✅
+#   task update product_image         ❌ Task "product_image" does not exist
+#
+# 同理，odoo 自己的子命令也必须写在最前面（Odoo 的 CLI 只看 argv[0]）：
+#   task odoo -- db dump dev /tmp/x.zip        ✅
+#   task odoo -- -c /etc/odoo/odoo.conf db ... ❌ 会被当成 server 命令
+# 配置统一走 compose 里的 ODOO_RC，所以这里不需要（也不该）传 -c。
+#
+# 安装 task：见 README「快速开始」（单文件二进制，不需要 sudo）。
+# 本文件只做调度；真正的实现分在 .dev/ 下：
+#   compose.yml        服务编排（唯一入口，本文件里的 COMPOSE 变量指向它）
+#   docker/           镜像与容器内入口（Dockerfile.odoo / Dockerfile.pg / run-as.sh）
+#   odoo.conf         容器内配置（挂到 /etc/odoo/odoo.conf）
+#   scripts/           拉数据 / 译文刷新 / 发布 / 自检（本文件各任务的实现）
+# ---------------------------------------------------------------------------
+
+version: '3'
+
+silent: true
+
+vars:
+  COMPOSE: docker compose -f .dev/compose.yml
+  # 配置文件路径由 compose 的 ODOO_RC 指定（见 .dev/compose.yml 的注释），命令行不用传 -c
+  # 库名：改这里就够（脚本与 compose 都跟着走）
+  DEV_DB: dev
+  TEST_DB: test
+
+tasks:
+
+  default:
+    desc: 列出所有命令
+    cmds:
+      - task --list
+
+  # ---------------------------------------------------------------------------
+  # 启动与状态
+  # ---------------------------------------------------------------------------
+
+  up:
+    desc: 启动 Odoo + PostgreSQL（首次会自动建库装 base）
+    deps: [docker-check, prepare-dirs]
+    cmds:
+      - '{{.COMPOSE}} up -d db'
+      - |
+        # Odoo 传 -d <库> 只会建一个**空库**、不会装 base（表都没有，页面 500），
+        # 所以这里先探一下 ir_module_module，没初始化过就先装 base（幂等）。
+        if ! {{.COMPOSE}} exec -T db psql -U odoo -d {{.DEV_DB}} -tAc \
+              "select 1 from ir_module_module limit 1" >/dev/null 2>&1; then
+            echo "[信息] 首次初始化数据库 {{.DEV_DB}}（装 base，约 30 秒）"
+            {{.COMPOSE}} run --rm -T odoo odoo -d {{.DEV_DB}} -i base --stop-after-init
+            {{.COMPOSE}} restart odoo >/dev/null 2>&1 || true
+        fi
+      - '{{.COMPOSE}} up -d {{.CLI_ARGS}}'
+      - 'echo "[信息] 已启动 → http://localhost:8069（库 {{.DEV_DB}}，建库密码 dev-admin-pwd）"'
+
+  rebuild:
+    desc: 重建镜像并重启（改了 .dev/docker/Dockerfile* 或 compose 的 build 段之后用）
+    deps: [docker-check, prepare-dirs]
+    cmds:
+      - '{{.COMPOSE}} up -d --build {{.CLI_ARGS}}'
+      - 'echo "[信息] 镜像已重建，容器已重启"'
+
+  down:
+    desc: 停止（数据保留）
+    deps: [docker-check]
+    cmds:
+      - '{{.COMPOSE}} down {{.CLI_ARGS}}'
+
+  reset:
+    desc: 停止并清空数据（删掉 .dev/data 下的数据库与 filestore，谨慎）
+    deps: [docker-check]
+    prompt: 这会删掉 .dev/data/{postgres,odoo} 里的数据库与附件，确定继续？
+    cmds:
+      - |
+        {{.COMPOSE}} down
+        # 用一次性 root 容器删，而不是宿主机的 rm：
+        #   ① 数据目录属主可能是 PUID（与宿主机用户不同），宿主机用户删不动
+        #   ② 有些环境给 rm 挂了“批量删除保护”的垫片（本机就有），会直接拒绝
+        #   容器里的 rm 不受这两条影响；删完顺手把目录重建回当前用户所有
+        docker run --rm -u 0 -v "$PWD/.dev/data:/data" alpine \
+            sh -c "rm -rf /data/postgres /data/odoo \
+                && mkdir -p /data/postgres /data/odoo \
+                && chown $(id -u):$(id -g) /data/postgres /data/odoo"
+      - 'echo "[信息] 已清空；下次 task up 重新建库"'
+
+  restart:
+    desc: 重启容器（默认 odoo）：task restart / task restart -- db（服务名要走 -- 分隔）
+    deps: [docker-check]
+    cmds:
+      - '{{.COMPOSE}} restart {{.CLI_ARGS | default "odoo"}}'
+
+  ps:
+    desc: 看容器状态
+    aliases: [status]
+    deps: [docker-check]
+    cmds:
+      - '{{.COMPOSE}} ps {{.CLI_ARGS}}'
+
+  logs:
+    desc: 跟日志（默认 odoo，日志走 stdout）
+    deps: [docker-check]
+    cmds:
+      - '{{.COMPOSE}} logs -f {{.CLI_ARGS | default "odoo"}}'
+
+  # ---------------------------------------------------------------------------
+  # 写代码
+  # ---------------------------------------------------------------------------
+
+  update:
+    desc: 升级模块（-u）：task update -- <模块...>
+    deps: [docker-check]
+    preconditions:
+      # 必须给模块名，且只接受模块名（挡掉 task update、task update -- --stop-after-init 这类误用）
+      - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[A-Za-z0-9_]+([[:space:],]+[A-Za-z0-9_]+)*$"'
+        msg: '没给模块名，已拒绝执行。用法：task update -- <模块...>（多个用空格分隔，例：task update -- product_image product_packing）'
+    cmds:
+      - |
+        mods=$(echo "{{.CLI_ARGS}}" | tr ' ' ',')
+        echo "[信息] 升级 ${mods}（库 {{.DEV_DB}}）"
+        {{.COMPOSE}} stop odoo >/dev/null 2>&1 || true
+        if {{.COMPOSE}} run --rm -T odoo odoo --dev=all -d {{.DEV_DB}} -u "$mods" --stop-after-init; then
+            {{.COMPOSE}} start odoo >/dev/null 2>&1 || true
+            echo "[信息] 完成，服务已恢复"
+        else
+            echo "[警告] 升级失败，odoo 保持停止；修好后跑 task up" >&2
+            exit 1
+        fi
+
+  install:
+    desc: 安装模块（-i）：task install -- <模块...>
+    deps: [docker-check]
+    preconditions:
+      - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[A-Za-z0-9_]+([[:space:],]+[A-Za-z0-9_]+)*$"'
+        msg: '没给模块名，已拒绝执行。用法：task install -- <模块...>（例：task install -- product_packing）'
+    cmds:
+      - |
+        mods=$(echo "{{.CLI_ARGS}}" | tr ' ' ',')
+        echo "[信息] 安装 ${mods}（库 {{.DEV_DB}}）"
+        {{.COMPOSE}} run --rm -T odoo odoo --dev=all -d {{.DEV_DB}} -i "$mods" --stop-after-init
+
+  test:
+    desc: 跑测试（重建 test 库）：task test -- <模块> [--test-tags=...]
+    deps: [docker-check]
+    preconditions:
+      # 第一段必须是模块名；后面的 --test-tags=... 之类原样透传给 odoo
+      - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[A-Za-z0-9_]"'
+        msg: '没给模块名，已拒绝执行。用法：task test -- <模块...> [额外 odoo 参数]（例：task test -- product_image）'
+    cmds:
+      - |
+        set -- {{.CLI_ARGS}}
+        mods="$1"; shift
+        # 默认只跑这几个模块的测试：不限定 tag 的话，-i 会连带跑 base 的全套测试
+        # （又慢又容易撞 Postgres 序列化冲突）。自己传了 --test-tags 就以你为准。
+        if [[ " $* " != *"--test-tags"* ]]; then
+            tags=""
+            for m in $(echo "$mods" | tr ',' ' '); do
+                tags="${tags:+$tags,}/$m"
+            done
+            set -- "$@" "--test-tags=$tags"
+        fi
+        echo "[信息] 重建测试库 {{.TEST_DB}} 并跑 ${mods}（$*）"
+        {{.COMPOSE}} run --rm -T odoo odoo db drop {{.TEST_DB}} >/dev/null 2>&1 || true
+        {{.COMPOSE}} run --rm -T odoo odoo --dev=all -d {{.TEST_DB}} -i "$mods" \
+            --test-enable --stop-after-init --log-level=test "$@"
+
+  odoo:
+    desc: 跑一次性 odoo 命令（不占用 8069）：task odoo -- -d dev -u x --stop-after-init / task odoo -- db dump dev /tmp/x.zip
+    aliases: [run]
+    deps: [docker-check]
+    preconditions:
+      # 这里传的是 odoo 自己的参数，允许以 - 开头
+      - sh: 'test -n "{{.CLI_ARGS}}"'
+        msg: '没给 odoo 参数，已拒绝执行。用法：task odoo -- <odoo 参数...>（例：task odoo -- -d dev -u product_image --stop-after-init）'
+    cmds:
+      - '{{.COMPOSE}} run --rm -T odoo odoo {{.CLI_ARGS}}'
+
+  debug:
+    desc: 启动并挂调试端口 5678（然后 VS Code 按 F5 attach）
+    deps: [docker-check]
+    cmds:
+      - 'ODOO_CMD="/usr/local/bin/odoo-debug --dev=all -d {{.DEV_DB}}" {{.COMPOSE}} up -d odoo'
+      - 'echo "[信息] debugpy 已在 0.0.0.0:5678 监听 → F5 选「Odoo：attach 到容器」"'
+
+  bash:
+    desc: 进 odoo 容器（以 PUID/PGID 身份，与 Odoo 进程一致）
+    aliases: [sh]
+    deps: [docker-check]
+    # 容器是以 root 起的（entrypoint 要降权），所以 exec 要显式换成宿主 uid，
+    # 否则会在仓库里留下 root 属主的文件
+    cmds:
+      - '{{.COMPOSE}} exec -u "$(id -u):$(id -g)" odoo bash'
+
+  shell:
+    desc: 交互式 Odoo shell（验 ORM / 改数据）
+    deps: [docker-check]
+    cmds:
+      - '{{.COMPOSE}} run --rm odoo odoo shell -d {{.DEV_DB}}'
+
+  psql:
+    desc: 连本地 dev 库
+    deps: [docker-check]
+    cmds:
+      - '{{.COMPOSE}} exec db psql -U odoo -d {{.DEV_DB}}'
+
+  # ---------------------------------------------------------------------------
+  # 数据与发布
+  # ---------------------------------------------------------------------------
+
+  pull:
+    desc: 从服务器拉现场数据：SSH_HOST=odoo@server REMOTE_DB=prod task pull
+    deps: [docker-check]
+    preconditions:
+      - sh: 'test -n "${SSH_HOST:-}" && test -n "${REMOTE_DB:-}"'
+        msg: '缺少 SSH_HOST / REMOTE_DB，已拒绝执行。用法：SSH_HOST=odoo@server REMOTE_DB=prod task pull'
+    cmds:
+      - 'bash .dev/scripts/db-sync.sh pull {{.CLI_ARGS}}'
+
+  db-sync:
+    desc: 数据备份/复制/装载：task db-sync -- {load|duplicate|dump} ...
+    deps: [docker-check]
+    preconditions:
+      - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^(load|duplicate|dump)([[:space:]]|$)"'
+        msg: '缺少子命令，已拒绝执行。用法：task db-sync -- {load|duplicate|dump} ...（例：task db-sync -- duplicate dev dev_clean）'
+    cmds:
+      - 'bash .dev/scripts/db-sync.sh {{.CLI_ARGS}}'
+
+  i18n:
+    desc: 强制刷新已有译文（默认 zh_CN）：task i18n -- zh_CN <模块...>
+    deps: [docker-check]
+    cmds:
+      - 'bash .dev/scripts/i18n-reload.sh {{.CLI_ARGS}}'
+
+  check:
+    desc: 仓库自检（po / manifest / XML / JS / JSON）：task check -- --strict
+    cmds:
+      - 'python3 .dev/scripts/check_repo.py {{.CLI_ARGS}}'
+
+  deploy:
+    desc: 发布到服务器：DEPLOY_HOST=odoo@server task deploy
+    preconditions:
+      - sh: 'test -n "${DEPLOY_HOST:-}"'
+        msg: '缺少 DEPLOY_HOST，已拒绝执行。用法：DEPLOY_HOST=odoo@server task deploy'
+    cmds:
+      - 'bash .dev/scripts/deploy.sh {{.CLI_ARGS}}'
+
+  # ---------------------------------------------------------------------------
+  # 内部任务
+  # ---------------------------------------------------------------------------
+
+  prepare-dirs:
+    internal: true
+    # 启动前用**当前用户**建好绑定挂载目录：Docker 自己建会是 root 属主，
+    # 虽然 entrypoint 会纠正属主，但先建成你的更直观（随时能看能删）
+    cmds:
+      - 'mkdir -p .dev/data/odoo .dev/data/postgres'
+
+  docker-check:
+    internal: true
+    preconditions:
+      - sh: 'command -v docker >/dev/null 2>&1'
+        msg: '找不到 docker'
+      - sh: 'docker info >/dev/null 2>&1'
+        msg: 'docker 不可用：当前用户是否在 docker 组？sudo usermod -aG docker $USER 后重新登录'
