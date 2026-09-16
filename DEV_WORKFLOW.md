@@ -108,6 +108,33 @@ XML / QWeb 模板与静态资源仍按上面的方式在容器里查。
 > 这份副本是**从镜像里拷出来的**，不是下载：它跟本地/服务器运行时用的源码是同一份（同一个 tag），
 > 所以不会再出现「本机 clone 的 odoo 和镜像里的版本对不上」这类问题。
 
+### 开发库的初始状态（重建后自动到位）
+
+`task up` 会检查 `dev` 库并**自动补齐**，所以重建镜像/容器后不需要再手工装一遍模块：
+
+| 项 | 值 |
+|----|-----|
+| 网页登录 | `admin` / `admin`（<http://localhost:8069>）—— Odoo 建库默认值，脚本与配置都不去动它 |
+| 数据库账号 | `odoo` / `odoo`（compose 的 `POSTGRES_USER` / `POSTGRES_PASSWORD`） |
+| 业务模块 | `sale_management`（Sales）、`purchase`（Purchase）、`stock`（Inventory） |
+| 仓库模块 | 根目录下所有带 `__manifest__.py` 的模块，**自动发现、一个不漏** |
+| 演示数据 | 随首次安装加载（下面那条注意点） |
+| 数据库管理页 | `admin` —— `odoo.conf` 的 `admin_passwd`，只管 `/web/database/manager`（建库 / 删库 / 备份），**不是**网页登录密码 |
+
+实现是 `.dev/scripts/init-db.sh`（幂等，跑多少遍都一样）：
+
+```bash
+task init                 # 补齐：只装缺失模块，不动已有数据
+task init -- --fresh      # 删掉 dev 库重建（演示数据只有这一次机会）
+task reset && task up     # 连 filestore 一起从零来过（最彻底）
+```
+
+> **演示数据是「模块安装那一刻」灌进去的**：Odoo 19 起 CLI 默认**不装**演示数据，脚本里显式传了
+> `--with-demo`（老的 `--without-demo` 只是保留的取反别名）。所以已经装好模块的库补不了演示数据，
+> 只能 `--fresh` 重建。
+>
+> `task rebuild`（重建镜像/容器）**不会**碰数据库：库与 filestore 都在 `.dev/data/` 的绑定挂载里。
+
 容器进程以 **`PUID` / `PGID`**（默认 1000:1000）运行。`.dev/docker/run-as.sh` 认五个运行时变量
 ——`PUID`、`PGID`、`USER`（目标用户名，默认 `odoo`；要换名字在 `.dev/.env` 里设 **`ODOO_USER`**，
 别设 `USER`，原因见第 9 节）、`HOME`（容器侧的家目录）、`CHOWN_SRC`（要归到 `PUID:PGID` 的
@@ -181,6 +208,7 @@ XML / QWeb 模板与静态资源仍按上面的方式在容器里查。
 | 任务 | 命令 |
 |------|------|
 | Odoo：启动 / 停止 / 重启 | `task up` / `down` / `restart`（改了 `.dev/docker/Dockerfile*` 用 `task rebuild`） |
+| 开发库：补齐 / 删库重建 | `task init` / `task init -- --fresh`（模块 + 演示数据 + `admin/admin`，见第 2 节） |
 | Odoo：日志（tail -f） | `task logs`（日志走 stdout，不再有本地日志文件） |
 | Odoo：升级模块（-u） | `task update -- <模块...>`（自动：停服务 → 升级 → 起服务） |
 | Odoo：安装模块（-i） | `task install -- <模块...>` |
@@ -293,7 +321,9 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 | 端口占用 | 宿主 8069 / 5432 / 5678 会被占用。本机已有 PostgreSQL 时删掉 compose 里 `db` 的 `ports` 那段 |
 | `odoo.conf` 不要写行尾注释 | Odoo 的 configparser 把 `1  # 注释` 整个当值，`int()` 直接抛 `ValueError: invalid literal for int()`。说明只能写成整行注释 |
 | Postgres 的 locale | 只能是镜像里已生成的：`postgres:16` 只有 `C` / `C.UTF-8` / `en_US.utf8`，写 `zh_CN.UTF-8` 会让 `initdb` 直接失败 |
-| 首次没有 `dev` 库 | `task up` 会探测并自动装 `base`（Odoo 传 `-d <库>` 只会建**空库**、不装模块，表现是页面 500、日志报 `relation "ir_module_module" does not exist`）。手工重来：<br>`task odoo -- -d dev -i base --stop-after-init` |
+| 首次没有 `dev` 库 / 缺模块 | `task up` 会调 `.dev/scripts/init-db.sh` 自动建库并补齐（Odoo 传 `-d <库>` 只会建**空库**、不装模块，表现是页面 500、日志报 `relation "ir_module_module" does not exist`）。手工重来：`task init`；想连演示数据一起重来：`task init -- --fresh` |
+| 演示数据装不上 | Odoo **19.0 起 CLI 默认不装**演示数据（`--without-demo` 只是保留的取反别名，默认值是「不装」）→ 脚本里显式传 `--with-demo`。而且演示数据只在「模块安装那一刻」灌进去，已装好的库补不了，只能 `--fresh` 重建 |
+| 别把 `admin_passwd` 当登录密码 | `odoo.conf` 的 `admin_passwd` 只用于 `/web/database/manager`（建库 / 删库 / 备份），改它**不会**影响网页登录。网页登录 `admin / admin` 是 Odoo 建库时写进 `res_users` 的默认值（纯净 CLI 建库实测：login=admin、password=admin），`.dev/scripts/init-db.sh` 不碰它 —— 自己改过密码想重置，就用 `odoo shell` 里的 `env.ref('base.user_admin').write({'password': 'admin'})` |
 | 带参数的任务报 `Task "xxx" does not exist` | `task` 会把裸参数当成**任务名**，传参数必须加 `--`：`task update -- product_image`（任务本身的 `desc` 里都写了正确写法） |
 | odoo 子命令必须写在最前面 | Odoo 的 CLI 只看 `argv[0]`（`odoo/cli/command.py:119`）：`odoo -c conf db dump ...` 会被当成 **server** 命令，报 `unrecognized parameters: db dump ...`。所以配置一律走 compose 里的 `ODOO_RC=/etc/odoo/odoo.conf`，命令写成 `odoo db dump dev -` 这种形式（`-c/--config` 的 `env_name` 就是 `ODOO_RC`，见 `odoo/tools/config.py:223`） |
 | 容器写不进挂载目录 | 容器进程身份是 `PUID`/`PGID`（默认 1000:1000），宿主机 uid 不是 1000 就在 `.dev/.env` 里设 `PUID=$(id -u)`、`PGID=$(id -g)`，然后 `task up`（**不用** `task rebuild`）。启动时 `run-as.sh` 只在顶层属主不对时才递归 chown（日志会打印 `[entrypoint] 把 … 属主从 X:Y 改为 …`）；嵌套层里的异常属主要手动修：`sudo chown -R $(id -u):$(id -g) .dev/data/<x>` 或 `task reset` |
@@ -316,7 +346,7 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 
 已实测通过的：
 
-1. ✅ `task up` / `task rebuild`：镜像构建 + 启动 + **首次自动建库装 base**（`dev` 库、密码 `dev-admin-pwd`）
+1. ✅ `task up` / `task rebuild`：镜像构建 + 启动 + **首次自动建库**（`dev` 库；网页登录 `admin/admin` 是 Odoo 建库自带默认值，数据库管理页密码见 `odoo.conf`）
 2. ✅ `http://localhost:8069` 返回 303（跳转登录页）
 3. ✅ 容器里能看到仓库：`ls /mnt/extra-addons` 列出各模块与文档
 4. ✅ 模块被发现且装得上：`task install -- product_packing` → 库里 `state = installed`
@@ -334,6 +364,10 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 13. ✅ `task reset`：停栈 → 一次性 root 容器清空 `.dev/data` 并重建目录（归当前用户）→ 再次 `task up`
    自动建库装 base、页面 303
 14. ✅ `PUID`/`PGID` 运行时切换（含腾位、0:0 例外）、`task debug`、`task pull` 之外的任务均已实测
+15. ✅ **开发库一键到位**（`.dev/scripts/init-db.sh`，在临时库上以 `--fresh` 实跑）：
+   `admin/admin` 可登录（`/web/session/authenticate` 返回 uid=2，错密码返回 Access Denied）、
+   `sale_management` / `purchase` / `stock` 全部 installed、仓库 8 个模块全部 installed、
+   演示数据已加载（`base.user_demo` 存在、`product_template` 37 条）；重复执行幂等（「模块齐全，跳过安装」）
 
 实跑时踩到并已修掉的坑（都写进了第 9 节）：
 
@@ -352,9 +386,9 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 
 还需你验的：
 
-15. ☐ 改一个模型 `.py` → 日志出现原地重启；改视图 XML / QWeb → 刷新浏览器生效
-16. ☐ `task debug` + F5 能断在自定义模块里
-17. ☐ `task pull` 能拉到**服务器**含 filestore 的备份，本地图片正常显示
-15. ☐ `pre-commit install` 后提交一次门禁生效
+16. ☐ 改一个模型 `.py` → 日志出现原地重启；改视图 XML / QWeb → 刷新浏览器生效
+17. ☐ `task debug` + F5 能断在自定义模块里
+18. ☐ `task pull` 能拉到**服务器**含 filestore 的备份，本地图片正常显示
+19. ☐ `pre-commit install` 后提交一次门禁生效
 
 验证结果请回写到本清单与对应模块的 `CHANGELOG.md`（AGENTS.md 的交付要求）。

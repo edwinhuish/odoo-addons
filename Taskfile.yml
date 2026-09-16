@@ -46,21 +46,20 @@ tasks:
   # ---------------------------------------------------------------------------
 
   up:
-    desc: 启动 Odoo + PostgreSQL（首次会自动建库装 base）
+    desc: 启动 Odoo + PostgreSQL（首次自动建库、装业务模块与仓库全部模块、加载演示数据）
     deps: [docker-check, prepare-dirs]
     cmds:
       - '{{.COMPOSE}} up -d db'
-      - |
-        # Odoo 传 -d <库> 只会建一个**空库**、不会装 base（表都没有，页面 500），
-        # 所以这里先探一下 ir_module_module，没初始化过就先装 base（幂等）。
-        if ! {{.COMPOSE}} exec -T db psql -U odoo -d {{.DEV_DB}} -tAc \
-              "select 1 from ir_module_module limit 1" >/dev/null 2>&1; then
-            echo "[信息] 首次初始化数据库 {{.DEV_DB}}（装 base，约 30 秒）"
-            {{.COMPOSE}} run --rm -T odoo odoo -d {{.DEV_DB}} -i base --stop-after-init
-            {{.COMPOSE}} restart odoo >/dev/null 2>&1 || true
-        fi
+      # 建库 + 装模块 + 演示数据都在 init-db.sh 里（幂等，重复跑无副作用）
+      - 'DEV_DB={{.DEV_DB}} bash .dev/scripts/init-db.sh'
       - '{{.COMPOSE}} up -d {{.CLI_ARGS}}'
-      - 'echo "[信息] 已启动 → http://localhost:8069（库 {{.DEV_DB}}，建库密码 dev-admin-pwd）"'
+      - 'echo "[信息] 已启动 → http://localhost:8069（库 {{.DEV_DB}}，网页 admin/admin，数据库管理页密码见 .dev/odoo.conf）"'
+
+  init:
+    desc: 初始化/补齐开发库（业务模块 + 仓库全部模块 + 演示数据）：task init / task init -- --fresh
+    deps: [docker-check, prepare-dirs]
+    cmds:
+      - 'DEV_DB={{.DEV_DB}} bash .dev/scripts/init-db.sh {{.CLI_ARGS}}'
 
   rebuild:
     desc: 重建镜像并重启（改了 .dev/docker/Dockerfile* 或 compose 的 build 段之后用）
@@ -90,7 +89,7 @@ tasks:
             sh -c "rm -rf /data/postgres /data/odoo \
                 && mkdir -p /data/postgres /data/odoo \
                 && chown $(id -u):$(id -g) /data/postgres /data/odoo"
-      - 'echo "[信息] 已清空；下次 task up 重新建库"'
+      - 'echo "[信息] 已清空；下次 task up 会重新建库并装业务模块 + 仓库全部模块（含演示数据）"'
 
   restart:
     desc: 重启容器（默认 odoo）：task restart / task restart -- db（服务名要走 -- 分隔）

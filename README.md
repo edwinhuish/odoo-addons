@@ -75,9 +75,22 @@ odoo-addons/           # 本目录即 addons_path
 GOBIN="$HOME/.local/bin" go install github.com/go-task/task/v3/cmd/task@latest
 export PATH="$HOME/.local/bin:$PATH"
 
-task up        # 启动 → http://localhost:8069
-task           # 列出所有命令（up / logs / update / test / pull / check / deploy ...）
+task up        # 启动 → http://localhost:8069（首次自动建库、装模块与演示数据）
+task           # 列出所有命令（up / init / logs / update / test / pull / check / deploy ...）
 ```
+
+首次 `task up` 会把 `dev` 库一次配好，**不用手工装模块或改密码**：
+
+| 项 | 值 |
+|----|-----|
+| 网页登录 | `admin` / `admin` |
+| 数据库账号 | `odoo` / `odoo` |
+| 业务模块 | Sales（`sale_management`）、Purchase、Inventory（`stock`） |
+| 仓库模块 | 根目录下所有带 `__manifest__.py` 的模块，自动发现 |
+| 演示数据 | 随首次安装加载（重建镜像不会丢，数据库在 `.dev/data/` 绑定挂载里） |
+
+要重新来一遍：`task init -- --fresh`（删库重建，含演示数据）或 `task reset && task up`（连 filestore 一起清）。
+详见 [`DEV_WORKFLOW.md`](DEV_WORKFLOW.md) 第 2 节。
 
 VS Code 里等价入口是任务面板（`Ctrl+Shift+B`）——它调的是同一个 `Taskfile.yml`。
 完整流程见 [`DEV_WORKFLOW.md`](DEV_WORKFLOW.md)。
