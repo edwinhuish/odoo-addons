@@ -3,7 +3,7 @@
 #
 # 编辑器**不连容器**：VS Code 直接用本机打开仓库，改代码即时生效（仓库挂进容器了）。
 # 日常走根目录的统一入口（见 Taskfile.yml）：
-#   task up        # 启动 → http://localhost:8069（首次自动建库装 base）
+#   task up        # 启动 → http://localhost:8069（首次自动建库、按 .dev/init.yaml 装模块 + 装 en_US/zh_CN）
 #   task logs      # 跟日志（Odoo 日志走 stdout）
 #   task down      # 停止（数据保留）；task reset = 停止 + 清空 .dev/data
 #

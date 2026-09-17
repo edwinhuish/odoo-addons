@@ -126,13 +126,14 @@ docker compose（.dev/compose.yml）
 .dev/
 |-- compose.yml          # 服务编排（唯一的环境入口）
 |-- odoo.conf            # 容器内 Odoo 配置（挂到 /etc/odoo/odoo.conf）
+|-- init.yaml            # task init 的安装配置（YAML：modules / addons / langs）
 |-- .gitignore           # 本目录的不入库规则（data/、backups/、.env、.cache/）
 |-- docker/              # 镜像与容器内入口（构建上下文就是这个子目录）
 |   |-- Dockerfile.odoo      # 官方 odoo:19.0 + watchdog / debugpy / fonts-noto-cjk
 |   |-- Dockerfile.pg        # 官方 postgres:16 + 共用入口脚本
 |   `-- run-as.sh            # 两个镜像共用：按 PUID/PGID 调属主 → 降权 → 执行命令
 |-- scripts/             # Taskfile 各任务调用的脚本
-|   |-- init-db.sh           # 开发库初始化 / 补齐（模块 + 演示数据）
+|   |-- init-db.sh           # 开发库初始化 / 补齐（init.yaml 的 modules + addons + 语言 + 演示数据）
 |   |-- db-sync.sh           # 拉服务器现场数据（含 filestore）/ 备份 / 复制库
 |   |-- i18n-reload.sh       # 强制刷新已有译文
 |   |-- deploy.sh            # rsync 发布到服务器
@@ -203,10 +204,13 @@ task up
 这一条命令做了四件事（幂等，重复跑没有副作用）：
 
 1. 起 `db` 服务；
-2. `init-db.sh`：库不存在就建库，然后装 `base` + 业务模块（`sale_management` / `purchase` / `stock`）
-   + **本仓库所有模块**（扫描根目录下带 `__manifest__.py` 的目录，自动发现）+ 演示数据（`--with-demo`）；
-3. 起 `odoo` 服务；
-4. 打印登录地址与账号。
+2. `init-db.sh`：库不存在就建库，然后装 `base` + `.dev/init.yaml` 里 `modules` 的模块
+   （Odoo 官方 / 第三方，默认 `sale_management` / `purchase` / `stock`）+ `addons` 的本仓库扩展
+   （留空 = 自动发现全部）+ 演示数据（`--with-demo`）；
+3. 装语言：`.dev/init.yaml` 里 `langs`（默认 `en_US, zh_CN`）缺哪个装哪个（走
+   `base.language.install`，译文一并灌进库，首次装中文要几分钟）；
+4. 起 `odoo` 服务；
+5. 打印登录地址与账号。
 
 首次会拉取 `odoo:19.0` 镜像（镜像较大：落盘约 3GB，本机镜像 `odoo-addons-dev-odoo` 约 3.1GB），
 之后建库 + 装模块 + 演示数据也需要几分钟 —— 这段时间不要以为卡死了，`task logs` 能看到进度。
@@ -334,7 +338,6 @@ task odoo-src      # 想在编辑器里跳转/打断点，就导出核心 .py �
 |---|---|---|
 | `task doctor`：一键自检（docker 可用、端口占用、属主、模块是否齐全、lang 是否 `C.UTF-8`） | 新人排障时间从「翻文档」变成「跑一条命令」 | 把第 5 节的坑变成检查项 |
 | CI（GitHub Actions）里跑 `task check` + `task test`，复用同一份 compose | 提交即验证，不依赖本地环境 | 需要一套无 GUI 的最小 compose |
-| 业务模块清单配置化（从 `.dev/.env` 或 conf 读，而不是脚本里写死三个） | 换业务线（如加 `mrp`）不用改脚本 | `init-db.sh` 里的 `BUSINESS_MODULES` |
 | 首次启动耗时统计 + 进度提示（装模块可能几分钟） | 新人不至于以为卡死 | 可选 |
 | `task reset` 后自动 `task init`（少一步） | 少记一条命令 | 注意别顺手把 dev 库删了 |
 | 把 `.dev/.cache/odoo-src` 换成「attach 容器」零拷贝方案 | 省 161MB 磁盘 | 前提是团队接受在容器里读核心源码 |

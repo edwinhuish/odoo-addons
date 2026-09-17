@@ -76,7 +76,7 @@ odoo-addons/           # 本目录即 addons_path
 GOBIN="$HOME/.local/bin" go install github.com/go-task/task/v3/cmd/task@latest
 export PATH="$HOME/.local/bin:$PATH"
 
-task up        # 启动 → http://localhost:8069（首次自动建库、装模块与演示数据）
+task up        # 启动 → http://localhost:8069（首次自动建库、按 .dev/init.yaml 装模块与扩展、装 en_US/zh_CN）
 task           # 列出所有命令（up / init / logs / update / test / pull / check / deploy ...）
 ```
 
@@ -86,8 +86,9 @@ task           # 列出所有命令（up / init / logs / update / test / pull / 
 |----|-----|
 | 网页登录 | `admin` / `admin` |
 | 数据库账号 | `odoo` / `odoo` |
-| 业务模块 | Sales（`sale_management`）、Purchase、Inventory（`stock`） |
-| 仓库模块 | 根目录下所有带 `__manifest__.py` 的模块，自动发现 |
+| 模块 | `.dev/init.yaml` 的 `modules`（默认 Sales `sale_management`、Purchase、Inventory `stock`），改完跑 `task init` |
+| 仓库扩展 | `.dev/init.yaml` 的 `addons`（当前全部 8 个模块；**留空 = 自动发现全部**，新模块不用登记），改完跑 `task init` |
+| 语言 | `.dev/init.yaml` 的 `langs`：`en_US`（English US）+ `zh_CN`（Chinese, Simplified），缺哪个装哪个（含译文） |
 | 演示数据 | 随首次安装加载（重建镜像不会丢，数据库在 `.dev/data/` 绑定挂载里） |
 
 要重新来一遍：`task init -- --fresh`（删库重建，含演示数据）或 `task reset && task up`（连 filestore 一起清）。

@@ -1,0 +1,49 @@
+# ============================================================================
+# `task init` / `task up` 的安装清单（YAML，与 .dev/compose.yml 同风格）
+#
+# 三个 key：
+#   modules = Odoo 官方 / 第三方模块（sale_management、stock…）
+#   addons  = 本仓库自己的扩展（仓库根目录下的一级模块目录）
+#   langs   = 语言 code
+#
+# 写法：
+#   · 块列表（一行一个，推荐）：  key: 换行 + `  - value`
+#   · 行内数组（值少时紧凑）：    key: [en_US, zh_CN]
+#   · 注释随便加：                `  - stock   # 库存`
+#   · 顺序无所谓，Odoo 自己按依赖拓扑排序
+#   · 想覆盖默认值：直接改这里，下一次 `task init` 就生效；改完不用重启容器、不用删库
+#
+# 只写**模块技术名**（不是应用显示名）：
+#   ✅ sale_management      ❌ Sales
+#   ✅ stock                ❌ Inventory
+#
+# langs 只列语言 code（不是语言名字）：
+#   ✅ en_US = English (US)；zh_CN = Chinese (Simplified)
+#   ❌ English / 简体中文 / Chinese
+#
+# 设了环境变量 DEV_MODULES / DEV_ADDONS / DEV_LANGS 时，脚本用环境变量、不看这里。
+# ============================================================================
+
+# --- Odoo 官方 / 第三方模块：进销存主链路 报价 → 销售 → 采购 → 出入库 -----------
+modules:
+  - sale_management
+  - purchase
+  - stock
+
+# --- 本仓库扩展（自研模块）：初始化时装哪些 -------------------------------------
+# 名字就是模块目录名（必须与 __manifest__.py 所在目录同名）。
+# 想要「新模块自动装上、不用改这里」→ 让 addons 保持空（`addons: []`），
+# 脚本会自动发现全部。删掉某一项不会卸载已装的模块 —— 卸载请用网页「应用」。
+addons:
+  - product_card_view
+  - product_image
+  - product_packing
+  - product_reference
+  - sale_order_no
+  - sale_product_hover
+  - web_image_paste
+  # - web_multi_tabs
+
+# --- 语言 ---------------------------------------------------------------------
+# en_US 通常已激活，脚本会自动跳过；首次装中文要几分钟
+langs: [en_US, zh_CN]

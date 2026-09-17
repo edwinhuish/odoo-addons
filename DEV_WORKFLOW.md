@@ -119,18 +119,64 @@ XML / QWeb 模板与静态资源仍按上面的方式在容器里查。
 |----|-----|
 | 网页登录 | `admin` / `admin`（<http://localhost:8069>）—— Odoo 建库默认值，脚本与配置都不去动它 |
 | 数据库账号 | `odoo` / `odoo`（compose 的 `POSTGRES_USER` / `POSTGRES_PASSWORD`） |
-| 业务模块 | `sale_management`（Sales）、`purchase`（Purchase）、`stock`（Inventory） |
-| 仓库模块 | 根目录下所有带 `__manifest__.py` 的模块，**自动发现、一个不漏** |
+| 模块 | **`.dev/init.yaml`**（`modules`，默认 `sale_management` Sales / `purchase` Purchase / `stock` Inventory） |
+| 仓库扩展 | `.dev/init.yaml` 的 `addons`；**留空（`addons: []`）= 自动发现全部**（新模块不用登记） |
+| 语言 | `en_US`（English US）+ `zh_CN`（Chinese, Simplified）：缺哪个装哪个，**连带把译文灌进库** |
 | 演示数据 | 随首次安装加载（下面那条注意点） |
 | 数据库管理页 | `admin` —— `odoo.conf` 的 `admin_passwd`，只管 `/web/database/manager`（建库 / 删库 / 备份），**不是**网页登录密码 |
 
 实现是 `.dev/scripts/init-db.sh`（幂等，跑多少遍都一样）：
 
 ```bash
-task init                 # 补齐：只装缺失模块，不动已有数据
+task init                 # 补齐：只装缺失模块 / 语言，不动已有数据
 task init -- --fresh      # 删掉 dev 库重建（演示数据只有这一次机会）
 task reset && task up     # 连 filestore 一起从零来过（最彻底）
 ```
+
+两个清单分工：`modules` 写 **Odoo 官方 / 第三方模块**，`addons` 写**本仓库扩展**（模块目录名）。
+改完再跑 `task init` 即可 —— 不用重启容器、不用删库、不影响已有数据。
+
+清单在 **`.dev/init.yaml`**（YAML，与 `compose.yml` 同风格），三个顶层 key：
+
+```yaml
+# --- Odoo 官方 / 第三方模块 -------------------------------------------------
+modules:
+  - sale_management
+  - purchase
+  - stock
+
+# --- 本仓库扩展（自研模块，名字 = 模块目录名）---------------------------------
+addons:
+  - product_card_view
+  - product_image
+  - product_packing
+  - product_reference
+  - sale_order_no
+  - sale_product_hover
+  - web_image_paste
+  - web_multi_tabs
+
+# --- 语言（行内数组，值少时紧凑）---------------------------------------------
+langs: [en_US, zh_CN]
+```
+
+- 块列表（`- xxx` 一行一个）与行内数组（`[a, b]`）等价，注释随便加。
+- 解析用宿主机的 `python3` + PyYAML；宿主机没有时自动退回 **Odoo 容器里的 python3**（镜像自带 PyYAML，
+  只是每次解析要起一次容器，慢几秒）。
+
+- 只写**模块技术名**（`sale_management` ✅，写 `Sales` 这种应用名装不上）。
+  Odoo 对认不出的模块名只会在日志打 `invalid module names, ignored`、**不报错**，所以脚本装完会复查
+  一次并警告「这些模块没装上」。
+- `addons` 留空（写成 `addons: []`，或整项删掉）→ 自动发现全部，新模块不用登记；
+  想只装其中几个就列出来。写错名字时脚本会直接警告并打印仓库里实际有的扩展。
+  **删掉某一项不会卸载已装的模块**，卸载请用网页「应用」。
+- 行尾 / 整行注释都允许（`#` 或 `;`），整行注释可夹在列表中间；**项之间留空行**用来结束上一项的续行。
+
+**语言**（`[init] langs = en_US, zh_CN`）同样按「缺哪个装哪个」补齐，走 Odoo 自己的加载路径（等价于网页
+「设置 → 语言 → 添加语言」）：不只是把语言激活，还会把各模块 `i18n/<lang>.po` 与官方译文灌进库，
+所以装完就能在用户偏好里直接切中文界面，不需要再跑一遍 `task i18n`。首次装语言要几分钟
+（`odoo shell` 里逐个导入术语），日志会打印进度，别打断。想临时换要装的语言：
+`DEV_LANGS=en_US,zh_CN,zh_TW task init`（环境变量优先于配置文件）。
 
 > **演示数据是「模块安装那一刻」灌进去的**：Odoo 19 起 CLI 默认**不装**演示数据，脚本里显式传了
 > `--with-demo`（老的 `--without-demo` 只是保留的取反别名）。所以已经装好模块的库补不了演示数据，
@@ -330,6 +376,8 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 | 带参数的任务报 `Task "xxx" does not exist` | `task` 会把裸参数当成**任务名**，传参数必须加 `--`：`task update -- product_image`（任务本身的 `desc` 里都写了正确写法） |
 | odoo 子命令必须写在最前面 | Odoo 的 CLI 只看 `argv[0]`（`odoo/cli/command.py:119`）：`odoo -c conf db dump ...` 会被当成 **server** 命令，报 `unrecognized parameters: db dump ...`。所以配置一律走 compose 里的 `ODOO_RC=/etc/odoo/odoo.conf`，命令写成 `odoo db dump dev -` 这种形式（`-c/--config` 的 `env_name` 就是 `ODOO_RC`，见 `odoo/tools/config.py:223`） |
 | 容器写不进挂载目录 | 容器进程身份是 `PUID`/`PGID`（默认 1000:1000），宿主机 uid 不是 1000 就在 `.dev/.env` 里设 `PUID=$(id -u)`、`PGID=$(id -g)`，然后 `task up`（**不用** `task rebuild`）。启动时 `run-as.sh` 只在顶层属主不对时才递归 chown（日志会打印 `[entrypoint] 把 … 属主从 X:Y 改为 …`）；嵌套层里的异常属主要手动修：`sudo chown -R $(id -u):$(id -g) .dev/data/<x>` 或 `task reset` |
+| `.dev/init.yaml` 里写了不存在的模块名 | Odoo 对认不出的模块名**只打 warning、不报错**（`invalid module names, ignored`，见 `odoo/modules/loading.py:_check_module_names`），所以命令照样成功、模块却一直没装 → `task init` 装完会复查并警告。检查名字是不是**模块技术名**（`sale_management` ✅ / `Sales` ❌），改完再 `task init` |
+| 想加 / 去掉一个模块 | 官方 / 第三方改 `.dev/init.yaml` 的 `modules`，本仓库扩展改 `addons`（改完 `task init`）；**删掉某一项不会卸载它**，卸载请用网页「应用」 |
 | `.dev/data` 里的文件不归我 | 正常情况下归你（entrypoint 启动时就 chown 成 `PUID:PGID`）。若你设的 `PUID` 不是宿主机 uid，属主就是那个 uid → 想直接 `rm` 会失败，用 `task reset`（它走一次性 root 容器删） |
 | `task reset` 为什么用容器删 | ① 数据目录属主可能是 `PUID`（≠ 宿主机用户）；② 有些环境给 `rm` 挂了「批量删除保护」（本机就有：`rm` 是个安全垫片，>500 个文件直接拒绝）→ 容器里的 `rm` 不受这两条影响，删完还会把目录重建回当前用户所有 |
 | `task up` 会先建 `.dev/data/{odoo,postgres}` | 用**当前用户**建（`prepare-dirs` 内部任务）：Docker 自己创建绑定源会是 root 属主，虽然 entrypoint 会纠正，但先建成你的更直观 |
@@ -337,7 +385,7 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 | 目标 uid/gid 被占用 | 基础镜像里 `ubuntu` 占着 1000：entrypoint 会把它（连它的组）挪到第一个空闲 id（从 2000 起），再把 `odoo` 挪到 1000 —— 所以 `id odoo` 显示的就是 `odoo`。**uid/gid 0 例外**：root 不挪，只能让 `USER` 与 root 共用（日志告警；Odoo 自己也会打印 `Running as user 'root' is a security risk.`）。改动只落在容器内的 `/etc/passwd`，每次 `task up` 重建容器即还原，不碰宿主机 |
 | 改名用 `ODOO_USER`，别写 `USER` | `USER` 既是 entrypoint 的目标用户名、也是官方 entrypoint 认的**数据库用户名**。而宿主机 shell 一般已导出 `USER`（本机 `USER=edwin`），所以 compose 里写的是 `USER: ${ODOO_USER:-odoo}`。**要换名字在 `.dev/.env` 里设 `ODOO_USER`**；直接设 `USER` 会把你的登录名带进容器（实测踩过：容器里被建了个 `edwin` 用户，`--db_user` 也会跟着错，只是我们 `odoo.conf` 里写了 `db_user` 才没炸） |
 | 备份为什么走 stdout | `odoo db dump dev - > .dev/backups/x.zip`：容器内 uid 与宿主机一致，直接写挂载目录也行，但走 stdout 少一次容器内落盘，也不受属主配置影响（`db-sync.sh` 的处理） |
-| `i18n` 刷新报 language not found | 库里还没装中文语言。先在 Odoo 设置里装「简体中文 (zh_CN)」（或 `task shell` 里 `env['res.lang']._activate_lang('zh_CN')`），再跑 `task i18n` |
+| `i18n` 刷新报 language not found | 库里还没装中文语言。`task init` 会自动装 `zh_CN`（首装要几分钟），装完再跑 `task i18n`；想手工装就 `task shell` 里 `env['res.lang']._activate_lang('zh_CN')` |
 | 断点不生效 | 忘了 `pathMappings`，或没跑「启动并挂调试端口 5678」任务 |
 | 改了 `compose.yml` 或 `.dev/docker/Dockerfile*` | 需要重建：`task rebuild`（= `docker compose up -d --build`；compose 不会自动重建镜像）。注意别写成 `task up --build`，`--build` 会被 task 当成自己的 flag 而报 `unknown flag` |
 | 想重置一切 | `task reset`：停栈 + 删空 `.dev/data`（数据库与 filestore 一起清），下次 `task up` 自动重建空库并装 `base` |

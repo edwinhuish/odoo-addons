@@ -5,7 +5,7 @@
 # 根 .gitignore 只需要管仓库级的东西（模块、编辑器、密钥配置等）。
 #
 # 本文件里的路径都相对 .dev/ 解析。
-# 需要入库的：compose.yml、odoo.conf、docker/（镜像与入口脚本）、scripts/。
+# 需要入库的：compose.yml、odoo.conf、init.yaml（task init 的安装配置）、docker/、scripts/。
 # ---------------------------------------------------------------------------
 
 # 运行时数据：Postgres 数据目录与 Odoo filestore（不在库里，随 task up 生成）
@@ -20,6 +20,8 @@ backups/
 # `task odoo-src` 从镜像里导出的核心源码副本（只为编辑器跳转，随时可删可重建）
 .cache/
 
-# 容器内配置要入库。根 .gitignore 里的 `*.conf` 是为了挡服务器配置，
+# 这里的配置要入库。根 .gitignore 里的 `*.conf` 是为了挡服务器配置，
 # 这里放行 —— 下层目录的规则优先级高于上层，所以这句能盖住那条。
+# （注意：git 不识别行尾注释，注释必须单独成行，且否定规则要单独一行）
 !odoo.conf
+# task init 的安装配置（要装的模块 / 语言清单，YAML；YAML 不受根 *.conf 规则影响，正常入库即可）
