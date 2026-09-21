@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="product_variant_conversion.VariantConversionDialog">
+        <Dialog title.translate="Variant Ownership" size="'lg'">
+            <p>This attribute change adds variants. Tell which existing variant keeps each combination: the chosen variant record keeps its stock, its orders and its invoices, and the other combinations are created as new variants.</p>
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Combination After</th>
+                        <th>Kept By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr t-foreach="combinations" t-as="combination" t-key="combination_index">
+                        <td t-esc="combination.label"/>
+                        <td>
+                            <select class="form-select" t-on-change="(ev) => this.onSelect(combination_index, ev)">
+                                <option value="" t-att-selected="!state.selection[combination_index]" t-esc="newVariantLabel"/>
+                                <option t-foreach="variants" t-as="variant" t-key="variant.id"
+                                        t-att-value="variant.id"
+                                        t-att-selected="state.selection[combination_index] === variant.id"
+                                        t-att-disabled="this.isVariantUsed(combination_index, variant.id)"
+                                        t-esc="variant.label"/>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div t-if="unassignedCount" class="text-danger" t-esc="unassignedLabel"/>
+            <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" id="variant_conversion_share_vendor_prices"
+                       t-att-checked="state.shareVendorPrices" t-on-change="onToggleShareVendorPrices"/>
+                <label class="form-check-label" for="variant_conversion_share_vendor_prices" t-esc="shareVendorPricesLabel"/>
+            </div>
+            <t t-set-slot="footer" t-slot-scope="dialog">
+                <button class="btn btn-primary" t-on-click="onConfirm" t-att-disabled="unassignedCount &gt; 0">Confirm</button>
+                <button class="btn btn-secondary" t-on-click="dialog.close">Cancel</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

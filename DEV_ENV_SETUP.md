@@ -223,7 +223,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8069   # 303（跳登�
 ```
 
 浏览器打开 <http://localhost:8069> → 用 `admin` / `admin` 登录，能看到 Sales / Purchase / Inventory
-三个应用，以及本仓库的 8 个模块；产品、客户列表里有演示数据。
+三个应用，以及本仓库的 9 个模块；产品、客户列表里有演示数据。
 
 ### 4.4 日常开发
 

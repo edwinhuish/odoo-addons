@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 变体表单：在「General Information」页末尾显示来源（无转换则不显示） -->
+    <!-- 来源字段可在变体列表 / 搜索里直接使用，便于下单与查询时追溯       -->
+    <!-- ============================================================ -->
+    <record id="product_normal_form_inherit_variant_lineage" model="ir.ui.view">
+        <field name="name">product.product.form.inherit.variant.lineage</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_normal_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='general_information']" position="inside">
+                <group string="Variant Lineage" invisible="not variant_conversion_id">
+                    <field name="variant_origin_id"/>
+                    <field name="variant_conversion_id"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- 变体列表：新增两个可选列（默认隐藏，用户可自行打开）            -->
+    <!-- ============================================================ -->
+    <record id="product_product_tree_inherit_variant_lineage" model="ir.ui.view">
+        <field name="name">product.product.list.inherit.variant.lineage</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_product_tree_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='product_tmpl_id']" position="after">
+                <field name="variant_origin_id" optional="hide"/>
+                <field name="variant_conversion_id" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- 变体搜索：可按来源变体 / 所属转换筛选                          -->
+    <!-- ============================================================ -->
+    <record id="product_search_form_inherit_variant_lineage" model="ir.ui.view">
+        <field name="name">product.product.search.inherit.variant.lineage</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_search_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="variant_origin_id" string="Derived From"/>
+                <field name="variant_conversion_id" string="Variant Conversion"/>
+            </xpath>
+            <xpath expr="//filter[@name='group_by_product_tmpl_id']" position="after">
+                <filter name="filter_variant_conversion" string="Created By A Conversion"
+                        domain="[('variant_origin_id', '!=', False)]"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

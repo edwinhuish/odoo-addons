@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- 转换台账：只读。列表回答「这个产品被谁、什么时候、加了什么属性、 -->
+    <!-- 变体数怎么变」；详情页里带出这一步的完整归属谱系               -->
+    <!-- 入口在产品表单的「Conversions」智能按钮（product 模块没有可用   -->
+    <!-- 的父级菜单，故不加菜单项，避免为一个只读台账依赖 stock / sale） -->
+    <!-- ============================================================ -->
+    <record id="product_variant_conversion_view_list" model="ir.ui.view">
+        <field name="name">product.variant.conversion.list</field>
+        <field name="model">product.variant.conversion</field>
+        <field name="arch" type="xml">
+            <list string="Variant Conversions" create="false">
+                <field name="create_date" string="Converted On"/>
+                <field name="create_uid" string="Converted By" widget="many2one_avatar_user" optional="hide"/>
+                <field name="product_tmpl_id"/>
+                <field name="product_variant_count_before"/>
+                <field name="product_variant_count_after"/>
+                <field name="new_variant_count"/>
+                <field name="added_attribute_ids" widget="many2many_tags"/>
+                <field name="share_vendor_prices" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="product_variant_conversion_view_form" model="ir.ui.view">
+        <field name="name">product.variant.conversion.form</field>
+        <field name="model">product.variant.conversion</field>
+        <field name="arch" type="xml">
+            <form string="Variant Conversion">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="product_tmpl_id"/>
+                            <field name="create_date" string="Converted On"/>
+                            <field name="create_uid" string="Converted By"/>
+                        </group>
+                        <group>
+                            <field name="product_variant_count_before"/>
+                            <field name="product_variant_count_after"/>
+                            <field name="new_variant_count"/>
+                            <field name="added_attribute_ids" widget="many2many_tags"/>
+                            <field name="share_vendor_prices"/>
+                        </group>
+                    </group>
+                    <field name="lineage_ids" nolabel="1">
+                        <list string="Variant Lineage">
+                            <field name="origin_variant_id"/>
+                            <field name="result_variant_id"/>
+                            <field name="is_kept"/>
+                            <field name="added_value_ids" widget="many2many_tags"/>
+                            <field name="origin_summary"/>
+                            <field name="result_summary"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="product_variant_conversion_action" model="ir.actions.act_window">
+        <field name="name">Variant Conversions</field>
+        <field name="res_model">product.variant.conversion</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No variant conversion recorded yet</p>
+            <p>Every conversion is recorded when attributes are added to a product from its own form.</p>
+        </field>
+    </record>
+
+</odoo>

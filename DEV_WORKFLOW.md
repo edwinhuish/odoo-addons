@@ -152,6 +152,7 @@ addons:
   - product_image
   - product_packing
   - product_reference
+  - product_variant_conversion
   - sale_order_no
   - sale_product_hover
   - web_image_paste

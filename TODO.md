@@ -36,7 +36,26 @@
 
 ## 待办池
 
-（空）
+- [ ] T-016 ｜ `product_variant_conversion` ｜ P1 ｜ 变体级数据按谱系继承：新变体的成本 / 内部参考号 / 条码 / 价格表规则 / 补货规则按「来源变体」复制，并做成可开关的配置项
+  - 背景：现在只有供应商价格能共享（勾选后一刀切改为「适用于全部变体」，还会抹平同一供应商对不同变体的价差）；成本 `standard_price` 是**变体级**字段，新变体为 0；`applied_on=0_product_variant` 的价格表规则也不覆盖新变体
+  - 建议：以 `variant_origin_id` 为继承来源；「继承哪些数据 / 冲突怎么办」做成系统参数或产品级选项
+  - 关联：模块 `README.md` →「价格与库存的同步规则」；`AGENTS.md` → L2 P5 缺口 2 / 3
+- [ ] T-017 ｜ `product_variant_conversion` ｜ P1 ｜ 补齐「属性主数据」路径的拦截：删 / 归档属性取值会直接删 / 归档既有变体，绕过保存拦截
+  - 背景：`product.template.attribute.value.unlink()` 会调 `ptav_product_variant_ids._unlink_or_archive()`；`product.template.attribute.line.write()` 自己会调 `_create_variant_ids()`。两条路都不经过 `product.template.write()`，本模块的归属确认与拒绝逻辑完全失效
+  - 建议：把「会丢变体就拒绝」的判定挂到 `product.template.attribute.value`（以及删 / 归档 `product.attribute.value`）上；至少在会丢变体时给出本模块的明确报错，而不是静默删变体
+  - 关联：`AGENTS.md` → L2 P5 缺口 1（最重要的绕过路径）
+- [ ] T-018 ｜ `product_variant_conversion` ｜ P2 ｜ 组合枚举的前置上限保护 + 试写加锁顺序 + 取值被归档时的报错措辞
+  - 背景：`_get_variant_conversion_combinations()` 先枚举全部组合、之后才撞 `product.dynamic_variant_limit`；`_analyze_variant_conversion_write()` 在 `FOR UPDATE` 之前执行，并发下分析结果可能过期（靠前置校验与后置断言兜底）；取值被归档时报错指向「变体要被删」，没有点出根因
+  - 建议：先用「各属性有效取值数的乘积」判上限并拒绝；把行锁提前到分析之前；报错区分「属性取值已被归档」
+  - 关联：`AGENTS.md` → L2 P5 缺口 5 / 6
+- [ ] T-019 ｜ `product_variant_conversion` ｜ P2 ｜ 弹窗展示在手数量 + 前端逻辑纯函数化与 Hoot 单测 + 补测未覆盖的服务端分支
+  - 背景：预览已返回 `variants[].on_hand`，弹窗只渲染了名称；前端（弹窗与保存钩子）无自动化测试；多记录写入、combo 产品、归档变体、dynamic 属性、组合被排除规则过滤、无 `stock` / 无读权限降级等分支有代码无测试
+  - 建议：把「载荷构造 / 未分配计数 / 守卫判定」抽成纯函数后加 Hoot 测试；服务端按缺口清单补测试
+  - 关联：`AGENTS.md` → L2 P5 缺口 7 / 8 / 9
+- [ ] T-020 ｜ `product_variant_conversion` ｜ P2 ｜ 扩展点与可维护性：转换后钩子、批量转换入口、文件拆分、chatter 审计
+  - 背景：想给新变体补数据只能在 `_create_variant_conversion_lineage()` 之后插代码；批量转换目前只有拒绝保护；`models/product_template.py` 已 887 行；转换没有留痕（chatter 无记录）
+  - 建议：新增正式钩子（如 `_post_variant_conversion_hook`）、批量入口逐产品各自包保存点、按职责拆分文件、转换时 `message_post` 记录台账摘要
+  - 关联：`AGENTS.md` → L2 P5「扩展点」与「常见扩展场景」
 
 ---
 
@@ -50,6 +69,15 @@
 
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
+
+- **T-015 产品变体转换（追加属性 / 取值而不丢变体 + 归属谱系）** ｜ `product_variant_conversion` ｜ P1
+  - 完成日期：2026-09-21 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`19.0.3.0.0`（新建模块；`19.0.1.0.0` 是只支持单变体产品的开发期中间版本、`19.0.2.0.0` 用「按钮 + 向导」，均已被取代；技术名在交付前由 `product_variant_convert` 定名调整为 `product_variant_conversion`，见模块 `CHANGELOG.md`）
+  - 做法：**入口是保存拦截、不是按钮**——前端 patch `FormController.onWillSaveRecord`（官方保存前钩子，返回 false 即阻止保存），保存前调 `get_variant_conversion_preview()`；服务端用带 `create_product_product=False` 的「只写配置、不碰变体」试写分析判定三种结局（不影响变体→原生保存；会新增变体→无归属映射就拦住、有映射先安全转换再落库；会丢变体→拒绝）；归属由弹窗逐组合确认「由哪条既有变体继续承载」（默认已填好），确认前不保存，确认后归属随技术字段 `variant_conversion_mapping` 与属性变更同一次写库；转换内部按归属把**每条**既有变体锚定到自己的组合再调 `_create_variant_ids()` 逐条复用、只新建缺失组合，全程 `savepoint` + 前置校验 + 后置断言；同时写 `product.variant.conversion` 台账与 `product.variant.lineage` 谱系，并在 `product.product` 上留下可搜索的「所属转换 / 来源变体」
+  - 验收记录：模块 [`README.md`](product_variant_conversion/README.md) →「验证清单」与 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) →「验收记录」；本地两个环境（只装 `product` / 加装 `stock`+`sale_management`）各 `task test -- product_variant_conversion,stock,sale_management --test-tags=/product_variant_conversion` 17 项全部通过
+  - 异常与维护：Odoo 19 变体生成 / 删除机制的四条源码事实、试写分析的必要性、归属与来源判定算法见模块 [`AGENTS.md`](product_variant_conversion/AGENTS.md) → L2 P1；保存前钩子 `onWillSaveRecord(record, changes)` 的机制、`create_product_product` 递归陷阱、`assets` 新增文件必须 `-u` 见 L2 P4；字段级 `domain` 被服务端求值、内联元素整体成术语、模型描述撞模块名等 i18n / 命名坑见 L2 P2 / P3；后置断言用的 `_filter_combinations_impossible_by_config()` 属 Odoo 内部 API，升级需回归
+  - 遗留：目标环境弹窗交互（默认归属 / 下拉改选 / 未分配完不可确认 / 取消不保存）与中英文界面待验证（清单见模块 `README.md` →「验证清单」）；本流程不支持「删除已有取值 / 删除属性」与「带归档变体的产品」，多记录写入也只做拒绝保护（见模块 `README.md` →「使用前提与限制」）
+  - 后续迭代：`19.0.3.0.2` 完成场景覆盖 / 数据流 / 一致性边界评估后，把 8 条边界与 5 类改进整理成待办池 `T-016` ~ `T-020`（变体级数据按谱系继承、属性主数据路径拦截、组合枚举前置上限、弹窗展示在手数量与测试补齐、扩展点与可维护性），评估结论见模块 [`README.md`](product_variant_conversion/README.md) →「场景覆盖矩阵 / 数据流 / 价格与库存的同步规则 / 已知边界」与 [`AGENTS.md`](product_variant_conversion/AGENTS.md) → L2 P5
 
 - **T-014 订单行产品悬浮卡** ｜ `sale_product_hover` ｜ P1
   - 完成日期：2026-09-17 ｜ 状态：**已完成**
