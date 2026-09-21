@@ -7,6 +7,7 @@
 #   · 模块           .dev/init.yaml 的 modules（Odoo 官方 / 第三方）+ addons（本仓库扩展）
 #   · 语言           en_US(English US) / zh_CN(Chinese, Simplified)，缺哪个装哪个
 #   · 演示数据       随首次安装一起加载（显式 `--with-demo`：Odoo 19 的 CLI 默认不装）
+#   · 批次          演示数据自带的 tracking=lot 会被清回 none（见 cleanup_demo_lots）
 #
 # 平时由 Taskfile 调，也可以直接跑：
 #   bash .dev/scripts/init-db.sh                    # 库不在就整套装上；在就只补缺失模块 / 语言
@@ -212,6 +213,82 @@ PYEOF
     rm -f "$tmp"
 }
 
+# --- 演示数据自带的批次（tracking='lot'）-------------------------------------
+# stock / product 的演示数据里写死了 <field name="tracking">lot</field>
+# （stock/data/stock_demo.xml、stock_demo2.xml），所以 --fresh 重建后一定有几个演示产品
+# 带批次，库存里还躺着 stock.lot / stock.quant，看上去像「批次功能被打开了」。
+# 演示数据只在模块安装那一刻灌进去、事后补不了，所以只能在装完之后把这几个产品恢复成
+# 「按数量」：在库数量归零 → 删批次 → tracking 改回 none。
+# 只认**有 ir.model.data 记录的**演示产品（UI 里自己录的产品没有），不碰自录数据；幂等。
+#
+# 例：库存里有 3 个演示产品带批次（Flipover / Drawer 来自 product 的 demo，
+#     Cable Management Box 来自 stock 的 demo），跑完这 3 个都变回 By Quantity。
+# 想保留批次（比如要拿演示数据练批次流程）：设 DEV_KEEP_DEMO_LOTS=1。
+
+# 库里「带批次的演示产品」个数（没装 stock / 查不到 → 0）
+demo_lot_count() {
+    local n
+    n="$("${COMPOSE[@]}" exec -T db psql -U odoo -d "$DEV_DB" -tAc \
+        "select count(*) from ir_module_module where name='stock' and state='installed'" 2>/dev/null || true)"
+    [[ "$n" == "1" ]] || { echo 0; return 0; }
+    # 两种残留都算：产品 tracking 还是 lot，或者 tracking 已改但批次记录还在库里
+    n="$("${COMPOSE[@]}" exec -T db psql -U odoo -d "$DEV_DB" -tAc \
+        "select count(*) from product_template t \
+          where exists (select 1 from ir_model_data d where d.res_id = t.id \
+                        and d.model = 'product.template') \
+            and (t.tracking <> 'none' \
+                 or exists (select 1 from stock_lot l \
+                            join product_product pp on pp.id = l.product_id \
+                            where pp.product_tmpl_id = t.id))" 2>/dev/null || true)"
+    echo "${n:-0}"
+}
+
+cleanup_demo_lots() {
+    local tmp
+    tmp="$(mktemp)"
+    cat > "$tmp" <<'PYEOF'
+Tpl = env['product.template'].with_context(active_test=False)
+Quant = env['stock.quant']
+Lot = env['stock.lot']
+Data = env['ir.model.data'].sudo()
+
+# 演示数据创建的产品都带 ir.model.data 记录；UI 里自己录的产品没有 → 用它区分，避免误动自录数据
+demo_ids = {d['res_id'] for d in Data.search_read(
+    [('model', '=', 'product.template')], ['res_id'], limit=None)}
+# 两种残留都算：tracking 还是 lot，或者 tracking 已改 none 但批次记录还躺在库里
+lot_tmpl_ids = Lot.search([]).mapped('product_id.product_tmpl_id').ids
+products = Tpl.search([
+    ('id', 'in', list(demo_ids)),
+    '|', ('tracking', '!=', 'none'), ('id', 'in', lot_tmpl_ids),
+])
+
+for t in products:
+    print("[信息] 清掉演示产品的批次：%s（%s）" % (t.display_name, t.tracking))
+    # 1) 先把 tracking 改回「按数量」，后面的库存调整才不会被要求填批次
+    t.tracking = 'none'
+    # 2) 在库数量归零（走库存调整，留痕）
+    quants = Quant.search([('product_id.product_tmpl_id', '=', t.id), ('quantity', '!=', 0)])
+    if quants:
+        quants.with_context(inventory_mode=True).write({'inventory_quantity': 0})
+        quants.with_context(inventory_mode=True).action_apply_inventory()
+    # 3) 删批次记录：stock_quant.lot_id 有外键，得先删掉引用它的 0 库存 quant，再删 lot
+    lots = Lot.search([('product_id.product_tmpl_id', '=', t.id)])
+    if lots:
+        try:
+            with env.cr.savepoint():
+                # 库存已归零，这些 quant 只是残行，删掉才能解开 lot 的外键
+                Quant.search([('lot_id', 'in', lots.ids), ('quantity', '=', 0)]).unlink()
+                lots.unlink()
+        except Exception as err:
+            print("[警告] %s 的批次没删掉（%s）；tracking 已改回 none，不影响使用" % (t.display_name, err))
+
+env.cr.commit()
+print("[信息] 演示产品批次清理完成：处理 %d 个产品" % len(products))
+PYEOF
+    "${COMPOSE[@]}" run --rm -T odoo odoo shell --log-level=warn -d "$DEV_DB" < "$tmp"
+    rm -f "$tmp"
+}
+
 odoo_running() {
     "${COMPOSE[@]}" ps --status running --services 2>/dev/null | grep -qx odoo
 }
@@ -272,6 +349,21 @@ if [[ "$INSTALLED" == 1 ]] && odoo_running; then
     "${COMPOSE[@]}" restart odoo >/dev/null
 fi
 
+# --- 6) 清掉演示数据自带的批次（tracking='lot' → 'none'）----------------------
+# 幂等：没有带批次的演示产品就什么都不做，所以每次 task init 都会跑到、但只清理一次。
+# 清完再想拿演示数据练批次流程：DEV_KEEP_DEMO_LOTS=1 task init
+if [[ -n "${DEV_KEEP_DEMO_LOTS:-}" ]]; then
+    info "DEV_KEEP_DEMO_LOTS 已设置，保留演示数据的批次"
+else
+    DEMO_LOTS="$(demo_lot_count)"
+    if [[ "$DEMO_LOTS" =~ ^[0-9]+$ ]] && [[ "$DEMO_LOTS" -gt 0 ]]; then
+        info "清掉演示数据自带的批次：$DEMO_LOTS 个演示产品 tracking=lot → none"
+        cleanup_demo_lots
+    else
+        info "没有带批次的演示产品，跳过清理"
+    fi
+fi
+
 cat <<EOF
 [信息] 库 ${DEV_DB} 已就绪：
   · 网页登录    http://localhost:8069 → admin / admin（Odoo 建库默认，本脚本不碰）
@@ -281,4 +373,5 @@ cat <<EOF
   · 本仓库扩展  $(repo_modules)（写 addons；留空 = 自动发现全部）
   · 语言        ${LANGS}（网页右上角用户偏好里切换界面语言）
   · 演示数据    随首次安装加载（要重新加载就 --fresh，或 task reset 后 task up）
+  · 演示批次    已清掉（演示数据写死的 tracking=lot 改回 none；要留着就 DEV_KEEP_DEMO_LOTS=1）
 EOF

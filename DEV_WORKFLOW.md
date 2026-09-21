@@ -123,6 +123,7 @@ XML / QWeb 模板与静态资源仍按上面的方式在容器里查。
 | 仓库扩展 | `.dev/init.yaml` 的 `addons`；**留空（`addons: []`）= 自动发现全部**（新模块不用登记） |
 | 语言 | `en_US`（English US）+ `zh_CN`（Chinese, Simplified）：缺哪个装哪个，**连带把译文灌进库** |
 | 演示数据 | 随首次安装加载（下面那条注意点） |
+| 批次 | 演示数据写死的 `tracking=lot` 会在装完后被**清回 `none`**（下面那条注意点），自带 `stock.lot` 一并删掉 |
 | 数据库管理页 | `admin` —— `odoo.conf` 的 `admin_passwd`，只管 `/web/database/manager`（建库 / 删库 / 备份），**不是**网页登录密码 |
 
 实现是 `.dev/scripts/init-db.sh`（幂等，跑多少遍都一样）：
@@ -183,6 +184,11 @@ langs: [en_US, zh_CN]
 > 只能 `--fresh` 重建。
 >
 > `task rebuild`（重建镜像/容器）**不会**碰数据库：库与 filestore 都在 `.dev/data/` 的绑定挂载里。
+>
+> **演示数据里的批次**：`stock` / `product` 的 demo 数据会把 Flipover / Drawer / Cable Management Box
+> 等产品设成 `tracking='lot'` 并塞 `stock.lot`，看上去像「批次功能被打开了」。`init-db.sh` 末尾会
+> 顺手把这几个产品（在库数量归零 → 删批次 → `tracking='none'`），只认带 `ir.model.data` 的演示产品
+> 不动自录数据；想留着练批次流程就 `DEV_KEEP_DEMO_LOTS=1 task init`。
 
 容器进程以 **`PUID` / `PGID`**（默认 1000:1000）运行。`.dev/docker/run-as.sh` 认五个运行时变量
 ——`PUID`、`PGID`、`USER`（目标用户名，默认 `odoo`；要换名字在 `.dev/.env` 里设 **`ODOO_USER`**，

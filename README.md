@@ -90,6 +90,7 @@ task           # 列出所有命令（up / init / logs / update / test / pull / 
 | 仓库扩展 | `.dev/init.yaml` 的 `addons`（当前全部 8 个模块；**留空 = 自动发现全部**，新模块不用登记），改完跑 `task init` |
 | 语言 | `.dev/init.yaml` 的 `langs`：`en_US`（English US）+ `zh_CN`（Chinese, Simplified），缺哪个装哪个（含译文） |
 | 演示数据 | 随首次安装加载（重建镜像不会丢，数据库在 `.dev/data/` 绑定挂载里） |
+| 批次 | 演示数据写死的 `tracking=lot` 装完会被清回 `none`（自录产品不碰）；要留着就 `DEV_KEEP_DEMO_LOTS=1 task init` |
 
 要重新来一遍：`task init -- --fresh`（删库重建，含演示数据）或 `task reset && task up`（连 filestore 一起清）。
 详见 [`DEV_WORKFLOW.md`](DEV_WORKFLOW.md) 第 2 节。
