@@ -6,6 +6,48 @@
 
 ---
 
+## [19.0.2.0.1] - 2026-09-22（修复 i18n 静默失效 + 中文打磨）
+
+### 变更
+
+- **修复：整份 `i18n/zh_CN.po` 从未生效**（中文界面一直是英文，导入过程却不报任何错）。三层原因逐层修掉：
+  1. **`#:` 引用行多了一层前缀**（写成 `#: #: model_terms:...`）→ `PoFileReader` 的
+     `re.match(r'(model|model_terms):...')` 匹配不上，条目定位不到记录；
+  2. **多行 `msgstr` 写成了带真实换行的字符串**（没有引号）→ `polib` 直接报 `Syntax error in po file`，
+     整份文件一条都读不进来；
+  3. **含 `code:` 引用的条目缺 `#. odoo-python` 注释** → Python 的 `_()` 译文在运行时按注释过滤
+     （`CodeTranslations._load_python_translations`），缺标记就永远显示英文。
+- **中文打磨**：术语与 Odoo 官方 zh_CN 对齐（用「原生体积」而不是「原生 Volume」，「采用所选尺寸单位」
+  而不是「按所选尺寸单位」等）；应用列表摘要改为「为每条产品变体增加尺寸单位与长宽高，并同步更新原生体积」；
+  `description` 整段重写。
+- **顺带清理**：`_check_dimension_values` 改用 `zip(DIMENSION_FIELDS[1:], labels)` 取字段名，
+  不再产生 `dimension_width` / `dimension_height` 这类「裸字段名」术语（po 条目 27 → 25）。
+
+### 影响
+
+- 中文界面的字段标签 / help / selection / 视图术语 / 报错文案 / 应用列表元数据现在**全部**为中文
+- 校验行为不变（仍是非负校验，报错仍带产品名、字段名与具体数值）；无数据结构变化、无迁移
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 新增 P5：po 的三类静默失效、`#. odoo-python` 标记的作用，以及「用数据库核对译文」的验收配方
+- 仓库 `.dev/scripts/check_repo.py`（`task check`）新增三条门禁：
+  `#:` 引用行写法与条目缺引用行；`code:` 条目缺 `odoo-python` / `odoo-javascript` 标记；
+  po 行结构合法性（多行文本必须写成带引号的续行）
+
+### 验证记录（数据库口径，不是「导入没报错」）
+
+| 面 | 核对方式 | 结果 |
+|----|----------|------|
+| 字段标签 / help | `ir_model_fields.field_description->>'zh_CN'` | 尺寸单位 / 长度 / 宽度 / 高度 ✓ |
+| selection | `ir_model_fields_selection.name->>'zh_CN'` | 厘米 / 米 ✓ |
+| 视图术语 | `ir_ui_view.arch_db->>'zh_CN'` | 含「尺寸单位」，无残留英文 ✓ |
+| 应用列表 | `ir_module_module.shortdesc / summary / description ->'zh_CN'` | 产品尺寸 / 摘要 / 描述 ✓ |
+| 运行期报错 | `with_context(lang='zh_CN')` 触发校验 | 「T-021 i18n Probe3 的长度不能为负数（-1.0）。」✓ |
+| po 语法 | 容器内 `polib.pofile()` | 27 条条目解析通过 ✓ |
+
+---
+
 ## [19.0.2.0.0] - 2026-09-22（改名 + 尺寸下沉到变体；T-021 交付）
 
 ### 变更

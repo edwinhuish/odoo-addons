@@ -136,8 +136,8 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 | 多变体各自独立 | 两条变体填不同尺寸 → 各自 `volume` 独立；模板侧读出空值、写入不牵动变体 | 通过（自动化测试） |
 | 非负校验 | 负数尺寸被 `ValidationError` 拒绝 | 通过（自动化测试） |
 | 转换后尺寸跟随变体 | 普通产品转多变体后，新变体继承来源变体的尺寸与体积 | 通过（自动化测试，见 `product_variant_conversion` 的 `test_new_variants_inherit_variant_dimensions_when_installed`） |
-| 中英双语 | 字段标签 / 报错 / 占位符在中文环境为中文，英文环境为英文 | 待验证 |
-| 应用列表中文名 | 中文环境「应用」搜 `product_dimension`：标题「产品尺寸」、摘要与描述为中文、分类「库存 / 产品」 | 待验证 |
+| 中英双语 | 字段标签 / 报错 / 占位符在中文环境为中文，英文环境为英文 | 通过（数据库核对：字段标签 / help / selection / 视图术语；运行期报错实测为中文）；界面待目标环境复验 |
+| 应用列表中文名 | 中文环境「应用」搜 `product_dimension`：标题「产品尺寸」、摘要与描述为中文、分类「库存 / 产品」 | 通过（数据库核对 shortdesc / summary / description）；界面待目标环境复验 |
 
 ### 自动化测试跑法
 
@@ -156,7 +156,8 @@ task test -- product_variant_conversion,product_dimension \
 - 覆盖范围：字段名称 / `help`、尺寸单位 selection 标签、`ValidationError` 报错、视图标题 / 占位提示。
 - **应用列表（Apps）元数据**：模块名 / 摘要 / 描述的中文由 `model:ir.module.module,shortdesc|summary|description:base.module_product_dimension` 三条提供，分类另有 `model:ir.module.category,name:base.module_category_inventory_product` → 「产品」（与其它产品类模块合并成同一条 `msgid`）；改 `__manifest__.py` 的 `name` / `summary` / `description` 时必须同步这三条的 `msgid`，规范见根 [`AGENTS.md`](../AGENTS.md) 4.8。
 - 改动流程：改英文源文本 → 在 `i18n/zh_CN.po` 补 `msgid` / `msgstr` → `task update -- product_dimension` 升级 → 刷新页面。
-- 校验：`task check` 会检查 po 里重复 `msgid` 与 Apps 元数据 `msgid` 是否与 manifest 逐字符一致。
+- 校验：`task check` 会检查 po 里重复 `msgid`、Apps 元数据 `msgid` 与 manifest 是否逐字符一致，以及 `#:` 引用行写法、`#. odoo-python` / `#. odoo-javascript` 标记、po 行结构合法性。
+- **验收要看数据库**（「导入没报错」不等于生效）：`ir_model_fields.field_description->>'zh_CN'`、`ir_ui_view.arch_db->>'zh_CN'`、`ir_module_module.shortdesc->>'zh_CN'`；运行期 `_()` 文案用 `with_context(lang='zh_CN')` 触发一次报错核对。三类静默失效的排障见 `AGENTS.md` → L2 P5。
 
 ---
 

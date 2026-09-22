@@ -94,12 +94,9 @@ class ProductProduct(models.Model):
     @api.constrains(*DIMENSION_FIELDS[1:])
     def _check_dimension_values(self):
         """尺寸不允许为负：负体积会让运费与装载计算得出无意义的结果。"""
+        labels = (_("Length"), _("Width"), _("Height"))
         for variant in self:
-            for field_name, label in (
-                ("dimension_length", _("Length")),
-                ("dimension_width", _("Width")),
-                ("dimension_height", _("Height")),
-            ):
+            for field_name, label in zip(DIMENSION_FIELDS[1:], labels):
                 value = variant[field_name] or 0.0
                 if value < 0:
                     raise ValidationError(_(

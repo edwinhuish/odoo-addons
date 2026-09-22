@@ -1,174 +1,169 @@
 # Translation of Odoo Server.
 # This file contains the translation of the following modules:
-# 	* product_packing
+# 	* product_dimension
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: Odoo Server 19.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-07 00:00+0000\n"
-"PO-Revision-Date: 2026-09-07 00:00+0000\n"
+"POT-Creation-Date: 2026-09-22 00:00+0000\n"
+"PO-Revision-Date: 2026-09-22 00:00+0000\n"
 "Last-Translator: \n"
 "Language-Team: \n"
+"Language: zh_CN\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: \n"
-"Plural-Forms: \n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
 #. module: product_dimension
-#: #: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
+#: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
 msgid "<span class=\"oe_inline\">x</span>"
 msgstr "<span class=\"oe_inline\">x</span>"
 
 #. module: product_dimension
-#: #: model:ir.model.fields.selection,name:product_dimension.selection__product_product__dimension_unit__cm
-#: #: model:ir.model.fields.selection,name:product_dimension.selection__product_template__dimension_unit__cm
+#: model:ir.model.fields.selection,name:product_dimension.selection__product_product__dimension_unit__cm
+#: model:ir.model.fields.selection,name:product_dimension.selection__product_template__dimension_unit__cm
 msgid "Centimeters"
 msgstr "厘米"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_product__dimension_unit
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_template__dimension_unit
-#: #: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
+#: model:ir.model.fields,field_description:product_dimension.field_product_product__dimension_unit
+#: model:ir.model.fields,field_description:product_dimension.field_product_template__dimension_unit
+#: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
 msgid "Dimension Unit"
 msgstr "尺寸单位"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,help:product_dimension.field_product_template__dimension_unit
+#: model:ir.model.fields,help:product_dimension.field_product_template__dimension_unit
 msgid "Dimension unit of the single variant. It is disabled as soon as the product has several variants (same behaviour as the native Volume field): set the unit on each variant instead."
-msgstr "单变体的尺寸单位。产品有多条变体时会被禁用（与原生 Volume 字段的行为一致）：请在每条变体上分别设置。"
+msgstr "单变体的尺寸单位。产品有多条变体时该字段会隐藏（与原生体积字段的行为一致），请在每条变体上分别设置。"
 
 #. module: product_dimension
-#: #: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
+#: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
 msgid "Dimensions"
 msgstr "尺寸"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_product__display_name
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_template__display_name
+#: model:ir.model.fields,field_description:product_dimension.field_product_product__display_name
+#: model:ir.model.fields,field_description:product_dimension.field_product_template__display_name
 msgid "Display Name"
 msgstr ""
 
 #. module: product_dimension
-#: #: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
+#: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
 msgid "H"
 msgstr "高"
 
 #. module: product_dimension
-#: #: code:addons/product_dimension/models/product_product.py:0
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_product__dimension_height
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_template__dimension_height
+#. odoo-python
+#: code:addons/product_dimension/models/product_product.py:0
+#: model:ir.model.fields,field_description:product_dimension.field_product_product__dimension_height
+#: model:ir.model.fields,field_description:product_dimension.field_product_template__dimension_height
 msgid "Height"
 msgstr "高度"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,help:product_dimension.field_product_template__dimension_height
+#: model:ir.model.fields,help:product_dimension.field_product_template__dimension_height
 msgid "Height of the single variant, in the selected dimension unit."
-msgstr "单变体的高度，按所选尺寸单位。"
+msgstr "单变体的高度，采用所选尺寸单位。"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,help:product_dimension.field_product_product__dimension_height
+#: model:ir.model.fields,help:product_dimension.field_product_product__dimension_height
 msgid "Height of this variant, in the selected dimension unit."
-msgstr "本变体的高度，按所选尺寸单位。"
+msgstr "本变体的高度，采用所选尺寸单位。"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_product__id
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_template__id
+#: model:ir.model.fields,field_description:product_dimension.field_product_product__id
+#: model:ir.model.fields,field_description:product_dimension.field_product_template__id
 msgid "ID"
 msgstr ""
 
 #. module: product_dimension
-#: #: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
+#: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
 msgid "L"
 msgstr "长"
 
 #. module: product_dimension
-#: #: code:addons/product_dimension/models/product_product.py:0
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_product__dimension_length
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_template__dimension_length
+#. odoo-python
+#: code:addons/product_dimension/models/product_product.py:0
+#: model:ir.model.fields,field_description:product_dimension.field_product_product__dimension_length
+#: model:ir.model.fields,field_description:product_dimension.field_product_template__dimension_length
 msgid "Length"
 msgstr "长度"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,help:product_dimension.field_product_template__dimension_length
+#: model:ir.model.fields,help:product_dimension.field_product_template__dimension_length
 msgid "Length of the single variant, in the selected dimension unit."
-msgstr "单变体的长度，按所选尺寸单位。"
+msgstr "单变体的长度，采用所选尺寸单位。"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,help:product_dimension.field_product_product__dimension_length
+#: model:ir.model.fields,help:product_dimension.field_product_product__dimension_length
 msgid "Length of this variant, in the selected dimension unit."
-msgstr "本变体的长度，按所选尺寸单位。"
+msgstr "本变体的长度，采用所选尺寸单位。"
 
 #. module: product_dimension
-#: #: model:ir.model.fields.selection,name:product_dimension.selection__product_product__dimension_unit__m
-#: #: model:ir.model.fields.selection,name:product_dimension.selection__product_template__dimension_unit__m
+#: model:ir.model.fields.selection,name:product_dimension.selection__product_product__dimension_unit__m
+#: model:ir.model.fields.selection,name:product_dimension.selection__product_template__dimension_unit__m
 msgid "Meters"
 msgstr "米"
 
 #. module: product_dimension
-#: #: model:ir.model,name:product_dimension.model_product_template
+#: model:ir.model,name:product_dimension.model_product_template
 #: model:ir.module.category,name:base.module_category_inventory_product
 msgid "Product"
 msgstr "产品"
 
 #. module: product_dimension
-#: #: model:ir.model,name:product_dimension.model_product_product
+#: model:ir.model,name:product_dimension.model_product_product
 msgid "Product Variant"
 msgstr "产品变体"
 
 #. module: product_dimension
-#: #: code:addons/product_dimension/models/product_product.py:0
+#. odoo-python
+#: code:addons/product_dimension/models/product_product.py:0
 msgid "The %(label)s of %(product)s cannot be negative (%(value)s)."
 msgstr "%(product)s 的%(label)s不能为负数（%(value)s）。"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,help:product_dimension.field_product_product__dimension_unit
+#: model:ir.model.fields,help:product_dimension.field_product_product__dimension_unit
 msgid "Unit used for the length, width and height of this variant. The native Volume is always expressed in cubic meters."
-msgstr "本变体的长宽高所用的单位。原生 Volume 始终以立方米表示。"
+msgstr "本变体长宽高所用的单位。原生体积字段始终以立方米表示。"
 
 #. module: product_dimension
-#: #: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
+#: model_terms:ir.ui.view,arch_db:product_dimension.product_template_form_inherit_dimension
 msgid "W"
 msgstr "宽"
 
 #. module: product_dimension
-#: #: code:addons/product_dimension/models/product_product.py:0
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_product__dimension_width
-#: #: model:ir.model.fields,field_description:product_dimension.field_product_template__dimension_width
+#. odoo-python
+#: code:addons/product_dimension/models/product_product.py:0
+#: model:ir.model.fields,field_description:product_dimension.field_product_product__dimension_width
+#: model:ir.model.fields,field_description:product_dimension.field_product_template__dimension_width
 msgid "Width"
 msgstr "宽度"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,help:product_dimension.field_product_template__dimension_width
+#: model:ir.model.fields,help:product_dimension.field_product_template__dimension_width
 msgid "Width of the single variant, in the selected dimension unit."
-msgstr "单变体的宽度，按所选尺寸单位。"
+msgstr "单变体的宽度，采用所选尺寸单位。"
 
 #. module: product_dimension
-#: #: model:ir.model.fields,help:product_dimension.field_product_product__dimension_width
+#: model:ir.model.fields,help:product_dimension.field_product_product__dimension_width
 msgid "Width of this variant, in the selected dimension unit."
-msgstr "本变体的宽度，按所选尺寸单位。"
+msgstr "本变体的宽度，采用所选尺寸单位。"
 
-#. module: product_dimension
-#: #: code:addons/product_dimension/models/product_product.py:0
-msgid "dimension_height"
-msgstr "高度"
-
-#. module: product_dimension
-#: #: code:addons/product_dimension/models/product_product.py:0
-msgid "dimension_width"
-msgstr "宽度"
-
-#. module: product_dimension
+#. module: base
 #: model:ir.module.module,shortdesc:base.module_product_dimension
 msgid "Product Dimensions"
 msgstr "产品尺寸"
 
-#. module: product_dimension
+#. module: base
 #: model:ir.module.module,summary:base.module_product_dimension
 msgid "Add a dimension unit and length / width / height per product variant, and keep the native Volume in sync"
-msgstr "为每条产品变体增加尺寸单位与长宽高，并同步原生 Volume"
+msgstr "为每条产品变体增加尺寸单位与长宽高，并同步更新原生体积"
 
-#. module: product_dimension
+#. module: base
 #: model:ir.module.module,description:base.module_product_dimension
 msgid ""
 "\n"
@@ -187,17 +182,18 @@ msgid ""
 "Known limitation:\n"
 "- The native Volume field is stored with the Odoo \"Volume\" decimal precision (2 decimals by default), so volumes below 0.01 cubic meter are rounded to 0; raise that decimal precision in Settings > Technical > Decimal Accuracy if your products are that small\n"
 ""
-msgstr "面向外贸 SOHO 场景的产品尺寸模块。
-
-本模块源码语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。
-
-功能：
-- 尺寸单位（厘米 / 米）与长宽高存放在产品变体上，显示在产品表单原生的「物流」组中、Volume 字段旁边
-- 每条变体的原生 Volume 按它自己的尺寸重算，多变体产品的每条变体各持一份体积
-- 产品表单上这两个字段是单变体桥接：产品一旦有多条变体就隐藏，与原生 Volume 字段的行为完全一致
-- 配合 product_variant_conversion 模块做变体转换时，尺寸随谱系继承（新变体继承其来源变体的尺寸）
-- 内置校验：尺寸不允许为负
-- 本模块取代原 product_packing 模块（纸箱与包装字段）；安装时会用安装前钩子把它留在模板上的尺寸数据搬到变体上
-
-已知限制：
-- 原生 Volume 字段按 Odoo 的「Volume」小数精度存储（默认 2 位小数），小于 0.01 立方米的体积会被舍入为 0；产品确实那么小时，请在「设置 → 技术 → 小数精度」中调高该精度"
+msgstr ""
+"面向外贸 SOHO 场景的产品尺寸模块。\n"
+"\n"
+"本模块源码语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
+"\n"
+"功能：\n"
+"- 尺寸单位（厘米 / 米）与长宽高存放在产品变体上，显示在产品表单原生的「物流」组中、体积字段旁边\n"
+"- 每条变体的原生体积按它自己的尺寸重算，多变体产品里每条变体各持一份体积\n"
+"- 产品表单上的这两个字段只在单变体产品上可用（桥接那条变体），产品一旦有多条变体就隐藏，与原生体积字段的行为完全一致\n"
+"- 配合 product_variant_conversion 模块做变体转换时，尺寸随谱系继承（新变体继承其来源变体的尺寸）\n"
+"- 内置校验：尺寸不允许为负\n"
+"- 本模块取代原 product_packing 模块（纸箱与包装字段）；安装时会用安装前钩子把它留在模板上的尺寸数据搬到变体上\n"
+"\n"
+"已知限制：\n"
+"- 原生体积字段按 Odoo 的「Volume」小数精度存储（默认 2 位小数），小于 0.01 立方米的体积会被舍入为 0；产品确实这么小时，请在「设置 → 技术 → 小数精度」中调高该精度"

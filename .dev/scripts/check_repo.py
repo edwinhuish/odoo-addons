@@ -7,7 +7,8 @@
     python3 .dev/scripts/check_repo.py --strict   # 连「残留中文界面文本」也算失败
 
 检查项：
- 1. i18n/*.po 里重复的 msgid（会导致整份译文导入失败）
+ 1. i18n/*.po：重复 msgid、条目缺 `#. module:` 首行注释、条目缺 `#:` 引用行或引用写法不对
+    （后三类都会让译文静默失效：导入不报错，界面一直显示英文）
  2. 应用列表元数据（shortdesc / summary / description）的 msgid 与 manifest 是否逐字符一致
  3. 源码里残留的中文界面文本（注释不算，需要人工判断的部分用 --strict 卡住）
  4. 所有 XML 是否合法（视图 / QWeb）
@@ -50,6 +51,11 @@ CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 MSGID_RE = re.compile(r'^msgid ((?:"(?:[^"\\]|\\.)*"\s*)+)', re.M)
 PO_REF_RE = re.compile(r"^#: model:ir\.module\.module,(\w+):base\.module_(\w+)$", re.M)
 MODULE_COMMENT_RE = re.compile(r"^#\.\s*module:\s*(\w+)", re.M)
+# `#:` 引用行里的单个引用：Odoo 的 PoFileReader 只认这三种前缀（且必须紧跟在 `#: ` 之后）
+PO_REF_PREFIX_RE = re.compile(r"^(?:code|model|model_terms):")
+# 运行期 `code:` 译文按注释过滤，标记缺失即静默失效（见 odoo/tools/translate.py CodeTranslations）
+PY_COMMENT_RE = re.compile(r"^#\.\s*odoo-python\b", re.M)
+JS_COMMENT_RE = re.compile(r"^#\.\s*odoo-javascript\b", re.M)
 METADATA_KEYS = {"shortdesc": "name", "summary": "summary", "description": "description"}
 
 # ---------------------------------------------------------------------------
@@ -283,14 +289,32 @@ class Report:
         (self.failures if self.strict else self.warnings).append(msg)
 
 
-def check_po_duplicates(report: Report) -> None:
-    """po 侧的检查：重复 msgid（整份译文导入会失败）+ 每个条目缺 `#. module:`（会被解析崩）。"""
+def check_po_files(report: Report) -> None:
+    """po 侧的三类检查。
+
+    1. 重复 `msgid`：整份译文导入会失败；
+    2. 条目缺 `#. module:` 首行注释：`PoFileReader` 会抛 `AttributeError`；
+    3. 引用行（`#:`）缺失或写法不对：Odoo 用 ``re.match(r'(code|model|model_terms):...')``
+       逐 token 匹配，写法不对（例如多写了一层 `#:`）就**匹配不到记录，条目静默失效** ——
+       界面永远显示英文，且导入过程不报任何错。
+    """
     for po_file in sorted(glob.glob(os.path.join(REPO_ROOT, "*", "i18n", "*.po"))):
+        relative = os.path.relpath(po_file, REPO_ROOT)
         content = open(po_file, encoding="utf-8").read()
         msgids = [unescape(raw) for raw in MSGID_RE.findall(content)]
         duplicates = [key for key, count in collections.Counter(msgids).items() if count > 1]
         if duplicates:
-            report.fail(f"{os.path.relpath(po_file, REPO_ROOT)}: 重复 msgid {duplicates}")
+            report.fail(f"{relative}: 重复 msgid {duplicates}")
+
+        # 行结构：po 里每行只能是空行 / 注释（`#`）/ `msgid` / `msgstr` / `msgctxt` / 带引号的续行。
+        # 典型错误：多行 msgstr 直接写成带真实换行的字符串 → polib 报 syntax error，
+        # 整份译文一条都导不进去（Odoo 侧只在 verbose 日志里才看得见）。
+        for lineno, line in enumerate(content.splitlines(), 1):
+            if not line or line.startswith(("#", '"', "msgid", "msgstr", "msgctxt")):
+                continue
+            report.fail(
+                f"{relative}:{lineno}: 不符合 po 语法（多行文本必须写成带引号的续行）：{line[:60]}"
+            )
 
         for block in content.split("\n\n"):
             raw = MSGID_RE.search(block)
@@ -298,10 +322,37 @@ def check_po_duplicates(report: Report) -> None:
                 continue  # 纯注释块
             if not unescape(raw.group(1)):
                 continue  # 文件头的 metadata 条目（msgid ""）
+            head = block.strip().splitlines()[0][:60]
             if not MODULE_COMMENT_RE.search(block):
-                head = block.strip().splitlines()[0][:60]
+                report.fail(f"{relative}: 条目缺 `#. module: xxx`：{head}")
+
+            ref_lines = [line for line in block.splitlines() if line.startswith("#:")]
+            if not ref_lines:
                 report.fail(
-                    f"{os.path.relpath(po_file, REPO_ROOT)}: 条目缺 `#. module: xxx`：{head}"
+                    f"{relative}: 条目缺 `#:` 引用行（没有引用的条目导入后不生效）：{head}"
+                )
+            ref_tokens = [token for line in ref_lines for token in line[2:].split()]
+            for token in ref_tokens:
+                if not PO_REF_PREFIX_RE.match(token):
+                    report.fail(
+                        f"{relative}: 引用行写法不对 → `#: {token}`\n"
+                        "     `#:` 后面应直接写 code: / model: / model_terms: 开头的引用"
+                        "（常见错误：引用行自己又带了一层 `#:`）"
+                    )
+
+            # `code:` 引用的运行期译文另有要求（CodeTranslations 按注释过滤）：
+            # Python（.py）条目要带 `#. odoo-python`，JS / OWL 模板（.js / .xml）条目要带
+            # `#. odoo-javascript`；缺标记的条目不生效 —— 界面一直英文，且不报错。
+            code_targets = [t[len("code:"):] for t in ref_tokens if t.startswith("code:")]
+            if any(t.endswith(".py") for t in code_targets) and not PY_COMMENT_RE.search(block):
+                report.fail(
+                    f"{relative}: 含 Python `code:` 引用的条目缺 `#. odoo-python` 注释"
+                    f"（Python 译文不会生效）：{head}"
+                )
+            if any(t.endswith((".js", ".xml")) for t in code_targets) and not JS_COMMENT_RE.search(block):
+                report.fail(
+                    f"{relative}: 含 JS / OWL `code:` 引用的条目缺 `#. odoo-javascript` 注释"
+                    f"（前端译文不会生效）：{head}"
                 )
 
 
@@ -441,7 +492,7 @@ def main() -> int:
 
     report = Report(args.strict)
     for check in (
-        check_po_duplicates,
+        check_po_files,
         check_apps_metadata,
         check_residual_chinese,
         check_xml,

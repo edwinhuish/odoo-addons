@@ -14,7 +14,7 @@
 - 继承模型：`product.product`（尺寸真身）、`product.template`（单变体桥接）
 - 自定义组件（前端模块）：无
 - 主依赖：`product`（不依赖 `stock` / `sale` / `purchase`）
-- 当前版本：`19.0.2.0.0`
+- 当前版本：`19.0.2.0.1`（19.0.2.0.1 修复 i18n：po 的 `#:` 引用行 / 多行 msgstr / `#. odoo-python` 标记三类静默失效，并打磨中文；19.0.2.0.0 改名 + 尺寸下沉到变体）
 
 ---
 
@@ -109,6 +109,38 @@
 - 现象：目录改名后每次加载都报 `module product_packing: not installable, skipped` + `Some modules are not loaded`。
 - 根因：`ir_module_module` 里旧记录仍是 `installed`，但 addons 里已没有它的代码。
 - 处置：装好新模块（数据搬运完成）后，用 `ir.module.module.button_immediate_uninstall()` 卸掉旧记录。
+
+---
+
+### P5：po 的三类「静默失效」（实测踩过：中文界面一直英文，导入却不报任何错）
+
+**触发条件**：改完 `i18n/zh_CN.po`，`task update` / `task i18n` 都显示成功，但界面仍是英文。
+
+三种原因互相独立，必须同时满足才能生效：
+
+1. **`#:` 引用行多了一层前缀**：写成 `#: #: model_terms:...` → `PoFileReader` 用
+   `re.match(r'(model|model_terms):([\w.]+),([\w]+):(\w+)\.([^ ]+)', occurrence)` 逐 occurrence 匹配，
+   多一层前缀就定位不到记录，条目被直接丢弃。
+2. **多行值没加引号**：多行 `msgstr` 直接写成带真实换行的字符串 → `polib` 抛
+   `Syntax error in po file (line N)`，**整份文件**一条都读不进来。必须写成 `msgstr ""` + 多行 `"...\n"`。
+3. **Python `_()` 条目缺 `#. odoo-python`**：运行期文案由 `CodeTranslations._load_python_translations()`
+   从 po 里**按注释过滤**读取（`PYTHON_TRANSLATION_COMMENT = 'odoo-python'`；JS / OWL 模板条目要
+   `odoo-javascript`），缺标记的条目永不生效。注意 `TranslationImporter` 本身**跳过** `code:` 条目
+   （`if row.get('type') == 'code': continue`），所以 `_()` 文案只走这个运行期通道。
+
+**验收方式（唯一可靠）**：去数据库 / 运行时看，别相信「导入没报错」——
+
+| 面 | 核对方式 |
+|----|----------|
+| 字段标签 / help | `ir_model_fields.field_description->>'zh_CN'`、`help->>'zh_CN'` |
+| selection | `ir_model_fields_selection.name->>'zh_CN'` |
+| 视图术语 | `ir_ui_view.arch_db->>'zh_CN'` |
+| 应用列表 | `ir_module_module.shortdesc / summary / description ->'zh_CN'` |
+| 运行期 `_()` | `odoo shell` 里 `with_context(lang='zh_CN')` 触发一次报错看文案 |
+| po 语法 | 容器内 `python3 -c "import polib; polib.pofile('<path>')"` |
+
+**预防**：`task check` 已内建四类校验（引用行写法 / 条目缺引用行 / 缺 `odoo-python`·`odoo-javascript`
+标记 / 行结构不合法），这几类问题都会在提交前卡住。
 
 ---
 
