@@ -14,15 +14,15 @@
 
 | 项 | 内容 |
 |---|---|
-| 阶段 | 2026-09-22（单日一轮，5 个提交） |
-| 提交 | `74fdade`（T-021 改名 + 尺寸下沉）→ `368f3a7`（i18n 静默失效）→ `44ad9ed`（po 检查 + Card 视图与入口）→ `66b8dda`（可选模块用户组 + 参考号归属）→ `6be1a3f`（前端算体积 + 转换映射） |
+| 阶段 | 2026-09-22（单日一轮，7 个提交） |
+| 提交 | `74fdade`（T-021 改名 + 尺寸下沉）→ `368f3a7`（i18n 静默失效）→ `44ad9ed`（po 检查 + Card 视图与入口）→ `66b8dda`（可选模块用户组 + 参考号归属）→ `6be1a3f`（前端算体积 + 转换映射）→ `6b54167`（本阶段报告入库）→ `f406f28`（Card 修复：切换分组后卡片空白 / 过宽） |
 | 涉及模块 | `product_dimension`（主战场）、`product_variant_conversion`、`product_reference`、`product_image`、`product_card_view` |
 | 交付任务 | **T-021**、**T-025**（收尾）、**T-027**、**T-029**、**T-030**、**T-031**、**T-032** |
-| 版本变化 | `product_dimension` 19.0.1.1.3 → **19.0.4.1.0**；`product_variant_conversion` 19.0.4.0.0 → **19.0.5.0.0**；`product_reference` → **19.0.2.5.3**；`product_image` → **19.0.2.6.4**；`product_card_view` **19.0.2.0.6** |
+| 版本变化 | `product_dimension` 19.0.1.1.3 → **19.0.4.1.0**；`product_variant_conversion` 19.0.4.0.0 → **19.0.5.0.0**；`product_reference` → **19.0.2.5.3**；`product_image` → **19.0.2.6.4**；`product_card_view` **19.0.2.0.6** → 当日追加修复 **19.0.2.0.7** |
 | 自动化测试 | `product_dimension` **17 项**、`product_variant_conversion` **43 项 × 4 种配置**（只装 `product` / +`product_dimension` / +`product_reference` / +`stock`+`sale_management`）全绿 |
 | 仓库门禁 | `task check` 新增 **4 类**校验（po 三类静默失效 + 可选模块用户组引用），均用已知坏数据自证有效 |
-| 待目标环境验证 | `product_dimension` 界面即时计算与精度、`product_variant_conversion` 弹窗、Card 入口覆盖；清单见第 6 节 |
-| 工作树状态 | 干净（本阶段改动全部已提交）；仅本报告文件为新增未提交 |
+| 待目标环境验证 | `product_dimension` 界面即时计算与精度、`product_variant_conversion` 弹窗、Card 入口覆盖、**Card 切换筛选 / 分组后的取数与布局**；清单见第 6 节 |
+| 工作树状态 | 主体改动与 `product_card_view` `19.0.2.0.7` 的**代码 + 首轮文档**均已提交（`74fdade` → `6be1a3f` → `6b54167` → `f406f28`）；本轮**文档补全**（模块三件套细化、根 `DOCS_TEMPLATE.md` / `TODO.md` / 本报告）尚未提交 |
 
 > **一句话概括**：把「产品尺寸」从一个放错层级的模块（模板级、夹带纸箱字段）重做成**变体级 + 前后端职责清晰**
 > 的模块；过程中修掉 **3 个会造成数据不一致的真 bug**（多变体共用参考号、无 `product_reference` 时转换必崩、
@@ -44,6 +44,7 @@
 | **T-030** | `product_dimension` | 表单填完尺寸即算出 `Volume`（服务端预览） | `19.0.3.1.0` | 已交付（**被 T-031 重做取代**） | `6be1a3f` |
 | **T-031** | `product_dimension` | 体积改由**前端**算、后端只兜底且不再返回体积 | `19.0.4.0.0` | 已交付，界面待复验 | `6be1a3f` |
 | **T-032** | `product_dimension` | 修「cm 尺寸的小体积显示 / 保存成 0」（前端取整参数 + Volume 精度提到 6 位） | `19.0.4.1.0` | 已交付，界面待复验 | `6be1a3f` |
+| （T-012 修订） | `product_card_view` | 修「切换 filter / group by 后卡片空白、过宽、无间隙」（取数覆盖分组 + payload 填充时机 + 分组布局） | `19.0.2.0.7` | 已交付，界面待复验 | `f406f28`（代码 + 首轮文档）；本轮文档补全未提交 |
 
 ---
 
@@ -132,6 +133,40 @@ Odoo 的桥接写入只在单变体时落到变体，产品一旦变成多变体
 | 验证 | 开发库逐动作核对 `action.views`；`task init -- --fresh` 实测全新安装路径；界面待复验 |
 | 风险 | 依赖 Odoo 内部 `session.view_info` 的 JS patch，Odoo 升降级需回归（见模块 `AGENTS.md` → L2 P2） |
 
+#### 追加修复（`19.0.2.0.7`，2026-09-22 当日追加，未提交）
+
+**目标**：搜索框里**切换筛选（filter）或分组（group by）之后**，Card 视图必须与首屏一致 ——
+有主图（多图可轮播）、有产品信息（title / reference / on hand / 变体按钮）、宽度适当、卡片之间有正常间隙；
+未分组与分组两种形态都要满足。
+
+**变更点**（四条现象、三类根因、三个文件）：
+
+| # | 变更 | 文件 |
+|---|---|---|
+| 1 | 取数范围覆盖分组：新增 `collectCardRecords()`（未分组 `list.records`、分组 `list.groups[].list.records`，多级分组递归） | `product_card_model.js` |
+| 2 | 取数时机：payload 改为「请求前不清空、成功后整体替换」+ 请求序号防乱序 + 批次 key 防重复请求；渲染器新增 `useEffect` 比对本页 id，数据到位后显式 `render(true)` | `product_card_model.js` / `product_card_renderer.js` |
+| 3 | 布局作用域与时机：分组样式给宽度上限与间距；未分组卡片 `margin: 0`、`absolute` 只由 JS 写 inline；布局改在 `onPatched` / `onMounted` + 容器 `ResizeObserver` 触发 | `product_card.scss` / `product_card_renderer.js` |
+
+**修复前后对比**：
+
+| 现象 | 根因 | 修复前 | 修复后 |
+|---|---|---|---|
+| Group By 后无图 / 无产品信息 | 分组时 `list.records` 为空 → 取数 id 为空 → 全局 Map 被清空 | 整页空 payload | 有图有信息 |
+| 切筛选后空白且不恢复 | ① `clear()` 后才 `await rpc`，飞行期间渲染读到空 Map，非 reactive Map 又不再触发渲染；② 这类刷新走 Reactive 重渲染、**不触发** `onWillUpdateProps` | 空白被固化 | 自动补拉并重渲染 |
+| 分组卡片过宽 / 无间隙 | 官方 `.o_kanban_grouped .o_kanban_record { width:100% }` + `.o_kanban_record { margin: 0 0 -1px }`，而瀑布流只在未分组生效 | 撑满列宽、零间距 | `max-width: 22.5rem` + 间距 `0.75rem` |
+| 未分组首帧 / 切筛选瞬间卡片叠在一起 | `position:absolute` 写在 SCSS，JS 未跑时全部绝对定位 | 可能重叠 | 退回正常流布局兜底，JS 跑完再切瀑布流 |
+
+**预期效果**：首屏 / 切筛选 / 切分组 / 翻页 / reload 五种路径表现一致且不空白；未分组仍为 JS 瀑布流
+（列高均衡、响应式列数），分组卡片宽度 ≤ 22.5rem、间距 0.75rem；接口 `/product_card/payload`
+与数据库结构不变、无迁移、无新增文案（`i18n/zh_CN.po` 不动）；升级方式 `-u product_card_view` + 强刷浏览器。
+
+**验证**：JS 语法（`node --check` ×4）、SCSS 编译（容器内 libsass，分组规则已核对）、
+开发库 `task update -- product_card_view`、`task check` 均通过；界面待目标环境按 TC-12 / TC-13 复验。
+
+**新增技术债 / 关注点**：`useEffect` 每次 patch 会比对一次本页 id 并可能多一次深渲染，
+记录数显著增大时可改为轻量 key；payload 属**非 reactive 容器**，任何「数据到位后不显式重渲染」的
+改动都会重现空白问题（已写入模块 `AGENTS.md` → L2 P6 与 L1 约束 6）。
+
 ---
 
 ### 2.5 仓库工程能力（本阶段的「副产品」，价值长期）
@@ -193,6 +228,9 @@ Odoo 的桥接写入只在单变体时落到变体，产品一旦变成多变体
 
 - `product_variant_conversion` 的转换链路改动面大（来源判定、价格分离、参考号交接），**依赖 43 项测试 + 目标环境复验**兜底；弹窗交互属于纯前端，无法在无浏览器环境自动化。
 - `product_card_view` 依赖 Odoo 内部 `session.view_info` 的 JS patch，Odoo 升降级需回归。
+- `product_card_view` 的卡片 payload 存在**非 reactive 全局 Map**（为避免 Owl DataModel 的 reload 循环），
+  因此「数据到位后必须显式重渲染」是硬约束：后续任何改动若去掉那条 `useEffect` + `render(true)`，
+  会重现「切换筛选 / 分组后空白」（见模块 `AGENTS.md` L1 约束 6 与 L2 P6）。
 - `product_dimension` 的前端即时计算依赖 `web` 模块（Odoo `auto_install`，实际总在）；即使缺失也只是少了界面即时计算，落库仍由后端兜底。
 
 ---
@@ -227,6 +265,8 @@ task todo
 | `product_variant_conversion` | 给带尺寸的产品做一次「给已有属性加取值」的转换 | 新变体挂在对应原变体（`Derived From`）、继承其尺寸与体积；无 `product_reference` 的环境下转换仍可保存 |
 | `product_variant_conversion` | 转换弹窗：改组合归属 / 取消保存 / 中文界面 | 归属逐组合可改；取消不落库；文案为中文 |
 | `product_card_view` | 库存 / 销售 / 采购三个入口打开产品列表 | 视图切换器有 **Card**（中文名），且默认进入 Card；卡片内容 / 多图 / 变体按钮正常 |
+| `product_card_view` | Card 视图里加 / 去一条筛选（如「有库存」）（`19.0.2.0.7`，TC-12） | 两次都立即显示图片与产品信息；卡片不空白、宽度与间隙不变（修复前必失败） |
+| `product_card_view` | Card 视图里按某字段分组 → 再切回不分组（`19.0.2.0.7`，TC-13） | 分组列内卡片有图有信息、宽度 ≤ 22.5rem、卡片间距 0.75rem；切回恢复瀑布流且无错位（修复前必失败） |
 | `product_reference` | 多变体产品的变体表单编辑参考号 | 编辑的是**本变体专属**参考号，不影响其它变体；单变体 → 多变体转换后原参考号仍可查到 |
 
 ### 6.3 改动文件地图（本阶段）
@@ -246,7 +286,11 @@ task todo
 | `product_reference/security/ir.model.access.csv` / `product_image/security/ir.model.access.csv` | 删掉硬编码的 `sales_team.group_sale_manager` 行 |
 | `product_reference/views/product_product_views.xml` | 变体表单指定 `lines_field: variant_reference_code_line_ids`（多变体不共用） |
 | `.dev/scripts/check_repo.py` | 新增 po 三类失效校验 + 可选模块用户组校验 + 应用列表元数据一致性校验 |
+| `product_card_view/static/src/js/product_card_model.js` | `19.0.2.0.7`：`collectCardRecords` / `collectCardRecordIds` / `cardRecordIdsKey`（取数覆盖分组）+ `fillProductCardPayload` 改为成功后整体替换、请求序号防乱序、批次 key 防重复 |
+| `product_card_view/static/src/js/product_card_renderer.js` | `19.0.2.0.7`：`useEffect` 比对本页 id 并 `render(true)` 兜底；布局改 `onPatched` / `onMounted` + 容器 `ResizeObserver`；分组时 `_clearCardLayout()` |
+| `product_card_view/static/src/scss/product_card.scss` | `19.0.2.0.7`：新增分组卡片宽度上限与间距；未分组卡片 `margin: 0`，`absolute` 交给 JS inline |
 | 各模块 `README.md` / `CHANGELOG.md` / `AGENTS.md`、根 `README.md` / `AGENTS.md` / `TODO.md` | 版本、验证清单、L1/L2 约束、任务状态同步 |
+| `product_card_view/README.md` / `CHANGELOG.md` / `AGENTS.md`、根 `README.md` / `AGENTS.md` / `TODO.md`、本报告 | `19.0.2.0.7` 文档同步：新增「筛选 / 分组下的取数与布局」小节与 L2 P6、修订记录表、模块版本与状态摘要、T-012 归档追溯行 |
 
 ### 6.4 常用命令速查
 
@@ -261,7 +305,10 @@ task i18n -- zh_CN product_dimension         # 导入中文译文
 
 ### 6.5 交付状态说明
 
-- 本阶段全部代码与文档改动**已提交**（`74fdade` → `6be1a3f`），工作树干净。
-- 本报告文件 `STAGE_REPORT_2026-09-22.md` 为**新增内容，尚未提交**（由你决定是否入库）。
+- 本阶段主体代码与文档改动**已提交**（`74fdade` → `6be1a3f`）；阶段报告已入库（`6b54167`）。
+- **当日追加**：`product_card_view` `19.0.2.0.7` 的代码 + 首轮文档已提交（`f406f28`）；
+  本轮**文档补全**（模块 `README.md` / `CHANGELOG.md` / `AGENTS.md` 的目标 / 变更点 / 前后对比 /
+  预期效果与修订记录，根 `DOCS_TEMPLATE.md` 的 CHANGELOG 约定、`TODO.md` 追溯行、本报告的同步）
+  **尚未提交**，提交后工作树即恢复干净。
 - 各模块的「待目标环境验证」状态以根 `README.md` 模块一览表与模块 `README.md` →「验证清单」为准；
   完成复验后把状态改为「已验收」并同步 `CHANGELOG.md` 的版本标题括号内容（`（待验证）` → `（已验证）`）。

@@ -1,7 +1,111 @@
 # 变更日志
 
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
+> 修复 / 优化类版本在这三段之外补两节，便于追溯「为什么改、改成什么、改前什么样」：
+> **优化目标**（置于「变更」之前）与**优化前后对比**（置于「变更」之后，三列「场景 / 优化前 / 优化后」），
+> 「影响」一节同时承载预期效果。规范见 [`DOCS_TEMPLATE.md`](../DOCS_TEMPLATE.md) →「CHANGELOG 约定」。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复 / 文档 +z。
+
+---
+
+## [19.0.2.0.7] - 2026-09-22（修复：切换 filter / group by 后卡片空白、过宽、无间隙）
+
+> 修订日期：2026-09-22 ｜ 类型：修复（+z）｜ 影响文件：`product_card_model.js` /
+> `product_card_renderer.js` / `product_card.scss`（无 Python、无数据、无 i18n 改动）
+
+### 优化目标
+
+产品列表的 Card 视图在**搜索框中切换筛选（filter）或分组（group by）之后**，必须与首屏表现一致：
+
+1. 卡片显示产品主图（多图时轮播仍可用）；
+2. 卡片显示产品信息（title / reference / on hand / 变体按钮行）；
+3. 卡片宽度适当（分组列里不被拉满整列）；
+4. 卡片之间保留正常间隙（不粘连）。
+
+四个现象来自**三类互相独立**的问题（取数范围 / 取数时机 / 布局作用域），因此分三条修复；
+未分组与分组两种形态都要满足上述四点。
+
+### 变更
+
+1. **取数范围（分组视图）** —— `product_card_model.js`
+   - 现状：`fillProductCardPayload` 只吃 `props.list.records`；分组时 `props.list` 是
+     `DynamicGroupList`，记录在各 `group.list.records` 里、`list.records` 为空 →
+     取数 id 列表为空 → 全局 Map 被清空 → 所有卡片空 payload（无图、无产品信息）。
+   - 变更：新增 `collectCardRecords(list)` 统一收集 —— 未分组取 `list.records`、分组取
+     `list.groups[].list.records`（多级分组继续下钻）；`collectCardRecordIds()` 在其上取
+     `resId` 列表，`cardRecordIdsKey()` 生成批次 key。
+2. **取数时机（筛选 / 分组 / 翻页 / reload）** —— `product_card_model.js` +
+   `product_card_renderer.js`
+   - 现状一：`payloadByResId.clear()` 之后才 `await rpc` —— 请求飞行期间若发生一次渲染，
+     卡片读到的是**已清空**的 Map；而 Map 是非 reactive 的，响应回来**不会再触发渲染**，
+     空白被固化。
+   - 现状二：只依赖 `onWillUpdateProps` 补拉；但筛选 / 分组 / 翻页 / reload 常常只改 `list`
+     内部数据，渲染器由 Reactive 直接重渲染、**不走 `updateProps`** → 钩子根本不触发；
+     即便触发，Owl 在 await 后还有 `if (fiber !== this.fiber) return`，fiber 被取代时会
+     放弃这次渲染。
+   - 变更：① `fillProductCardPayload` 改为「请求前不清空、成功后整体替换」，加
+     `requestSeq` 丢弃过期响应、加批次 key 避免同一批 id 重复请求、失败时清标记允许重试；
+     ② 渲染器新增 `useEffect` 逐次比对本页 id（Owl 19 的 `useEffect` 即
+     `onMounted` + `onPatched`，patch 路径全覆盖），数据到位后**显式 `this.render(true)`**
+     —— 非 reactive 容器没有别的通知途径（effect 回调不返回 promise，避免被 Owl 当 cleanup 调用）。
+3. **布局作用域（分组）与布局时机** —— `product_card.scss` + `product_card_renderer.js`
+   - 现状：JS 瀑布流只在 `o_kanban_ungrouped` 下运行；分组时套用官方样式
+     `.o_kanban_grouped .o_kanban_record { width: 100% }` + `.o_kanban_record { margin: 0 0 -1px }`
+     → 卡片撑满列宽（过宽）、上下零间距（无间隙）。
+   - 变更：新增分组样式 `.o_product_card_view.o_kanban_grouped .o_kanban_group
+     .o_kanban_record.o_product_card { width: 100%; max-width: 22.5rem; margin: 0 auto 0.75rem }`；
+     未分组卡片 `margin: 0`（间距完全由瀑布流 `GAP` 决定），并把 `position: absolute` 从
+     SCSS 移到 JS inline（JS 未跑的首帧退回正常流布局作兜底）；布局触发点由
+     `onWillUpdateProps` 里的 rAF 改为 `onPatched` + `onMounted`，新增容器 `ResizeObserver`，
+     分组时 `_clearCardLayout()` 清掉残留 inline 定位，`innerWidth <= 0` 时跳过计算。
+
+### 优化前后对比
+
+| 维度 | 优化前 | 优化后 |
+|------|--------|--------|
+| 取数范围（分组） | 只取 `props.list.records` → 分组时为空 → Map 被清空 → 整页无图无信息 | `collectCardRecords()` 覆盖 `list.groups[].list.records`（多级分组递归）→ 有图有信息 |
+| 取数时机（筛选 / 分组 / 翻页 / reload） | `clear()` 后再 `await rpc`，飞行期间的渲染读到空 Map 且不再触发渲染 → 空白固定；只靠 `onWillUpdateProps`，而这类刷新不触发它 → 无补拉机会 | 请求前不清空、成功后整体替换 + requestSeq 防乱序；`useEffect` 逐次比对本页 id，数据到位后显式 `render(true)` |
+| 卡片宽度（分组） | 官方 `width: 100%` → 撑满列宽 | `width: 100%; max-width: 22.5rem` → 有宽度上限，列内居中 |
+| 卡片间隙（分组） | 官方 `margin: 0 0 -1px` → 零间距 | `margin: 0 auto 0.75rem` → 间距 0.75rem |
+| 未分组首帧 / 切筛选瞬间 | `position: absolute` 写在 SCSS，JS 未跑时所有卡片叠在一起 | `absolute` 只由 JS 写 inline，未跑时退回正常流布局（官方宽度与边距） |
+| 未分组间距 | 官方 `margin` 与瀑布流 `GAP` 叠加，实际间距不可控 | 卡片 `margin: 0`，间距完全由瀑布流 `GAP` 决定 |
+| 布局触发 | 仅 `onWillUpdateProps` 里的 rAF（props 更新 ≠ DOM 已更新） | `onPatched`（DOM patch 后）+ `onMounted` + 容器 `ResizeObserver`；分组时清残留 inline 定位 |
+
+### 影响
+
+（预期效果）
+
+- 首屏与切换筛选 / 分组 / 翻页 / reload 后表现一致：卡片有图、有产品信息、宽度适当、间隙正常；
+  分组视图同样有图有信息（修复前分组必空）
+- 未分组仍为 JS 瀑布流（列高均衡、响应式列数），间距精确可控；分组视图卡片宽度 ≤ 22.5rem、
+  间距 0.75rem，不再撑满列宽、不再零间距
+- 无数据结构变化、无迁移；接口 `/product_card/payload` 不变（分组时一次性提交所有分组的记录 id）
+- 不新增用户可见文案，`i18n/zh_CN.po` 无需改动
+- 代价：`useEffect` 会在每次 patch 后比对一次本页 id（字符串 join，约百条量级），
+  取到新数据时多一次深渲染 —— 换取「非 reactive 容器下必然刷新」的正确性
+
+### 文档
+
+- 本文件：本版本按「优化目标 / 变更 / 优化前后对比 / 影响 / 文档」记录（修复类版本格式，
+  已写进根 [`DOCS_TEMPLATE.md`](../DOCS_TEMPLATE.md) →「CHANGELOG 约定」，供后续模块沿用）
+- 模块 `README.md`：功能概述与核心设计补「分组视图」「取数时机」；新增「筛选 / 分组下的取数与布局」小节；
+  验证清单补切换 filter / group by 一条；「异常情况与处理」补 3 条排障入口
+- 模块 `AGENTS.md`：新增 L2 P6（取数范围 / 取数时机 / 布局作用域 / 布局时机 / effect 返回值五个坑）；
+  更新 L1 约束 6、技术设计表「瀑布流 / 分组布局」两行、文件职责表、修订记录
+- 根 `README.md` 模块一览表与 `AGENTS.md` 模块速查表：版本 `19.0.2.0.6` → `19.0.2.0.7` + 变更摘要
+- 根 `TODO.md`：`T-012` 归档条目补一行本版本追溯
+- 根 `STAGE_REPORT_2026-09-22.md`：速览版本行、2.4 节、6.2 界面复验清单、6.3 文件地图、5.3 风险同步
+- 根 `DOCS_TEMPLATE.md`：把「修复 / 优化类版本补两节」写进 CHANGELOG 模板与约定（本版本是首个范例）
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| JS 语法（`node --check`） | 4 个 js 文件全部通过 ✓ |
+| SCSS 编译 | 容器内 libsass 编译 `product_card.scss` 通过，分组规则编译结果已核对 ✓ |
+| 模块升级 | 开发库 `task update -- product_card_view` 无报错（assets 顺序、视图与译文正常加载）✓ |
+| 仓库门禁 | `task check` 对 `product_card_view` 无告警 ✓ |
+| 待目标环境验证 | 非分组 / 分组分别切换 filter 与 group by：卡片有图有信息、宽度与间隙正常（需 `-u` 升级 + 强刷浏览器）|
 
 ---
 
@@ -40,70 +144,6 @@
 | `task init -- --fresh`（全新安装） | 7 个 `product.template` 动作 `views[0]` 均为 card；库里 card 记录仅 3 条（静态声明）✓ |
 | 销售 / 采购 / 发票 | `views = card → kanban → list → form → activity` ✓ |
 | `task check` | 通过 ✓ |
-
----
-
-## [19.0.2.0.7] - 2026-09-22（修复：切换 filter / group by 后卡片空白、过宽、无间隙）
-
-### 变更
-
-四个现象同源，分三条修复（`product_card_model.js` / `product_card_renderer.js` / `product_card.scss`）：
-
-1. **分组（Group By）后无图 / 无信息**：`fillProductCardPayload` 只吃 `props.list.records`，
-   而分组时 `props.list` 是 `DynamicGroupList`，记录在各 `group.list.records` 里、
-   `list.records` 为空 → 取数列表为空 → 全局 Map 被清空 → 所有卡片空 payload。
-   - 改为 `collectCardRecords(list)` 统一收集：未分组取 `list.records`、分组取
-     `list.groups[].list.records`（多级分组继续下钻）。
-2. **切换筛选 / 分组后无图 / 无信息（时机问题）**：
-   - 根因一：原实现 `clear()` 之后才 `await rpc` —— 请求飞行期间若发生一次渲染，
-     卡片读到的是**已清空**的 Map，而 Map 非 reactive，响应回来后**不会再触发渲染**，
-     空白就固定住了。
-   - 根因二：筛选 / 分组 / 翻页 / reload 常常只改 `list` 内部数据，本渲染器由
-     Reactive 直接重渲染、**不走 `updateProps`**，`onWillUpdateProps` 不触发 →
-     根本没有补拉的机会（`onWillUpdateProps` 那条 await 还可能因 fiber 被取代而在
-     `if (fiber !== this.fiber) return` 处放弃渲染）。
-   - 改法：① `fillProductCardPayload` 改为「请求前不清空、成功后整体替换」，
-     并用 requestSeq 丢弃过期响应；② 新增 `useEffect` 比对本页 id 列表
-     （Owl 19 的 `useEffect` 是 `onMounted` + `onPatched` 逐次比对，patch 路径全覆盖），
-     数据到位后**显式 `this.render(true)`** —— payload 在非 reactive Map 里，
-     这是唯一能让卡片取到新数据的方式（effect 回调不能返回 promise，Owl 会把返回值
-     当 cleanup 调用）。
-3. **卡片过宽 / 卡片之间无间隙**：
-   - 分组时官方 CSS 是 `.o_kanban_grouped .o_kanban_record { width: 100% }` +
-     `.o_kanban_record { margin: 0 0 -1px }`（卡片撑满列宽、上下零间距），
-     而瀑布流只在未分组生效 → 分组列里就是「过宽 + 无间隙」。新增分组样式：
-     卡片 `width: 100%; max-width: 22.5rem; margin: 0 auto 0.75rem`。
-   - 未分组：`position: absolute` 从 SCSS 移到 JS inline —— JS 还没跑的首帧
-     （或切筛选后 DOM 刚 patch）若已被 CSS 设为 absolute，所有卡片会叠在一起；
-     留正常流布局作兜底。同时 `margin: 0`，避免官方 kanban 的 margin 叠加到
-     瀑布流算的 GAP 上。
-   - 布局触发点从「`onWillUpdateProps` 里的 rAF」改为 **`onPatched`**（每次 DOM patch
-     后重算，offsetHeight 才准）+ `onMounted`，并新增容器 `ResizeObserver`
-     （侧栏收放 / 分组列数变化）；分组时 `_clearCardLayout()` 清掉残留的 inline 定位，
-     避免从未分组切到分组后卡片错位。
-   - 兜底：`innerWidth <= 0`（容器还没布局完）时不算列数。
-
-### 影响
-
-- 切换筛选（filter）、分组（group by）、翻页、reload 后卡片都正常显示图片与产品信息；
-  分组视图同样有图有信息
-- 未分组保持 JS 瀑布流（列高均衡、响应式列数）；分组视图卡片宽度上限 22.5rem、
-  卡片间距 0.75rem，不再撑满列宽、不再零间距
-- 无数据结构变化、无迁移；接口 `/product_card/payload` 不变（分组时一次性提交全部分组的记录 id）
-
-### 文档
-
-- 模块 `AGENTS.md`：新增 L2 P6（payload 填充时机 + 分组取数 + 瀑布流只在未分组生效三个坑），
-  修订「文件职责」里 renderer / model 的职责描述，当前版本改为 `19.0.2.0.7`
-- 模块 `README.md`：功能概述 / 核心设计补充「分组视图」与「取数时机」说明；
-  「异常情况与处理」新增「切换筛选 / 分组后卡片空白」一条
-
-### 验证记录
-
-| 项 | 结果 |
-|----|------|
-| JS 语法（`node --check`） | 4 个 js 文件全部通过 ✓ |
-| 待目标环境验证 | 非分组 / 分组分别切换 filter 与 group by，确认卡片有图有信息、宽度与间隙正常（需 `-u` 升级 + 强刷浏览器） |
 
 ---
 

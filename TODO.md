@@ -215,5 +215,9 @@
   ——Card 视图入口（库存 → Products 切换器）已确认；卡片内容 / 多图 / 变体 / Sales / Purchase 入口 /
   双语 / 权限待目标环境复验，清单见 [`product_card_view/README.md`](product_card_view/README.md)
   →「验证清单」「遗留问题」；技术设计与踩坑见 [`product_card_view/AGENTS.md`](product_card_view/AGENTS.md)。
+  - 后续修订（追溯）：`19.0.2.0.7`（2026-09-22）修复「切换筛选 / 分组后卡片空白、过宽、无间隙」——
+    取数范围覆盖分组、payload 成功后整体替换 + `useEffect` 兜底重渲染、分组布局改由 SCSS 给；
+    文档见模块 `CHANGELOG.md` → `[19.0.2.0.7]`、`README.md` →「筛选 / 分组下的取数与布局」、
+    `AGENTS.md` → L2 P6；复验项 TC-12 / TC-13（待目标环境验证）
 - **T-011 产品参考号界面改造 + 多变体参考号不共用**：2026-09-08 验收通过，落地版本
   `19.0.2.5.0`，记录见 [`product_reference/CHANGELOG.md`](product_reference/CHANGELOG.md)   →「验收记录（T-011）」。
