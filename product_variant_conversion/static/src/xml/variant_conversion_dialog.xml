@@ -21,7 +21,7 @@
                                         t-att-value="variant.id"
                                         t-att-selected="state.selection[combination_index] === variant.id"
                                         t-att-disabled="this.isVariantUsed(combination_index, variant.id)"
-                                        t-esc="variant.label"/>
+                                        t-esc="variantDisplay(variant)"/>
                             </select>
                         </td>
                     </tr>

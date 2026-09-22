@@ -17,6 +17,7 @@
 """
 
 import json
+from unittest import mock
 
 from odoo.exceptions import UserError
 from odoo.fields import Command
@@ -930,3 +931,132 @@ class TestProductVariantConversion(TransactionCase):
             seller = variant._select_seller(partner_id=vendor, quantity=1.0)
             self.assertEqual(seller, variant_price)
             self.assertEqual(seller.price, 12.0)
+
+    # ------------------------------------------------------------------
+    # 属性主数据路径的拦截（T-017）
+    # ------------------------------------------------------------------
+
+    def test_deleting_a_used_value_in_master_data_is_refused(self):
+        """属性主数据里删取值：正被产品变体使用的取值不允许删。"""
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        with self.assertRaises(UserError):
+            self.color_red.unlink()
+        self.assertTrue(self.color_red.exists())
+
+    def test_deleting_a_ptav_with_active_variants_is_refused(self):
+        """删除取值记录（ptav）：还有在用变体带着它时不允许删。"""
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        ptav = product.attribute_line_ids.mapped("product_template_value_ids").filtered(
+            lambda value: value.product_attribute_value_id == self.color_red)
+        with self.assertRaises(UserError):
+            ptav.unlink()
+        self.assertTrue(ptav.exists())
+
+    def test_deleting_an_attribute_line_directly_is_refused(self):
+        """直接删属性行（不经产品表单）：带着该行取值的在用变体会失去归属，必须拒绝。"""
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        line = product.attribute_line_ids
+        with self.assertRaises(UserError):
+            line.unlink()
+        self.assertTrue(line.exists())
+
+    def test_removing_a_value_through_the_line_is_refused(self):
+        """直接写属性行移走取值：在用变体还带着它时不允许（不经产品表单的路也被拦住）。"""
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        line = product.attribute_line_ids.filtered(lambda ptal: ptal.attribute_id == self.color)
+        with self.assertRaises(UserError):
+            line.write({"value_ids": [Command.set(self.color_red.ids)]})
+        self.assertEqual(
+            line.product_template_value_ids.mapped("product_attribute_value_id"),
+            self.color.value_ids,
+        )
+
+    def test_value_deletion_works_once_the_variants_are_gone(self):
+        """报错里给的出路：先把用到取值的产品处理掉，取值就能正常删。"""
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        product.unlink()
+        self.color_red.unlink()
+        self.assertFalse(self.color_red.exists())
+
+    # ------------------------------------------------------------------
+    # 未覆盖分支（T-019）：多记录 / combo / 归档变体 / dynamic 属性
+    # ------------------------------------------------------------------
+
+    def test_writing_several_products_at_once_is_refused(self):
+        """一次改多个产品的属性：会动到变体时拒绝（多记录表达不了逐条归属）。"""
+        product_a = self._create_product(attribute=self.color, values=self.color.value_ids)
+        product_b = self._create_product(attribute=self.color, values=self.color.value_ids)
+        commands = self._set_commands(product_a, self.size, self.size.value_ids)
+        with self.assertRaises(UserError):
+            (product_a + product_b).write({"attribute_line_ids": commands})
+        self.assertFalse(product_a.attribute_line_ids.filtered(
+            lambda ptal: ptal.attribute_id == self.size))
+
+    def test_product_with_archived_variants_is_refused(self):
+        """产品带归档变体时拒绝转换（避免老变体被悄悄复活）。"""
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        self._variant_of(product, self.color_blue).active = False
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        self.assertTrue(preview["required"])
+        with self.assertRaises(UserError):
+            self._confirm(product, commands, self._payload(self._default_rows(preview)))
+
+    def test_dynamic_attribute_is_refused(self):
+        """「按需生成变体」的属性拒绝走本流程（Odoo 自己创建变体，无需归属确认）。"""
+        dynamic = self.Attribute.create({
+            "name": "Test Dynamic",
+            "create_variant": "dynamic",
+            "value_ids": [(0, 0, {"name": "Test D1"}), (0, 0, {"name": "Test D2"})],
+        })
+        product = self._create_product()
+        commands = self._set_commands(product, dynamic, dynamic.value_ids)
+        preview = self._preview(product, commands)
+        self.assertTrue(preview["blocked"])
+        with self.assertRaises(UserError):
+            product.write({"attribute_line_ids": commands})
+        self.assertFalse(product.attribute_line_ids)
+
+    # ------------------------------------------------------------------
+    # 组合数前置上限（T-018）
+    # ------------------------------------------------------------------
+
+    def test_huge_combination_counts_are_refused_before_enumeration(self):
+        """组合总数（各属性取值数乘积）超过 dynamic_variant_limit 时，先拒绝再枚举。"""
+        big = self.Attribute.create({
+            "name": "Test Big",
+            "value_ids": [(0, 0, {"name": "Test Big %02d" % index}) for index in range(40)],
+        })
+        other = self.Attribute.create({
+            "name": "Test Big 2",
+            "value_ids": [(0, 0, {"name": "Test B2 %02d" % index}) for index in range(40)],
+        })
+        product = self._create_product()
+        with self.assertRaises(UserError) as catch:
+            self._configure(product, big, big.value_ids)
+            self._configure(product, other, other.value_ids)
+        self.assertIn("product.dynamic_variant_limit", str(catch.exception))
+
+    # ------------------------------------------------------------------
+    # 转换后钩子与 chatter 留痕（T-020）
+    # ------------------------------------------------------------------
+
+    def test_conversion_hook_is_called_and_chatter_is_written(self):
+        """转换完成后调用扩展钩子，并在产品 chatter 里留下一条转换记录。"""
+        calls = []
+
+        def fake_hook(recordset, originals, new_variants, anchors):
+            calls.append((originals, new_variants, anchors))
+
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        with mock.patch.object(
+                type(product), "_post_variant_conversion_hook",
+                side_effect=fake_hook, autospec=True):
+            self._configure(product, self.size, self.size.value_ids)
+        # 补丁只对打上之后的那次转换生效（建产品配 Color 的那次在补丁之前）
+        self.assertEqual(len(calls), 1)
+        originals, new_variants, anchors = calls[0]
+        self.assertEqual(len(originals), 2)
+        self.assertEqual(len(new_variants), 2)
+        self.assertEqual(len(anchors), len(originals))
+        self.assertTrue(product.message_ids)

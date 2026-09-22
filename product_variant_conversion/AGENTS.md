@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.3.4.0`
+- 当前版本：`19.0.4.0.0`
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -113,6 +113,14 @@
     - 开关：系统参数 `product_variant_conversion.separate_variant_prices`（默认开启）；台账 `separate_variant_prices` 如实记录
     - 违反后果：拆规则时静默改价（卖价变了却没人知道）；或所有变体共用一条价格记录，改一处影响全部
 
+17. **属性主数据与属性行的直接写路径必须过「丢变体」守卫**（`models/product_attribute_guards.py`）
+    - 三个模型都有守卫：`product.template.attribute.value.unlink()`、`product.attribute.value.unlink()`、
+      `product.template.attribute.line.unlink()` / `.write()`（`value_ids` 移走在用变体携带的取值时拒绝）
+    - 守卫在 `create_product_product=False` 时**必须放行**（那是本模块的沙盒写入，见 L1 约束 10）
+    - 报错必须给出出路：「先归档或删除用到它的变体，再删取值」
+    - 违反后果：属性主数据里删取值会连坐删 / 归档在用变体（库存与单据跟着消失），绕过整个归属确认
+    - 已知不拦：**归档**属性取值（Odoo 原生也不拦）——归档后变体仍带着该取值，见 README →「已知边界」
+
 ---
 
 ## 国际化约束（i18n）
@@ -142,15 +150,17 @@
 | `__manifest__.py` | 模块元数据、版本、依赖（仅 `product`）、数据文件与前端资源登记（assets 里三个文件） |
 | `models/product_template.py` | 保存拦截 `write()`、预览 RPC `get_variant_conversion_preview()`、试写分析 `_analyze_variant_conversion_write()`、归属解析、核心转换 `_convert_to_multi_variant()`、校验与断言、谱系写入、台账入口 `action_open_variant_conversions()` |
 | `models/product_product.py` | 变体上的可搜索来源字段 `variant_conversion_id` / `variant_origin_id` |
+| `models/product_template_prices.py` | 价格数据按变体分离的实现（供应商价格 / 价格表规则的拆分、继承与守恒断言），从 `product_template.py` 拆出 |
+| `models/product_attribute_guards.py` | T-017：属性主数据与属性行直接写路径的「丢变体」守卫（ptav / PAV / line 三个模型） |
 | `models/product_variant_conversion.py` | 转换台账与变体谱系两个模型 |
 | `static/src/js/variant_conversion_form_patch.js` | patch `FormController.onWillSaveRecord`：保存前检测、拦保存、弹窗、把归属放进本次 `changes` |
 | `static/src/js/variant_conversion_dialog.js` | 归属确认弹窗组件（逐组合选「由谁继续承载」+ 供应商价格勾选框 + 文案 getter） |
 | `static/src/xml/variant_conversion_dialog.xml` | 弹窗模板 `product_variant_conversion.VariantConversionDialog` |
-| `views/product_template_views.xml` | 产品表单的技术字段（不可见）、`Conversions` 智能按钮、**Variant Lineage** 页；产品搜索筛选 |
+| `views/product_template_views.xml` | 产品表单的技术字段（不可见）、`Conversions` 智能按钮；产品搜索筛选。**刻意不加谱系页**：谱系明细在台账详情页里看，避免产品详情页多出页签 |
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
 | `views/product_variant_conversion_views.xml` | 转换台账的列表 / 详情视图与动作 |
 | `security/ir.model.access.csv` | 两个模型的访问规则（`base.group_user` 与 `product.group_product_variant`） |
-| `tests/test_product_variant_conversion.py` | 28 项自动化测试（拦截、预览、归属确认、拒绝删减、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格数据按变体分离与共享边界） |
+| `tests/test_product_variant_conversion.py` | 38 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目 |
 | `README.md` | 用户可见功能、字段表、归属怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
@@ -417,7 +427,7 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
    由 `_check_variant_conversion_anchors()` 与后置断言兜住（拒绝并整单回滚），不会写坏数据，但报错会指向「组合被排除 / 变体数不符」。
 7. **弹窗未展示在手数量**：预览已返回 `variants[].on_hand`，模板只渲染了 `label`。
 8. **前端无自动化测试**：28 项都是服务端测试，弹窗与钩子靠手工验证（见 `README.md` →「验证清单」）。
-9. **有代码无测试的服务端分支**：多记录写入、combo、归档变体、dynamic 属性、组合被排除、无 `stock` / 无读权限时的降级。
+9. **有代码无测试的服务端分支**（多记录写入、归档变体、dynamic 属性已于 `19.0.4.0.0` 补测）：combo 产品（构造合法组合产品需要先配 combo choice）、组合被排除规则过滤（排除规则本身会先让原生收编变体，难以构造）、无 `stock` / 无读权限时的降级。
 
 **扩展点**
 

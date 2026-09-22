@@ -110,11 +110,15 @@ class ProductTemplate(models.Model):
         vals = dict(vals)
         mapping_payload = vals.pop("variant_conversion_mapping", False)
 
+        # 先锁住模板行再做分析：分析在前、锁在后的话，并发下可能拿到过期的结论（T-018）
+        if len(self) == 1:
+            self.env.cr.execute("SELECT id FROM product_template WHERE id = %s FOR UPDATE", (self.id,))
+
         if len(self) > 1:
             # 多记录写入表达不了「每条变体的归属」，只做安全判定：会动到变体就要求逐条保存
             for tmpl in self:
                 affected = tmpl._analyze_variant_conversion_write(vals["attribute_line_ids"])
-                if affected["lost_variant_ids"] or affected["new_variant_ids"]:
+                if affected["lost_variant_ids"] or affected["expected_count"] > affected["before_count"]:
                     raise UserError(_(
                         "Changing the attributes of several products at once cannot keep track of the variant ownership of %(product)s. Save the products one by one from the product form.",
                         product=tmpl.display_name,
@@ -127,6 +131,15 @@ class ProductTemplate(models.Model):
                 "This product has an attribute that creates its variants on demand, so Odoo itself creates the new variants and there is nothing to confirm here. Set that attribute's variant creation mode to instantly if you want to decide the variant ownership.",
             ))
         if affected["lost_variant_ids"]:
+            if affected.get("lost_values_archived"):
+                raise UserError(_(
+                    "The value %(values)s of %(product)s has been archived in the attribute settings while "
+                    "%(count)s variants still carry it: the conversion cannot keep those combinations. "
+                    "Restore the value in the attribute settings, or archive or delete those variants first.",
+                    values=affected["lost_value_names"],
+                    count=len(affected["lost_variant_ids"]),
+                    product=self.display_name,
+                ))
             raise UserError(_(
                 "This attribute change removes values and would archive or delete %(count)s existing variants of %(product)s, which carry their own stock, orders and invoices. Nothing has been changed. Archive or delete those variants first if you really want to drop them.",
                 count=len(affected["lost_variant_ids"]),
@@ -194,6 +207,20 @@ class ProductTemplate(models.Model):
                 "combinations": [],
             }
         if affected["lost_variant_ids"]:
+            if affected.get("lost_values_archived"):
+                return {
+                    "blocked": _(
+                        "The value %(values)s of this product has been archived in the attribute settings "
+                        "while %(count)s variants still carry it: the conversion cannot keep those "
+                        "combinations. Restore the value in the attribute settings, or archive or delete "
+                        "those variants first.",
+                        values=affected["lost_value_names"],
+                        count=len(affected["lost_variant_ids"]),
+                    ),
+                    "required": False,
+                    "variants": [],
+                    "combinations": [],
+                }
             return {
                 "blocked": _(
                     "This attribute change removes values and would archive or delete %(count)s existing variants, which carry their own stock, orders and invoices. Archive or delete those variants first if you really want to drop them.",
@@ -254,6 +281,8 @@ class ProductTemplate(models.Model):
             self.with_context(create_product_product=False).write({
                 "attribute_line_ids": attribute_line_ids,
             })
+            self._check_variant_conversion_combination_cap(
+                self._get_variant_conversion_attribute_lines())
             specification = self._get_variant_conversion_specification()
             spec_attributes = self.env["product.attribute"]
             for spec in specification:
@@ -280,15 +309,21 @@ class ProductTemplate(models.Model):
                 spec["attribute"].id: set(spec["values"].ids) for spec in specification
             }
             lost = []
+            lost_value_ids = set()
             for variant, pairs in before_values.items():
                 for attribute_id, value_id in pairs:
                     kept_values = spec_values.get(attribute_id)
                     if kept_values is not None and value_id not in kept_values:
                         lost.append(variant.id)
-                        break
+                        lost_value_ids.add(value_id)
+            lost_pavs = self.env["product.attribute.value"].browse(sorted(lost_value_ids))
+            lost_values_archived = bool(lost_pavs) and all(not value.active for value in lost_pavs)
+            lost_value_names = ", ".join(lost_pavs.mapped("name"))
             analysis = {
                 "dynamic_attributes": self.has_dynamic_attributes(),
                 "lost_variant_ids": lost,
+                "lost_values_archived": lost_values_archived,
+                "lost_value_names": lost_value_names,
                 "expected_count": len(combinations),
                 "before_count": len(variants),
                 "combinations": combinations,
@@ -357,6 +392,29 @@ class ProductTemplate(models.Model):
             ))
         return mapping, share_vendor_prices
 
+    def _check_variant_conversion_combination_cap(self, attribute_lines):
+        """组合总数（各属性有效取值数的乘积）超过 ``product.dynamic_variant_limit`` 就拒绝。
+
+        必须在 ``itertools.product`` 枚举**之前**做：超限的配置先拒绝，而不是先把几十万个
+        组合枚举出来再拒绝（T-018）。只数取值个数，不生成任何组合。
+        """
+        self.ensure_one()
+        cap = int(self.env["ir.config_parameter"].sudo().get_param(
+            "product.dynamic_variant_limit", 1000))
+        total = 1
+        for line in attribute_lines:
+            count = len(line.product_template_value_ids._only_active())
+            if not count:
+                return                                  # 没有有效取值的属性不产生组合
+            total *= count
+        if total > cap:
+            raise UserError(_(
+                "This configuration would create %(count)s combinations, above the limit of %(limit)s "
+                "set by the system parameter product.dynamic_variant_limit. Reduce the number of values.",
+                count=total,
+                limit=cap,
+            ))
+
     def _get_variant_conversion_specification(self):
         """当前（或演练后的）变体生成配置：属性 + 有效取值。"""
         self.ensure_one()
@@ -378,7 +436,8 @@ class ProductTemplate(models.Model):
                 self._get_variant_conversion_combination_label(
                     variant.product_template_attribute_value_ids),
             ),
-            "on_hand": quantities.get(variant.id, 0.0),
+            # 没装 stock（或无读权限）时为 None：前端据此决定要不要展示在手数量
+            "on_hand": quantities.get(variant.id),
         } for variant in self.product_variant_ids]
 
     def _get_variant_conversion_on_hand_quantities(self):
@@ -460,6 +519,9 @@ class ProductTemplate(models.Model):
 
         with self.env.cr.savepoint():
             # 转换前的快照：属性行、各变体的取值组合、以及本次真正「新加」的属性
+            # （先做组合数上限检查：超限的配置在枚举前就拒绝，见 T-018）
+            self._check_variant_conversion_combination_cap(
+                self._get_variant_conversion_attribute_lines())
             old_lines = (previous_attribute_lines if previous_attribute_lines is not None
                          else self._get_variant_conversion_attribute_lines())
             old_values = {
@@ -525,6 +587,10 @@ class ProductTemplate(models.Model):
                 self._separate_variant_prices(originals, new_variants, share_vendor_prices)
             elif share_vendor_prices:
                 self._share_vendor_prices_with_variants(originals)
+
+            # ⑨ 扩展点 + chatter 留痕（T-020）
+            self._post_variant_conversion_hook(originals, new_variants, anchors)
+            self._log_variant_conversion(originals, new_variants, added_attributes)
 
         return new_variants
 
@@ -887,6 +953,30 @@ class ProductTemplate(models.Model):
                     row["result_variant_id"]).variant_origin_id = row["origin_variant_id"]
         return conversion
 
+    def _post_variant_conversion_hook(self, originals, new_variants, anchors):
+        """转换完成后的扩展点（在保存点内、写完台账与继承之后调用）。
+
+        其它模块想给新变体补数据（默认参考号、图片、通知……）就继承这个方法，
+        **不要**在 ``_convert_to_multi_variant()`` 里插代码。默认什么都不做。
+
+        :param product.product originals: 转换前就存在的变体（已原地保留）。
+        :param product.product new_variants: 本次新建的变体。
+        :param dict anchors: ``{原有变体: 它现在携带的 ptav 组合}``。
+        """
+        return
+
+    def _log_variant_conversion(self, originals, new_variants, added_attributes):
+        """在产品 chatter 里留一条转换记录：台账之外，业务侧一眼可见（T-020）。"""
+        if "mail.thread" not in self.env or not hasattr(self, "message_post"):
+            return
+        self.message_post(body=_(
+            "Variant conversion: %(kept)s existing variants kept, %(created)s new variants created "
+            "(added attributes: %(attributes)s).",
+            kept=len(originals),
+            created=len(new_variants),
+            attributes=added_attributes.display_name or "-",
+        ))
+
     def _get_variant_conversion_bool_parameter(self, name, default=True):
         """读 ``product_variant_conversion.<name>`` 系统参数（布尔），缺省按 ``default``。
 
@@ -909,16 +999,6 @@ class ProductTemplate(models.Model):
         """
         return self._get_variant_conversion_bool_parameter("inherit_variant_data")
 
-    def _get_variant_conversion_separate_variant_prices(self):
-        """是否把价格数据（供应商价格 / 价格表规则）按变体分离，默认开启。
-
-        系统参数 ``product_variant_conversion.separate_variant_prices``。
-
-        关闭时模板级的价格记录保持模板级（对所有变体生效）—— **改一条会影响全部变体**，
-        这正是默认开启的原因：变体的价格要能各自独立地改。
-        """
-        return self._get_variant_conversion_bool_parameter("separate_variant_prices")
-
     def _apply_variant_data_inheritance(self, new_variants):
         """把新变体的变体级字段从它的谱系来源（``variant_origin_id``）复制过来。
 
@@ -940,206 +1020,3 @@ class ProductTemplate(models.Model):
             })
             inherited |= variant
         return inherited
-
-    def _share_vendor_prices_with_variants(self, originals):
-        """把「仅适用于既有变体」的供应商价格改为「适用于本产品的全部变体」。
-
-        ``product.supplierinfo.product_id`` 为空即对模板下所有变体生效（Odoo 原生语义），
-        否则转换后只有部分变体有供应商价格，其余新变体采购时找不到价格。
-        共享后所有变体取到的是**同一批价格数值**（同一供应商 / 最小数量 / 有效期）。
-
-        **只动「product_id 指向既有变体」的记录**：本身就已经是模板级（对所有变体生效）的记录
-        不动 —— 已属于全部变体就不需要转移；指向其它产品的记录也不动。
-        返回本次改写过的记录集，便于调用方 / 测试核对到底动了哪些。
-        """
-        self.ensure_one()
-        vendor_prices = self.env["product.supplierinfo"].search([
-            ("product_id", "in", originals.ids),
-        ])
-        if vendor_prices:
-            vendor_prices.write({"product_id": False})
-        return vendor_prices
-
-    # ------------------------------------------------------------------
-    # 辅助：价格数据按变体分离（供应商价格 / 价格表规则）
-    #
-    # 为什么默认分离：模板级的价格记录是「一条记录被所有变体共用」，改一次就影响全部变体，
-    # 与「变体的价格要各自独立」冲突。分离 = 每条变体各持一份自己的记录（数值不变、归属独立）。
-    # ------------------------------------------------------------------
-
-    @api.model
-    def _variant_conversion_vendor_price_key(self, info):
-        """供应商价格「是同一条」的判据：同一供应商 + 同一最小数量 + 同一价格。"""
-        return (info.partner_id.id, info.min_qty, info.price)
-
-    @api.model
-    def _variant_conversion_pricelist_tier_key(self, item):
-        """价格表规则「占住的位置」：同一价格表的同一数量门槛。
-
-        变体自己已有的规则优先：拆模板级规则时，若该变体在这个位置上已有规则就不再复制过去，
-        否则会凭空多出一条同档规则、把原来生效的那条挤掉 —— 等于静默改价。
-        """
-        return (item.pricelist_id.id, item.min_quantity)
-
-    def _variant_conversion_vendor_price_signature(self, variants):
-        """每条变体当前可用的供应商价格集合，用于「分离只改归属、不改数值」的守恒断言。
-
-        元素是 ``(供应商 id, 最小数量, 价格)``；模板级（对本产品全部变体生效）的记录会算给每条变体，
-        按变体的记录只算它自己那条。
-        """
-        self.ensure_one()
-        suppliers = self.env["product.supplierinfo"]
-        template_suppliers = suppliers.search([
-            ("product_tmpl_id", "=", self.id), ("product_id", "=", False)])
-        signature = {}
-        for variant in variants:
-            rows = template_suppliers | suppliers.search([("product_id", "=", variant.id)])
-            signature[variant] = frozenset(
-                (info.partner_id.id, info.min_qty, info.price) for info in rows)
-        return signature
-
-    def _variant_conversion_pricelist_prices(self, variants):
-        """每条变体在各价格表 / 各数量门槛上**实际取到的售价**，用于价格表侧的守恒断言。
-
-        比「规则集合相等」更贴近事实：拆分规则时真正要保证的是「卖价没变」。
-        """
-        self.ensure_one()
-        rules = self.env["product.pricelist.item"].search([
-            ("applied_on", "in", ("1_product", "0_product_variant")),
-            "|", ("product_tmpl_id", "=", self.id), ("product_id", "in", variants.ids),
-        ])
-        quantities = sorted({item.min_quantity for item in rules} | {1.0})
-        prices = {}
-        for variant in variants:
-            per_pricelist = {}
-            for pricelist in rules.pricelist_id:
-                per_pricelist[pricelist.id] = {
-                    quantity: pricelist._get_product_price(variant, quantity)
-                    for quantity in quantities
-                }
-            prices[variant] = per_pricelist
-        return prices
-
-    def _duplicate_vendor_prices(self, rows, variant):
-        """把 ``rows`` 复制成「属于 variant」的供应商价格，跳过 variant 已有的同款。"""
-        existing = {
-            self._variant_conversion_vendor_price_key(info)
-            for info in self.env["product.supplierinfo"].search([("product_id", "=", variant.id)])
-        }
-        for info in rows:
-            key = self._variant_conversion_vendor_price_key(info)
-            if key in existing:
-                continue
-            info.copy({"product_id": variant.id})
-            existing.add(key)
-
-    def _duplicate_pricelist_items(self, rows, variant):
-        """把 ``rows`` 复制成「属于 variant」的价格表规则；该变体已占住同一价格表同一门槛就跳过。"""
-        existing = {
-            self._variant_conversion_pricelist_tier_key(item)
-            for item in self.env["product.pricelist.item"].search([
-                ("applied_on", "=", "0_product_variant"), ("product_id", "=", variant.id)])
-        }
-        for item in rows:
-            key = self._variant_conversion_pricelist_tier_key(item)
-            if key in existing:
-                continue
-            item.copy({
-                "applied_on": "0_product_variant",
-                "product_id": variant.id,
-                "product_tmpl_id": False,
-            })
-            existing.add(key)
-
-    def _separate_vendor_prices(self, originals, new_variants):
-        """供应商价格：新变体先继承谱系来源的按变体记录，再把模板级记录拆到各变体后删除。"""
-        self.ensure_one()
-        suppliers = self.env["product.supplierinfo"]
-        for variant in new_variants:
-            origin = variant.variant_origin_id
-            if origin and origin != variant:
-                self._duplicate_vendor_prices(
-                    suppliers.search([("product_id", "=", origin.id)]), variant)
-        template_level = suppliers.search([
-            ("product_tmpl_id", "=", self.id), ("product_id", "=", False)])
-        for variant in originals | new_variants:
-            self._duplicate_vendor_prices(template_level, variant)
-        if template_level:
-            template_level.unlink()
-
-    def _separate_pricelist_rules(self, originals, new_variants):
-        """价格表规则：新变体先继承谱系来源的按变体规则，再把本产品模板级规则拆到各变体后删除。
-
-        只处理 ``applied_on = '1_product'``（本产品）与 ``'0_product_variant'``（本变体）：
-        ``3_global``（所有产品）与 ``2_product_category``（按分类）的规则不属于本产品，绝不触碰。
-        """
-        self.ensure_one()
-        rules = self.env["product.pricelist.item"]
-        for variant in new_variants:
-            origin = variant.variant_origin_id
-            if origin and origin != variant:
-                self._duplicate_pricelist_items(
-                    rules.search([
-                        ("applied_on", "=", "0_product_variant"), ("product_id", "=", origin.id)]),
-                    variant)
-        template_rules = rules.search([
-            ("applied_on", "=", "1_product"), ("product_tmpl_id", "=", self.id)])
-        for variant in originals | new_variants:
-            self._duplicate_pricelist_items(template_rules, variant)
-        if template_rules:
-            template_rules.unlink()
-
-    def _separate_variant_prices(self, originals, new_variants, share_vendor_prices):
-        """让每条变体持有自己的价格数据，做到「改一个变体的价格不影响别的变体」。
-
-        供应商价格：默认**分离**（模板级的拆到各变体、新变体从谱系来源补齐）；
-        勾了「应用到全部变体」时改为**共享**（既有变体的记录提升为模板级，所有变体同一批数值）。
-        价格表规则：始终按变体分离（与这个勾选框无关）。
-
-        分离只改「归属」不改「数值」：由 ``_check_variant_price_separation()`` 后置断言兜住，
-        不符即整单回滚。
-        """
-        self.ensure_one()
-        variants = originals | new_variants
-        before_vendor = self._variant_conversion_vendor_price_signature(variants)
-        before_prices = self._variant_conversion_pricelist_prices(variants)
-
-        if share_vendor_prices:
-            self._share_vendor_prices_with_variants(originals)
-        else:
-            self._separate_vendor_prices(originals, new_variants)
-        self._separate_pricelist_rules(originals, new_variants)
-
-        self._check_variant_price_separation(before_vendor, before_prices, variants, originals)
-
-    def _check_variant_price_separation(self, before_vendor, before_prices, variants, originals):
-        """后置断言：谁的价格都没少、原有变体的售价一分未变、新变体的售价与其来源一致。
-
-        供应商价格允许变多（勾选共享时，所有变体都会拿到原来只挂在某条变体上的价格），
-        但不允许变少；价格表侧则连售价都必须严格不变（拆规则最怕悄悄改价）。
-        """
-        self.ensure_one()
-        after_vendor = self._variant_conversion_vendor_price_signature(variants)
-        after_prices = self._variant_conversion_pricelist_prices(variants)
-        for variant in variants:
-            if not before_vendor[variant] <= after_vendor[variant]:
-                raise UserError(_(
-                    "Spreading the price data of %(product)s over its variants would lose vendor prices on %(variant)s; nothing has been changed.",
-                    product=self.display_name,
-                    variant=variant.display_name,
-                ))
-            if variant in originals:
-                if before_prices[variant] != after_prices[variant]:
-                    raise UserError(_(
-                        "Spreading the price data of %(product)s over its variants would change the prices available on %(variant)s; nothing has been changed.",
-                        product=self.display_name,
-                        variant=variant.display_name,
-                    ))
-                continue
-            origin = variant.variant_origin_id
-            if origin and origin in variants and after_prices[variant] != after_prices[origin]:
-                raise UserError(_(
-                    "The new variant %(variant)s of %(product)s would not be priced like the variant it derives from; nothing has been changed.",
-                    product=self.display_name,
-                    variant=variant.display_name,
-                ))

@@ -41,26 +41,6 @@
 
 ## 待办池
 
-- [ ] T-017 ｜ `product_variant_conversion` ｜ P1 ｜ 补齐「属性主数据」路径的拦截：删 / 归档属性取值会直接删 / 归档既有变体，绕过保存拦截
-  - 背景：`product.template.attribute.value.unlink()` 会调 `ptav_product_variant_ids._unlink_or_archive()`；`product.template.attribute.line.write()` 自己会调 `_create_variant_ids()`。两条路都不经过 `product.template.write()`，本模块的归属确认与拒绝逻辑完全失效
-  - 建议：把「会丢变体就拒绝」的判定挂到 `product.template.attribute.value`（以及删 / 归档 `product.attribute.value`）上；至少在会丢变体时给出本模块的明确报错，而不是静默删变体
-  - 关联：`AGENTS.md` → L2 P5 缺口 1（最重要的绕过路径）
-  - 检测：product_variant_conversion/models/ 含 _inherit = "(product\.template\.attribute\.value|product\.attribute\.value)"
-- [ ] T-018 ｜ `product_variant_conversion` ｜ P2 ｜ 组合枚举的前置上限保护 + 试写加锁顺序 + 取值被归档时的报错措辞
-  - 背景：`_get_variant_conversion_combinations()` 先枚举全部组合、之后才撞 `product.dynamic_variant_limit`；`_analyze_variant_conversion_write()` 在 `FOR UPDATE` 之前执行，并发下分析结果可能过期（靠前置校验与后置断言兜底）；取值被归档时报错指向「变体要被删」，没有点出根因
-  - 建议：新增系统参数 `product_variant_conversion.combination_limit`（默认取 `product.dynamic_variant_limit`），用「各属性有效取值数的乘积」在枚举前判上限并拒绝；把行锁提前到分析之前；报错区分「属性取值已被归档」
-  - 关联：`AGENTS.md` → L2 P5 缺口 5 / 6
-  - 检测：product_variant_conversion/ 含 combination_limit
-- [ ] T-019 ｜ `product_variant_conversion` ｜ P2 ｜ 弹窗展示在手数量 + 前端逻辑纯函数化与 Hoot 单测 + 补测未覆盖的服务端分支
-  - 背景：预览已返回 `variants[].on_hand`，弹窗只渲染了名称；前端（弹窗与保存钩子）无自动化测试；多记录写入、combo 产品、归档变体、dynamic 属性、组合被排除规则过滤、无 `stock` / 无读权限降级等分支有代码无测试
-  - 建议：把「载荷构造 / 未分配计数 / 守卫判定」抽成纯函数后加 Hoot 测试；服务端按缺口清单补测试
-  - 关联：`AGENTS.md` → L2 P5 缺口 7 / 8 / 9
-  - 检测：product_variant_conversion/static/src/xml/variant_conversion_dialog.xml 含 on_hand
-- [ ] T-020 ｜ `product_variant_conversion` ｜ P2 ｜ 扩展点与可维护性：转换后钩子、批量转换入口、文件拆分、chatter 审计
-  - 背景：想给新变体补数据只能在 `_create_variant_conversion_lineage()` 之后插代码；批量转换目前只有拒绝保护；`models/product_template.py` 已 887 行；转换没有留痕（chatter 无记录）
-  - 建议：新增正式钩子（如 `_post_variant_conversion_hook`）、批量入口逐产品各自包保存点、按职责拆分文件、转换时 `message_post` 记录台账摘要
-  - 关联：`AGENTS.md` → L2 P5「扩展点」与「常见扩展场景」
-  - 检测：product_variant_conversion/models/ 含 _post_variant_conversion_hook
 - [ ] T-021 ｜ `product_packing` + `product_variant_conversion` ｜ P2 ｜ 产品尺寸 → 原生 Volume 的同步在多变体产品上不再落到变体
   - 背景：`product_packing` 的产品尺寸靠写模板侧 `volume` 同步，而 Odoo 的桥接写入（`_set_product_variant_field()`）只在单变体时落到变体（见模块 `AGENTS.md` → L2 P5「同步规则」）；产品一旦变成多变体，改尺寸不再更新任何变体的 Volume —— 原生行为与该模块的假设冲突
   - 建议：改为按变体写入（建议命名 `_sync_volume_to_variants()`，只写各变体侧的 `volume`）；先在一个多变体产品上复现现状再定方案
@@ -89,6 +69,38 @@
   - 安全线：① 变体在同一「价格表 + 数量门槛」上已有自己的规则时不覆盖（避免静默改价）；② 后置断言校验「供应商价格只多不少、原有变体实际售价一分未变、新变体售价与其来源一致」，不符即整单回滚
   - 验收记录：模块 [`README.md`](product_variant_conversion/README.md) →「价格数据按变体分离」「验证清单」与 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.3.4.0]`；两个环境各 28 项自动化测试全部通过
   - 遗留：目标环境需验证「转换后各变体价格可独立修改」「模板级记录被拆成各变体一份」「关闭系统参数后保持模板级」；新变体仍不自动获得补货规则（见待办池 `T-021` 与模块 README →「已知边界」）
+
+- **T-024 产品详情页移除「Variant Lineage」页签** ｜ `product_variant_conversion` ｜ P2
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**（本条目当日提出、当日完成，未在待办池停留）
+  - 落地版本：`19.0.3.5.0`
+  - 起因：用户反馈产品详情页多出「变体谱系」页签，没有必要出现
+  - 做法：删除产品表单上的 `variant_lineage` 页（模型 / 数据 / 其它视图不变）；谱系明细改由 **Conversions** 智能按钮 → 台账**详情页**查看（含来源变体 → 结果变体、`is_kept`、组合前后文本、新增取值与结果变体的参考号 / 条码 / 成本三列）；变体表单 / 列表 / 搜索上的来源追溯不变
+  - 验收记录：模块 [`README.md`](product_variant_conversion/README.md) →「视图」「变体来源与归属怎么追溯」「验证清单」与 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.3.5.0]`；只装 product 环境 28 项自动化测试全部通过
+  - 遗留：目标环境需确认产品详情页不再出现该页签、台账详情页可正常打开
+
+- **T-020 扩展点与可维护性（钩子 / chatter / 拆分；批量转换不做）** ｜ `product_variant_conversion` ｜ P2
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`19.0.4.0.0`
+  - 做法：新增 `_post_variant_conversion_hook(originals, new_variants, anchors)`（保存点内的扩展点，其它模块在此给新变体补数据）；转换完成在产品 chatter 留一条转换记录；价格归属逻辑拆到 `models/product_template_prices.py`
+  - **批量转换入口不做**：多产品批量无法逐条确认归属，与「绝不静默改归属」冲突（见模块 `AGENTS.md` →「常见扩展场景」）
+  - 验收记录：模块 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.4.0.0]`；钩子调用与 chatter 留痕有自动化测试
+- **T-019 弹窗在手数量 + 测试补齐** ｜ `product_variant_conversion` ｜ P2
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`19.0.4.0.0`
+  - 做法：预览的 `on_hand` 改为「未装 stock / 无权限时为 null」，弹窗在既有变体选项后附「在手 N」；归属载荷构造 / 未分配计数抽成纯函数（`buildOwnershipPayload()` / `countUnassigned()`）；补测多记录写入、归档变体、dynamic 属性三个分支
+  - 验收记录：模块 [`README.md`](product_variant_conversion/README.md) →「验证清单」；两个环境各 38 项自动化测试全部通过
+  - 遗留：Hoot 前端单测未做（本仓库尚无前端测试基建）；combo 与「组合被排除」两分支仍未自动化测试
+- **T-018 组合数前置上限 + 试写加锁 + 归档取值措辞** ｜ `product_variant_conversion` ｜ P2
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`19.0.4.0.0`
+  - 做法：`_check_variant_conversion_combination_cap()` 用「各属性有效取值数乘积」在枚举前对照 `product.dynamic_variant_limit` 拒绝（分析与转换两条路都拦）；`write()` 在分析前对模板行 `FOR UPDATE`；取值被归档的报错单独措辞（指向「恢复取值」）
+  - 验收记录：模块 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.4.0.0]`；上限拒绝有自动化测试
+- **T-017 属性主数据路径的拦截** ｜ `product_variant_conversion` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`19.0.4.0.0`（新增 `models/product_attribute_guards.py`）
+  - 做法：三道闸 —— `product.template.attribute.value.unlink()`（在用变体仍携带时拒绝）、`product.attribute.value.unlink()`（正被产品使用时拒绝）、`product.template.attribute.line.unlink()` / `.write()`（删行 / 移走取值时拒绝）；`create_product_product=False` 的沙盒写入放行；报错给出「先处理变体」的出路
+  - 验收记录：模块 [`README.md`](product_variant_conversion/README.md) →「验证清单」与 [`AGENTS.md`](product_variant_conversion/AGENTS.md) → L1 约束 17；5 项自动化测试
+  - 遗留：**归档**属性取值不拦（Odoo 原生也不拦），归档后变体仍带着该取值——处置办法与删取值相同（见模块 `README.md` →「已知边界」）
 
 - **T-023 原产品资料保留给指定变体 + 供应商价格勾选框默认不勾选** ｜ `product_variant_conversion` ｜ P1
   - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**（本条目当日提出、当日完成，未在待办池停留）

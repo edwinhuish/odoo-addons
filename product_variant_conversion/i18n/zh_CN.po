@@ -852,3 +852,72 @@ msgstr "已按变体分离价格"
 #: model:ir.model.fields,help:product_variant_conversion.field_product_variant_conversion__separate_variant_prices
 msgid "Whether the vendor prices and the pricelist rules of this product were spread over its variants, so that every variant can be priced on its own (changing one variant does not touch the others). Configure it with the system parameter product_variant_conversion.separate_variant_prices."
 msgstr "本产品的供应商价格与价格表规则是否已按变体分离（每条变体各持一份，改一个变体不影响别的变体）。可关闭：把系统参数 product_variant_conversion.separate_variant_prices 设为 0。"
+
+
+#. module: product_variant_conversion
+#: code:addons/product_variant_conversion/static/src/js/variant_conversion_dialog.js:0
+msgid "%(label)s — %(count)s on hand"
+msgstr "%(label)s — 在手 %(count)s"
+
+#. module: product_variant_conversion
+#: model:ir.model,name:product_variant_conversion.model_product_attribute_value
+msgid "Attribute Value"
+msgstr "属性值"
+
+#. module: product_variant_conversion
+#: model:ir.model,name:product_variant_conversion.model_product_template_attribute_line
+msgid "Product Template Attribute Line"
+msgstr "产品模板属性行"
+
+#. module: product_variant_conversion
+#: model:ir.model,name:product_variant_conversion.model_product_template_attribute_value
+msgid "Product Template Attribute Value"
+msgstr "产品模板属性值"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_attribute_guards.py:0
+msgid "Removing the attribute %(attribute)s from %(product)s would affect %(count)s active variants, for example %(variant)s: they carry its values and keep the stock, the orders and the invoices. Archive or delete those variants first, then remove the attribute."
+msgstr "从 %(product)s 移除属性 %(attribute)s 会影响 %(count)s 个在用变体（例如 %(variant)s）：它们携带该属性的取值，并保存着库存、订单与发票。请先归档或删除这些变体，再移除该属性。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_attribute_guards.py:0
+msgid "Removing the value %(value)s of %(attribute)s from %(product)s would affect %(count)s active variants: they carry it and keep the stock, the orders and the invoices. Archive or delete those variants first, then remove the value."
+msgstr "从 %(product)s 移除属性 %(attribute)s 的取值 %(value)s 会影响 %(count)s 个在用变体：它们携带该取值，并保存着库存、订单与发票。请先归档或删除这些变体，再移除该取值。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_attribute_guards.py:0
+msgid "The attribute value %(value)s is used on the products %(products)s. Deleting it would break those products' variants (they would lose the value from their combination). Remove it from the products' attribute lines — or archive or delete the variants that use it — first."
+msgstr "属性取值 %(value)s 正被这些产品使用：%(products)s。删除它会破坏这些产品的变体（变体的属性组合会丢失该取值）。请先从产品的属性行移除它——或先归档、删除用到它的变体。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_attribute_guards.py:0
+msgid "The value %(value)s of %(attribute)s is still carried by %(count)s active variants of %(product)s, for example %(variant)s. Deleting it would delete or archive those variants together with their stock, orders and invoices. Archive or delete those variants first, then remove the value."
+msgstr "%(product)s 有 %(count)s 个在用变体仍携带属性 %(attribute)s 的取值 %(value)s（例如 %(variant)s）。删除它会连带删除或归档这些变体及其库存、订单与发票。请先归档或删除这些变体，再移除该取值。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_template.py:0
+msgid "The value %(values)s of %(product)s has been archived in the attribute settings while %(count)s variants still carry it: the conversion cannot keep those combinations. Restore the value in the attribute settings, or archive or delete those variants first."
+msgstr "%(product)s 的取值 %(values)s 已在属性设置中归档，但仍有 %(count)s 个变体携带它：转换无法保留这些组合。请在属性设置中恢复该取值，或先归档、删除这些变体。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_template.py:0
+msgid "The value %(values)s of this product has been archived in the attribute settings while %(count)s variants still carry it: the conversion cannot keep those combinations. Restore the value in the attribute settings, or archive or delete those variants first."
+msgstr "本产品的取值 %(values)s 已在属性设置中归档，但仍有 %(count)s 个变体携带它：转换无法保留这些组合。请在属性设置中恢复该取值，或先归档、删除这些变体。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_template.py:0
+msgid "This configuration would create %(count)s combinations, above the limit of %(limit)s set by the system parameter product.dynamic_variant_limit. Reduce the number of values."
+msgstr "该配置将产生 %(count)s 个组合，超过系统参数 product.dynamic_variant_limit 设定的上限 %(limit)s。请减少属性取值数量。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_template.py:0
+msgid "Variant conversion: %(kept)s existing variants kept, %(created)s new variants created (added attributes: %(attributes)s)."
+msgstr "变体转换：保留 %(kept)s 个既有变体，新建 %(created)s 个变体（新增属性：%(attributes)s）。"
