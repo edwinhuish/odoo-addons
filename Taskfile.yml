@@ -281,9 +281,14 @@ tasks:
       - 'bash .dev/scripts/i18n-reload.sh {{.CLI_ARGS}}'
 
   check:
-    desc: 仓库自检（po / manifest / XML / JS / JSON）：task check -- --strict
+    desc: 仓库自检（po / manifest / XML / JS / JSON / TODO.md 结构）：task check -- --strict
     cmds:
       - 'python3 .dev/scripts/check_repo.py {{.CLI_ARGS}}'
+
+  todo:
+    desc: 待办池看板（跑条目自带的「检测：」条件）：task todo / task todo -- --all / task todo -- T-017
+    cmds:
+      - 'python3 .dev/scripts/todo_status.py {{.CLI_ARGS}}'
 
   deploy:
     desc: 发布到服务器：DEPLOY_HOST=odoo@server task deploy

@@ -20,6 +20,8 @@
                 <field name="new_variant_count"/>
                 <field name="added_attribute_ids" widget="many2many_tags"/>
                 <field name="share_vendor_prices" optional="hide"/>
+                <field name="inherit_variant_data" optional="hide"/>
+                <field name="separate_variant_prices" optional="hide"/>
             </list>
         </field>
     </record>
@@ -42,12 +44,17 @@
                             <field name="new_variant_count"/>
                             <field name="added_attribute_ids" widget="many2many_tags"/>
                             <field name="share_vendor_prices"/>
+                            <field name="inherit_variant_data"/>
+                            <field name="separate_variant_prices"/>
                         </group>
                     </group>
                     <field name="lineage_ids" nolabel="1">
                         <list string="Variant Lineage">
                             <field name="origin_variant_id"/>
                             <field name="result_variant_id"/>
+                            <field name="result_default_code"/>
+                            <field name="result_barcode"/>
+                            <field name="result_standard_price"/>
                             <field name="is_kept"/>
                             <field name="added_value_ids" widget="many2many_tags"/>
                             <field name="origin_summary"/>

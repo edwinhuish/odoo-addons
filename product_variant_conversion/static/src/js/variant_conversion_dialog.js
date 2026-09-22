@@ -25,7 +25,9 @@ export class VariantConversionDialog extends Component {
         for (const [index, combination] of this.props.preview.combinations.entries()) {
             selection[index] = combination.origin_variant_id || false;
         }
-        this.state = useState({ selection, shareVendorPrices: true });
+        // 供应商价格共享默认**不勾选**：勾选会把「仅挂某条变体」的价格记录改成对所有变体生效，
+        // 同一供应商对不同变体的价差会被抹平（见模块 README →「价格与库存的同步规则」⚠）。
+        this.state = useState({ selection, shareVendorPrices: false });
     }
 
     get combinations() {

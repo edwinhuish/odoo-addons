@@ -45,7 +45,8 @@ GOBIN="$HOME/.local/bin" go install github.com/go-task/task/v3/cmd/task@latest
 |   |-- db-sync.sh           #   拉服务器现场数据（含 filestore）
 |   |-- i18n-reload.sh       #   强制刷新已有译文（-u 不覆盖旧值）
 |   |-- deploy.sh            #   rsync 发布到服务器
-|   `-- check_repo.py        #   仓库自检（也用于 pre-commit）
+|   |-- check_repo.py        #   仓库自检（也用于 pre-commit；含 TODO.md 结构检查）
+|   `-- todo_status.py       #   待办池看板：跑 TODO.md 条目自带的「检测：」条件
 |-- data/                    # 运行时数据（不入库）：data/odoo = filestore、data/postgres = 数据库
 `-- backups/                 # db-sync.sh 的备份 zip（不入库）
 ```
@@ -276,11 +277,12 @@ langs: [en_US, zh_CN]
 | 数据：拉服务器数据 | `SSH_HOST=... REMOTE_DB=prod task pull` |
 | 数据：复制 / 备份 / 装载 | `task db-sync -- duplicate dev dev_clean`、`task db-sync -- dump [库] [out.zip]`、`task db-sync -- load <dump.zip> [库]` |
 | 译文：强制刷新 zh_CN | `task i18n -- zh_CN <模块...>` |
-| 自检：仓库检查 | `task check`（`task check -- --strict` 把警告也算失败） |
+| 自检：仓库检查 | `task check`（`task check -- --strict` 把警告也算失败；含 TODO.md 结构：条目格式 / ID / 模块目录 / 文档链接 / 检测条件语法） |
+| 需求：待办池看板 | `task todo`（跑条目自带的「检测：」条件，报「可能已实现 / 未实现」；`task todo -- --all` 连归档一起列，`task todo -- T-017` 看单条） |
 | 发布 / 重置一切 | `DEPLOY_HOST=... task deploy` / `task reset`（清空 `.dev/data`，等于重置库与附件） |
 
 `Taskfile.yml` 只是调度层：真正干活的是 `.dev/compose.yml`（Odoo + PostgreSQL）
-与 `.dev/scripts/*`（拉数据 / 译文刷新 / 发布 / 自检），想看清底层命令直接读那两个地方。
+与 `.dev/scripts/*`（拉数据 / 译文刷新 / 发布 / 自检 / 待办看板），想看清底层命令直接读那两个地方。
 
 > **为什么升级/测试一律用 `run --rm` 而不是 `exec`**：`run` 起独立进程，不依赖服务是否在跑，
 > 也不会占用 8069；`-u` 前先 `stop odoo` 是避免两个进程同时改元数据。

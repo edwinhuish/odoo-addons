@@ -54,6 +54,20 @@ class ProductVariantConversion(models.Model):
         readonly=True,
         help="Whether the vendor prices of the original variants were shared with all the variants of the product.",
     )
+    inherit_variant_data = fields.Boolean(
+        string="Variant Data Inherited",
+        readonly=True,
+        help="Whether the variants created by this conversion inherited the cost, the volume and the weight of the "
+             "variant they derive from. Configure it with the system parameter "
+             "product_variant_conversion.inherit_variant_data.",
+    )
+    separate_variant_prices = fields.Boolean(
+        string="Variant Prices Separated",
+        readonly=True,
+        help="Whether the vendor prices and the pricelist rules of this product were spread over its variants, so "
+             "that every variant can be priced on its own (changing one variant does not touch the others). "
+             "Configure it with the system parameter product_variant_conversion.separate_variant_prices.",
+    )
     lineage_ids = fields.One2many(
         comodel_name="product.variant.lineage",
         inverse_name="conversion_id",
@@ -122,6 +136,34 @@ class ProductVariantLineage(models.Model):
         string="Values Added",
         readonly=True,
         help="Values that the resulting variant carries and the original variant did not: what the conversion added for this variant.",
+    )
+
+    # ------------------------------------------------------------------
+    # 结果变体上的变体级属性（只读关联展示，不落库）
+    #
+    # 参考号 / 条码 / 成本的真身在变体上（见模块 README →「属性归属审计」）：
+    # 转换不搬任何数据，所以这里只是把它们「关联显示」出来，让用户在转换后
+    # 一眼看到每条结果变体（尤其是保留了原记录的那条）到底带着什么值。
+    # 非存储 related → 不新增数据库列、不需要迁移。
+    # ------------------------------------------------------------------
+    result_default_code = fields.Char(
+        string="Reference (After)",
+        related="result_variant_id.default_code",
+        readonly=True,
+        help="Internal reference of the resulting variant. It belongs to the variant: the conversion never changes it.",
+    )
+    result_barcode = fields.Char(
+        string="Barcode (After)",
+        related="result_variant_id.barcode",
+        readonly=True,
+        help="Barcode of the resulting variant. It belongs to the variant: the conversion never changes it.",
+    )
+    result_standard_price = fields.Float(
+        string="Cost (After)",
+        related="result_variant_id.standard_price",
+        readonly=True,
+        groups="base.group_user",
+        help="Cost of the resulting variant. It belongs to the variant: the conversion never changes it.",
     )
 
     @api.depends("origin_variant_id", "result_variant_id")

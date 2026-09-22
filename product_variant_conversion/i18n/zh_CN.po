@@ -770,3 +770,85 @@ msgstr ""
 "  新增了哪些取值），并在变体上留下可搜索的「所属转换」「来源变体」字段，\n"
 "  显示在变体表单、变体列表与变体搜索里；\n"
 "- 整个转换在保存点内执行，并有前置与后置校验：任何不符合预期的情况都完全不写库。\n"
+
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,field_description:product_variant_conversion.field_product_variant_lineage__result_default_code
+msgid "Reference (After)"
+msgstr "内部参考号（转换后）"
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,field_description:product_variant_conversion.field_product_variant_lineage__result_barcode
+msgid "Barcode (After)"
+msgstr "条码（转换后）"
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,field_description:product_variant_conversion.field_product_variant_lineage__result_standard_price
+msgid "Cost (After)"
+msgstr "成本（转换后）"
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,help:product_variant_conversion.field_product_variant_lineage__result_default_code
+msgid "Internal reference of the resulting variant. It belongs to the variant: the conversion never changes it."
+msgstr "结果变体的内部参考号。参考号属于变体本身，转换不会改动它。"
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,help:product_variant_conversion.field_product_variant_lineage__result_barcode
+msgid "Barcode of the resulting variant. It belongs to the variant: the conversion never changes it."
+msgstr "结果变体的条码。条码属于变体本身，转换不会改动它。"
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,help:product_variant_conversion.field_product_variant_lineage__result_standard_price
+msgid "Cost of the resulting variant. It belongs to the variant: the conversion never changes it."
+msgstr "结果变体的成本。成本属于变体本身，转换不会改动它。"
+
+#. module: product_variant_conversion
+#: model_terms:ir.ui.view,arch_db:product_variant_conversion.product_template_only_form_inherit_variant_conversion
+msgid ""
+"Reference, barcode, cost, volume and weight belong to the variant: the "
+"conversion keeps them on the variant that carries them, and the columns "
+"below show what each resulting variant holds."
+msgstr "内部参考号、条码、成本、体积与重量都属于变体本身：转换会把它们留在承载各自组合的那条变体上，下表显示每条结果变体实际带着的值。"
+
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,field_description:product_variant_conversion.field_product_variant_conversion__inherit_variant_data
+msgid "Variant Data Inherited"
+msgstr "已继承变体数据"
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,help:product_variant_conversion.field_product_variant_conversion__inherit_variant_data
+msgid ""
+"Whether the variants created by this conversion inherited the cost, the "
+"volume and the weight of the variant they derive from. Configure it with the"
+" system parameter product_variant_conversion.inherit_variant_data."
+msgstr "本次转换新建的变体是否继承了其来源变体的成本、体积与重量。可关闭：把系统参数 product_variant_conversion.inherit_variant_data 设为 0。"
+
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_template.py:0
+msgid "Spreading the price data of %(product)s over its variants would change the prices available on %(variant)s; nothing has been changed."
+msgstr "把 %(product)s 的价格数据拆到各变体后，%(variant)s 上可用的价格会发生变化；未做任何改动。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_template.py:0
+msgid "Spreading the price data of %(product)s over its variants would lose vendor prices on %(variant)s; nothing has been changed."
+msgstr "把 %(product)s 的价格数据拆到各变体会丢失 %(variant)s 上的供应商价格；未做任何改动。"
+
+#. module: product_variant_conversion
+#. odoo-python
+#: code:addons/product_variant_conversion/models/product_template.py:0
+msgid "The new variant %(variant)s of %(product)s would not be priced like the variant it derives from; nothing has been changed."
+msgstr "%(product)s 的新变体 %(variant)s 的售价与其来源变体不一致；未做任何改动。"
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,field_description:product_variant_conversion.field_product_variant_conversion__separate_variant_prices
+msgid "Variant Prices Separated"
+msgstr "已按变体分离价格"
+
+#. module: product_variant_conversion
+#: model:ir.model.fields,help:product_variant_conversion.field_product_variant_conversion__separate_variant_prices
+msgid "Whether the vendor prices and the pricelist rules of this product were spread over its variants, so that every variant can be priced on its own (changing one variant does not touch the others). Configure it with the system parameter product_variant_conversion.separate_variant_prices."
+msgstr "本产品的供应商价格与价格表规则是否已按变体分离（每条变体各持一份，改一个变体不影响别的变体）。可关闭：把系统参数 product_variant_conversion.separate_variant_prices 设为 0。"

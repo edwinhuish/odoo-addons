@@ -35,11 +35,18 @@
 
             <xpath expr="//page[@name='variants']" position="after">
                 <page name="variant_lineage" string="Variant Lineage" invisible="not lineage_ids">
+                    <!-- 参考号 / 条码 / 成本等变体级属性的真身在变体上（见 README →「属性归属审计」）：
+                         转换不搬数据，这里只是把「结果变体」上的值关联展示出来。
+                         写成 div 而不是 span / p：内联元素会被整块当成一个术语，po 会对不上（AGENTS.md → L2 P2） -->
+                    <div class="text-muted mb-2">Reference, barcode, cost, volume and weight belong to the variant: the conversion keeps them on the variant that carries them, and the columns below show what each resulting variant holds.</div>
                     <field name="lineage_ids" nolabel="1" readonly="1">
                         <list>
                             <field name="conversion_id"/>
                             <field name="origin_variant_id"/>
                             <field name="result_variant_id"/>
+                            <field name="result_default_code"/>
+                            <field name="result_barcode"/>
+                            <field name="result_standard_price"/>
                             <field name="is_kept"/>
                             <field name="added_value_ids" widget="many2many_tags"/>
                             <field name="origin_summary"/>

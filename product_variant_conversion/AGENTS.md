@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.3.0.2`
+- 当前版本：`19.0.3.4.0`
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -94,6 +94,25 @@
     - Python / XML / JS 中不写中文界面文案；中文只放在 `i18n/zh_CN.po` 的 `msgstr`
     - 违反后果：默认英文界面出现中文；或重复 `msgid` 导致整份 po 解析失败
 
+15. **新变体的继承只限「成本 / 体积 / 重量」，来源只能是谱系来源**
+    - `_apply_variant_data_inheritance()` 只复制 `standard_price` / `volume` / `weight`，来源取 `variant.variant_origin_id`；
+      来源为空时跳过该变体，保持空值、不做猜测
+    - **禁止**复制内部参考号（本仓库 `product_reference` 的 L1 约束是「多变体产品不共用参考号」）与条码
+      （`product.product._check_barcode_uniqueness()` 的唯一性约束会让写入直接报错、整单回滚）
+    - 开关是系统参数 `product_variant_conversion.inherit_variant_data`（默认开启）；台账 `inherit_variant_data` 要如实记录
+    - 违反后果：参考号在多变体间共用，与 `product_reference` 的既定规则打架；复制条码直接 ValidationError
+
+16. **价格数据默认按变体分离：改一个变体的价格不得牵动别的变体**
+    - `_separate_variant_prices()` 负责：本产品**模板级**的供应商价格 / 价格表规则拆成每条变体一份后
+      **删除原记录**（值不变），新变体从谱系来源继承；勾了「应用到全部变体」时供应商价格退回模板级共享
+      （价格表规则仍按变体分离）
+    - **禁止**把「模板级共用」当默认：一条记录被所有变体共用，改它就会影响全部变体
+    - 两道保险必须保留：① 变体在同一「价格表 + 数量门槛」上已有自己的规则时，模板规则不再拆过去（避免静默改价）；
+      ② `_check_variant_price_separation()` 断言分离前后「供应商价格只多不少、原有变体**实际售价**一分未变、
+      新变体售价与其来源一致」，不符即整单回滚
+    - 开关：系统参数 `product_variant_conversion.separate_variant_prices`（默认开启）；台账 `separate_variant_prices` 如实记录
+    - 违反后果：拆规则时静默改价（卖价变了却没人知道）；或所有变体共用一条价格记录，改一处影响全部
+
 ---
 
 ## 国际化约束（i18n）
@@ -131,7 +150,7 @@
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
 | `views/product_variant_conversion_views.xml` | 转换台账的列表 / 详情视图与动作 |
 | `security/ir.model.access.csv` | 两个模型的访问规则（`base.group_user` 与 `product.group_product_variant`） |
-| `tests/test_product_variant_conversion.py` | 17 项自动化测试（拦截、预览、归属确认、拒绝删减、台账与谱系、库存与订单行不变） |
+| `tests/test_product_variant_conversion.py` | 28 项自动化测试（拦截、预览、归属确认、拒绝删减、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格数据按变体分离与共享边界） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目 |
 | `README.md` | 用户可见功能、字段表、归属怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
@@ -352,27 +371,52 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 **同步规则（写文档 / 排障时别搞错）**
 
 - 库存：**完全不动**（`stock.quant` / `move.line` / `move` / `lot` / `orderpoint` 都留在各自那条原记录上）。
+- **原产品资料不需要「转移」**：弹窗里被指定承载某个组合的那条变体，**就是原 `product.product` 记录本身**（id 不变），
+  所以参考号 / 条码 / 按变体的供应商价格（`supplierinfo.product_id`）/ 按变体的价格表规则
+  （`pricelist.item.applied_on = 0_product_variant`）/ 补货规则（`orderpoint.product_id`）本来就在它身上，
+  一个字段都不搬；已指向该变体的记录不动，模板级的记录保持模板级（对所有变体生效）。
+  由 `test_product_data_stays_on_the_variant_that_keeps_the_product()` 与
+  `test_reordering_rules_stay_on_the_variant_that_keeps_the_product()` 钉住。
+- **价格数据默认按变体分离**（系统参数 `separate_variant_prices`，默认开启）：本产品模板级的供应商价格 /
+  价格表规则拆成每条变体一份（数值不变）并删除原记录；新变体从谱系来源继承；同一「价格表 + 数量门槛」上
+  变体已有规则时不覆盖（避免静默改价）；分离前后由 `_check_variant_price_separation()` 断言兜底。
+  弹窗勾选框**默认不勾选**，勾上时供应商价格退回模板级共享（`_share_vendor_prices_with_variants()`：
+  所有变体取同一批数值；价格表规则仍按变体分离）。
 - 模板级字段（`list_price`、`taxes_id`、`uom_id`）天然覆盖全部变体；ptav 级（`price_extra`）随取值走。
-- **变体级字段不会自动继承**：`standard_price`（成本）→ 新变体为 0（模板侧那个只是单变体时的 compute/inverse 通道）；
-  `product.pricelist.item`（`applied_on=0_product_variant`）→ 不覆盖新变体；`supplierinfo` → 只有勾选共享才生效。
+- **字段归属与「单变体桥接」（T-016 核实结论，完整表见 `README.md` →「属性归属审计」）**：
+  - `product.product._inherits = {'product.template': 'product_tmpl_id'}`：模板字段在变体上是**委托**关系；
+  - 但 `barcode` / `standard_price` / `volume` / `weight` / `default_code` 是 `product.product` **自己声明的存储字段**，
+    在变体上**覆盖**了委托来的模板字段 → 模板侧那几个退化成「单变体桥接」；
+  - 桥接规则（`_compute_template_field_from_variant_field()` / `_set_product_variant_field()`）：**单变体**时读 / 写都落到那条变体；
+    **多变体**时读出默认值（空 / 0），写入**不落任何变体**。所以「普通产品 → 多变体」后产品表单上的条码 / 成本 / 体积 /
+    重量 / 内部参考号显示空 / 0 是**原生语义，不是数据丢失**（真值在承载它的那条变体上）；
+  - 因此**变体级字段不需要任何数据迁移**：值本来就在那条唯一的 `product.product` 记录上，而本模块保留该记录。
+    由测试 `test_field_storage_layers_match_the_audit()` / `test_variant_level_values_stay_on_the_kept_variant()` 钉住；
+  - **新变体的继承策略**（`19.0.3.2.0` 起默认开启，系统参数 `product_variant_conversion.inherit_variant_data`）：
+    按谱系来源（`variant_origin_id`）复制 `standard_price` / `volume` / `weight`；**`default_code` 与 `barcode` 刻意不复制**
+    （参考号受 `product_reference` 的 L1 约束「多变体不共用」约束、条码有 `_check_barcode_uniqueness()` 唯一性约束）；
+    `product.pricelist.item` 与 `stock.warehouse.orderpoint` 也不继承（规则各自带适用条件，盲目复制会产生重复规则）；
+    `supplierinfo` → 仍由弹窗勾选框决定（一刀切共享，见下方 ⚠）。
+    来源为空时跳过、保持空值，不猜测。
+- ⚠ **跨模块注意**：`product_packing` 的产品尺寸靠写模板侧 `volume` 同步，而桥接写入只在单变体时落到变体
+  → 产品变成多变体后，改尺寸不再更新任何变体的 Volume（原生行为与它的假设冲突，已记 TODO `T-021`）。
 - ⚠ **共享供应商价格会抹平变体级价差**：同一供应商对不同变体给不同价时，共享后全是模板级同级记录，
   采购取价按 `price_discounted → sequence → id`（`product.product._select_seller`）只取一条，另一条静默失效。
-- `default_code` / `barcode` → 新变体为空。
 
-**已识别的缺口**（明确记录在案的边界，不是「未知 bug」；对应需求见仓库 `TODO.md` → 待办池 T-016 ~ T-020）
+**已识别的缺口**（明确记录在案的边界，不是「未知 bug」；对应需求见仓库 `TODO.md` → 待办池 T-017 ~ T-021）
 
 1. **绕过路径（最重要）**：归属确认挂在 `product.template.write()` 上，但
    `product.template.attribute.value.unlink()` 会 `self.ptav_product_variant_ids._unlink_or_archive()` —— **直接删 / 归档变体**；
    `product.template.attribute.line.write()` 又会自己调 `product_tmpl_id._create_variant_ids()`。
    于是「在属性主数据里删取值」「直接写属性行」这两条路**不经过本模块**，照样丢变体。
-2. **成本价不继承**（`standard_price` 是变体级字段）。
-3. **供应商价格共享抹平价差**（见上）。
+2. ~~成本价不继承~~ **已解决**（`19.0.3.2.0`）：新变体按谱系继承来源的成本 / 体积 / 重量，可关。
+3. ~~供应商价格共享抹平价差~~ **已解决**（`19.0.3.4.0`）：价格数据默认按变体分离并随谱系继承，共享改为需要主动勾选。
 4. **谱系行随变体级联删除**：`product.variant.lineage` 的两个变体字段都是 `ondelete='cascade'`，删变体即丢审计行（台账本身不受影响）。
 5. **组合枚举无前置上限**：`_get_variant_conversion_combinations()` 在 `product.dynamic_variant_limit` 检查之前就枚举全部组合，超大配置会先枚举再拒绝。
 6. **试写在加锁之前**：`_analyze_variant_conversion_write()` 不带 `FOR UPDATE`，并发下分析结果可能过期 ——
    由 `_check_variant_conversion_anchors()` 与后置断言兜住（拒绝并整单回滚），不会写坏数据，但报错会指向「组合被排除 / 变体数不符」。
 7. **弹窗未展示在手数量**：预览已返回 `variants[].on_hand`，模板只渲染了 `label`。
-8. **前端无自动化测试**：17 项都是服务端测试，弹窗与钩子靠手工验证（见 `README.md` →「验证清单」）。
+8. **前端无自动化测试**：28 项都是服务端测试，弹窗与钩子靠手工验证（见 `README.md` →「验证清单」）。
 9. **有代码无测试的服务端分支**：多记录写入、combo、归档变体、dynamic 属性、组合被排除、无 `stock` / 无读权限时的降级。
 
 **扩展点**

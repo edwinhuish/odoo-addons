@@ -501,3 +501,432 @@ class TestProductVariantConversion(TransactionCase):
 
         self.assertEqual(order.order_line.product_id, red_original)
         self.assertTrue(order.order_line.product_id.exists())
+
+    # ------------------------------------------------------------------
+    # 字段归属（T-016）：谁是真身、谁是桥接，以及转换后值落在哪
+    # ------------------------------------------------------------------
+
+    def test_field_storage_layers_match_the_audit(self):
+        """把「属性归属审计」钉成升级闸门：Odoo 一旦改动存储层级，这里必须先失败。
+
+        结论（对照模块 README →「属性归属审计」）：
+        - 条码 / 内部参考号 / 成本 / 体积 / 重量：**真身在变体上**（存储字段），
+          模板侧那几个是「单变体桥接」（compute + inverse，只在单变体时落到变体）；
+        - 销售价：**只有模板级**（变体上的 `lst_price` 是计算值，写回模板）。
+        """
+        template_fields = self.env["product.template"]._fields
+        variant_fields = self.env["product.product"]._fields
+
+        for name in ("barcode", "default_code", "standard_price", "volume", "weight"):
+            with self.subTest(field=name):
+                self.assertFalse(
+                    variant_fields[name].compute,
+                    "%s 在变体上应当是存储字段（真身）" % name,
+                )
+                self.assertTrue(
+                    template_fields[name].compute,
+                    "%s 在模板上应当是 compute 出来的桥接字段" % name,
+                )
+                self.assertTrue(
+                    template_fields[name].inverse,
+                    "%s 在模板上应当有 inverse（写回唯一变体）" % name,
+                )
+
+        # 销售价没有变体级存储：变体上的 list_price 是 _inherits 委托（related 到模板）来的，
+        # 变体上真正可写的是 lst_price（计算值 = 模板价 + 属性加价，写回模板）
+        self.assertEqual(
+            self.env["product.product"]._inherits,
+            {"product.template": "product_tmpl_id"},
+        )
+        list_price_variant = variant_fields["list_price"]
+        self.assertEqual(list_price_variant.related, "product_tmpl_id.list_price")
+        self.assertFalse(list_price_variant.store)
+        self.assertTrue(variant_fields["lst_price"].compute)
+        self.assertFalse(template_fields["list_price"].compute)
+
+    def test_variant_level_values_stay_on_the_kept_variant(self):
+        """单变体产品里「看起来挂在产品上」的那些字段，转换后仍在原记录（默认变体）上。
+
+        这正是本模块**不需要任何数据迁移**的原因：值本来就在那条唯一的 ``product.product``
+        记录上，而转换只做「保留原记录 + 新增缺失组合」，一个字节都不搬。
+        """
+        product = self._create_product()
+        original = product.product_variant_id
+        original.write({
+            "barcode": "1234567890123",
+            "default_code": "KEEP-001",
+            "standard_price": 12.5,
+            "volume": 0.25,
+            "weight": 3.5,
+        })
+        product.list_price = 99.0
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+        product.invalidate_recordset()
+        original.invalidate_recordset()
+
+        new_variant = product.product_variant_ids - original
+        self.assertEqual(len(new_variant), 1)
+
+        # ① 默认变体 = 保留的那条原记录：变体级字段一个都没变
+        self.assertEqual(original.barcode, "1234567890123")
+        self.assertEqual(original.default_code, "KEEP-001")
+        self.assertEqual(original.standard_price, 12.5)
+        self.assertEqual(original.volume, 0.25)
+        self.assertEqual(original.weight, 3.5)
+
+        # ② 模板级字段全变体共享，转换不影响
+        self.assertEqual(product.list_price, 99.0)
+
+        # ③ 新变体：成本 / 体积 / 重量按谱系继承来源（默认开启，见「新变体继承策略」），
+        #    参考号与条码刻意不复制（条码有唯一性约束、参考号按 product_reference 不共用）
+        self.assertEqual(new_variant.variant_origin_id, original)
+        self.assertEqual(new_variant.standard_price, 12.5)
+        self.assertEqual(new_variant.volume, 0.25)
+        self.assertEqual(new_variant.weight, 3.5)
+        self.assertFalse(new_variant.barcode)
+        self.assertFalse(new_variant.default_code)
+
+        # ④ 多变体状态下，模板侧的桥接字段读出来是空 / 0 —— Odoo 原生语义
+        #    （`_compute_template_field_from_variant_field` 只在单变体时镜像变体值），
+        #    不是数据丢失：真值在上面那条变体上，前端去变体表单 / 变体列表看。
+        self.assertFalse(product.barcode)
+        self.assertFalse(product.default_code)
+        self.assertEqual(product.volume, 0.0)
+        self.assertEqual(product.weight, 0.0)
+        self.assertEqual(product.standard_price, 0.0)
+
+        # ⑤ 谱系行上的关联展示字段（前端「Variant Lineage」里看到的就是这些）：
+        #    取值来自结果变体本身，所以保留的那条显示原值、新变体那行是空的
+        kept_line = product.lineage_ids.filtered("is_kept")
+        self.assertEqual(len(kept_line), 1)
+        self.assertEqual(kept_line.result_default_code, "KEEP-001")
+        self.assertEqual(kept_line.result_barcode, "1234567890123")
+        self.assertEqual(kept_line.result_standard_price, 12.5)
+        added_line = product.lineage_ids - kept_line
+        self.assertEqual(len(added_line), 1)
+        self.assertFalse(added_line.result_default_code)
+        self.assertFalse(added_line.result_barcode)
+
+    # ------------------------------------------------------------------
+    # 新变体按谱系继承变体级数据（T-016）
+    # ------------------------------------------------------------------
+
+    def test_new_variants_inherit_variant_level_data(self):
+        """新变体从谱系来源（Derived From）继承成本 / 体积 / 重量，但不碰参考号与条码。
+
+        只继承这三样的理由（见模块 README →「新变体继承策略」）：
+        条码有唯一性约束（`product.product._check_barcode_uniqueness()`）无法复制；
+        内部参考号按本仓库 `product_reference` 的 L1 约束「多变体不共用」不能复制。
+        """
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        red = self._variant_of(product, self.color_red)
+        blue = self._variant_of(product, self.color_blue)
+        red.write({
+            "default_code": "RED-001", "barcode": "1111111111111",
+            "standard_price": 10.0, "volume": 0.1, "weight": 1.0,
+        })
+        blue.write({
+            "default_code": "BLUE-001", "barcode": "2222222222222",
+            "standard_price": 20.0, "volume": 0.2, "weight": 2.0,
+        })
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        self._confirm(product, commands, self._payload(self._default_rows(preview)))
+
+        new_variants = product.product_variant_ids - red - blue
+        self.assertEqual(len(new_variants), 2)
+        for variant in new_variants:
+            origin = variant.variant_origin_id
+            self.assertTrue(origin, "新变体应当有谱系来源")
+            self.assertEqual(variant.standard_price, origin.standard_price)
+            self.assertEqual(variant.volume, origin.volume)
+            self.assertEqual(variant.weight, origin.weight)
+            # 参考号与条码刻意不复制
+            self.assertFalse(variant.default_code)
+            self.assertFalse(variant.barcode)
+
+        # 台账记下这次启用了继承；来源本身没有被改动
+        self.assertTrue(product.variant_conversion_ids.sorted("id")[-1].inherit_variant_data)
+        self.assertEqual(red.standard_price, 10.0)
+        self.assertEqual(blue.volume, 0.2)
+        self.assertEqual(blue.weight, 2.0)
+
+    def test_variant_data_inheritance_can_be_switched_off(self):
+        """系统参数关掉后新变体不再继承：保持 Odoo 默认的空 / 0，台账记为未继承。"""
+        self.env["ir.config_parameter"].sudo().set_param(
+            "product_variant_conversion.inherit_variant_data", "0")
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        red = self._variant_of(product, self.color_red)
+        red.write({"standard_price": 10.0, "volume": 0.1, "weight": 1.0})
+
+        originals = product.product_variant_ids
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        self._confirm(product, commands, self._payload(self._default_rows(preview)))
+
+        new_variants = product.product_variant_ids - originals
+        self.assertEqual(len(new_variants), 2)
+        self.assertEqual(set(new_variants.mapped("standard_price")), {0.0})
+        self.assertEqual(set(new_variants.mapped("volume")), {0.0})
+        self.assertEqual(set(new_variants.mapped("weight")), {0.0})
+        self.assertFalse(product.variant_conversion_ids.sorted("id")[-1].inherit_variant_data)
+
+    # ------------------------------------------------------------------
+    # 「原产品资料保留给指定变体」（T-023）
+    # ------------------------------------------------------------------
+
+    def _confirm_original_keeps_first_value(self, product, original):
+        """给产品加 size 属性，并把**原记录**显式指定给「第一个取值」那个组合后保存。
+
+        （模拟用户在弹窗里说「把原产品资料保留给这个变体」。）
+        """
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+        product.invalidate_recordset()
+        return product.product_variant_ids - original
+
+    def test_product_data_stays_on_the_variant_that_keeps_the_product(self):
+        """把原产品资料「保留给某个指定变体」＝保留原记录本身，资料本来就在它身上，无需转移。
+
+        覆盖只装 `product` 就能验的四类：内部参考号 / 条码 / 按变体的供应商价格 / 按变体的价格表规则
+        （补货规则需要 stock，见下一个测试）。「已属于该变体」的记录一律不动。
+        """
+        product = self._create_product()
+        original = product.product_variant_id
+        original.write({"default_code": "KEEP-002", "barcode": "9999999999999"})
+
+        vendor = self.env["res.partner"].create({"name": "Test Vendor T-023"})
+        variant_price = self.env["product.supplierinfo"].create({
+            "partner_id": vendor.id,
+            "product_tmpl_id": product.id,
+            "product_id": original.id,
+            "price": 7.5,
+        })
+        template_price = self.env["product.supplierinfo"].create({
+            "partner_id": vendor.id,
+            "product_tmpl_id": product.id,
+            "product_id": False,
+            "price": 9.5,
+        })
+        pricelist = self.env["product.pricelist"].create({
+            "name": "Test Pricelist T-023",
+            "currency_id": self.env.company.currency_id.id,
+        })
+        variant_rule = self.env["product.pricelist.item"].create({
+            "pricelist_id": pricelist.id,
+            "applied_on": "0_product_variant",
+            "product_id": original.id,
+            "compute_price": "fixed",
+            "fixed_price": 88.0,
+        })
+        template_rule = self.env["product.pricelist.item"].create({
+            "pricelist_id": pricelist.id,
+            "applied_on": "1_product",
+            "product_tmpl_id": product.id,
+            "compute_price": "fixed",
+            "fixed_price": 99.0,
+        })
+
+        new_variant = self._confirm_original_keeps_first_value(product, original)
+
+        # ① 本来指向原记录的资料：仍指向它（「已属于该变体」就不动）
+        self.assertEqual(original.default_code, "KEEP-002")
+        self.assertEqual(original.barcode, "9999999999999")
+        self.assertEqual(variant_price.product_id, original)
+        self.assertEqual(variant_rule.product_id, original)
+
+        # ② 模板级的记录不再被所有变体共用：按变体各拆一份（数值不变），原记录被删除
+        self.assertFalse(template_price.exists())
+        self.assertFalse(template_rule.exists())
+        for variant in original + new_variant:
+            self.assertEqual(self.env["product.supplierinfo"].search([
+                ("product_id", "=", variant.id), ("partner_id", "=", vendor.id),
+                ("price", "=", 9.5)]).price, 9.5)
+            # 价格表侧：原记录自己在同一个「价格表 + 数量门槛」上已有 88.0 的规则，
+            # 模板级那条 99.0 被它顶掉（本来也没在生效），新变体继承到的同样是 88.0
+            self.assertEqual(self.env["product.pricelist.item"].search([
+                ("applied_on", "=", "0_product_variant"), ("product_id", "=", variant.id),
+                ("pricelist_id", "=", pricelist.id)]).fixed_price, 88.0)
+
+        # ③ 新变体从谱系来源继承了价格数据（数值与来源一致），但参考号 / 条码不继承
+        self.assertEqual(self.env["product.supplierinfo"].search([
+            ("product_id", "=", new_variant.id), ("partner_id", "=", vendor.id),
+            ("price", "=", 7.5)]).price, 7.5)
+        self.assertEqual(self.env["product.pricelist.item"].search([
+            ("applied_on", "=", "0_product_variant"), ("product_id", "=", new_variant.id),
+            ("pricelist_id", "=", pricelist.id), ("fixed_price", "=", 88.0)]).fixed_price, 88.0)
+        self.assertFalse(new_variant.default_code)
+        self.assertFalse(new_variant.barcode)
+
+    def test_variant_prices_are_separated_by_default(self):
+        """默认把价格数据按变体分离：模板级记录拆到各变体一份（数值不变），不再被所有变体共用。"""
+        product = self._create_product()
+        original = product.product_variant_id
+        vendor = self.env["res.partner"].create({"name": "Test Vendor T-024"})
+        template_price = self.env["product.supplierinfo"].create({
+            "partner_id": vendor.id,
+            "product_tmpl_id": product.id,
+            "product_id": False,
+            "price": 30.0,
+        })
+        pricelist = self.env["product.pricelist"].create({
+            "name": "Test Pricelist T-024",
+            "currency_id": self.env.company.currency_id.id,
+        })
+        template_rule = self.env["product.pricelist.item"].create({
+            "pricelist_id": pricelist.id,
+            "applied_on": "1_product",
+            "product_tmpl_id": product.id,
+            "compute_price": "fixed",
+            "fixed_price": 70.0,
+        })
+
+        new_variant = self._confirm_original_keeps_first_value(product, original)
+
+        self.assertFalse(template_price.exists())
+        self.assertFalse(template_rule.exists())
+        for variant in original + new_variant:
+            self.assertEqual(self.env["product.supplierinfo"].search([
+                ("product_id", "=", variant.id), ("partner_id", "=", vendor.id)]).price, 30.0)
+            self.assertEqual(self.env["product.pricelist.item"].search([
+                ("applied_on", "=", "0_product_variant"), ("product_id", "=", variant.id),
+                ("pricelist_id", "=", pricelist.id)]).fixed_price, 70.0)
+        self.assertTrue(product.variant_conversion_ids.sorted("id")[-1].separate_variant_prices)
+
+    def test_separated_variant_prices_are_edited_independently(self):
+        """分离之后改一个变体的价格，不会影响别的变体 —— 这正是「价格要分离」的目的。"""
+        product = self._create_product()
+        original = product.product_variant_id
+        vendor = self.env["res.partner"].create({"name": "Test Vendor T-024b"})
+        template_price = self.env["product.supplierinfo"].create({
+            "partner_id": vendor.id,
+            "product_tmpl_id": product.id,
+            "product_id": False,
+            "price": 40.0,
+        })
+
+        new_variant = self._confirm_original_keeps_first_value(product, original)
+
+        own_price = self.env["product.supplierinfo"].search([
+            ("product_id", "=", original.id), ("partner_id", "=", vendor.id)])
+        self.assertTrue(own_price)
+        self.assertFalse(template_price.exists())
+        self.assertEqual(original._select_seller(partner_id=vendor, quantity=1.0).price, 40.0)
+        self.assertEqual(new_variant._select_seller(partner_id=vendor, quantity=1.0).price, 40.0)
+
+        own_price.write({"price": 55.0})
+
+        self.assertEqual(original._select_seller(partner_id=vendor, quantity=1.0).price, 55.0)
+        self.assertEqual(new_variant._select_seller(partner_id=vendor, quantity=1.0).price, 40.0)
+
+    def test_price_separation_can_be_switched_off(self):
+        """系统参数关掉后保持原样：模板级记录仍是模板级（所有变体共用），台账记为未分离。"""
+        self.env["ir.config_parameter"].sudo().set_param(
+            "product_variant_conversion.separate_variant_prices", "0")
+        product = self._create_product()
+        original = product.product_variant_id
+        vendor = self.env["res.partner"].create({"name": "Test Vendor T-024c"})
+        template_price = self.env["product.supplierinfo"].create({
+            "partner_id": vendor.id,
+            "product_tmpl_id": product.id,
+            "product_id": False,
+            "price": 25.0,
+        })
+
+        self._confirm_original_keeps_first_value(product, original)
+
+        self.assertTrue(template_price.exists())
+        self.assertFalse(template_price.product_id)
+        self.assertFalse(self.env["product.supplierinfo"].search([
+            ("product_tmpl_id", "=", product.id), ("product_id", "!=", False)]))
+        self.assertFalse(product.variant_conversion_ids.sorted("id")[-1].separate_variant_prices)
+
+    def test_reordering_rules_stay_on_the_variant_that_keeps_the_product(self):
+        """补货规则挂在变体上：转换后仍指向原来那条变体（被指定保留原产品资料的那条）。"""
+        if "stock.warehouse.orderpoint" not in self.env:
+            self.skipTest("stock is not installed")
+        product = self._create_product()
+        original = product.product_variant_id
+        warehouse = self.env["stock.warehouse"].search(
+            [("company_id", "=", self.env.company.id)], limit=1)
+        orderpoint = self.env["stock.warehouse.orderpoint"].create({
+            "product_id": original.id,
+            "location_id": warehouse.lot_stock_id.id,
+            "product_min_qty": 2.0,
+            "product_max_qty": 8.0,
+        })
+
+        new_variant = self._confirm_original_keeps_first_value(product, original)
+
+        self.assertTrue(orderpoint.exists())
+        self.assertEqual(orderpoint.product_id, original)
+        self.assertFalse(self.env["stock.warehouse.orderpoint"].search(
+            [("product_id", "=", new_variant.id)]))
+
+    def test_sharing_vendor_prices_only_touches_variant_level_records(self):
+        """共享时只改「product_id 指向既有变体」的记录；本来就模板级的记录不动。"""
+        product = self._create_product()
+        original = product.product_variant_id
+        vendor = self.env["res.partner"].create({"name": "Test Vendor T-023b"})
+        variant_price = self.env["product.supplierinfo"].create({
+            "partner_id": vendor.id,
+            "product_tmpl_id": product.id,
+            "product_id": original.id,
+            "price": 12.0,
+        })
+        template_price = self.env["product.supplierinfo"].create({
+            "partner_id": vendor.id,
+            "product_tmpl_id": product.id,
+            "product_id": False,
+            "price": 20.0,
+        })
+
+        touched = product._share_vendor_prices_with_variants(original)
+
+        self.assertEqual(touched, variant_price)
+        self.assertNotIn(template_price, touched)
+        self.assertFalse(variant_price.product_id)
+        self.assertEqual(variant_price.price, 12.0)
+        self.assertFalse(template_price.product_id)
+        self.assertEqual(template_price.price, 20.0)
+
+    def test_sharing_vendor_prices_gives_every_variant_the_same_price(self):
+        """勾选共享后（走正常转换链路）：所有变体 —— 含新建的 —— 取到同一数值。"""
+        product = self._create_product()
+        original = product.product_variant_id
+        vendor = self.env["res.partner"].create({"name": "Test Vendor T-023c"})
+        variant_price = self.env["product.supplierinfo"].create({
+            "partner_id": vendor.id,
+            "product_tmpl_id": product.id,
+            "product_id": original.id,
+            "price": 12.0,
+        })
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows, share_vendor_prices=True))
+        product.invalidate_recordset()
+
+        self.assertEqual(len(product.product_variant_ids), 2)
+        self.assertFalse(variant_price.product_id)
+        for variant in product.product_variant_ids:
+            seller = variant._select_seller(partner_id=vendor, quantity=1.0)
+            self.assertEqual(seller, variant_price)
+            self.assertEqual(seller.price, 12.0)

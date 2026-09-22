@@ -137,7 +137,8 @@ docker compose（.dev/compose.yml）
 |   |-- db-sync.sh           # 拉服务器现场数据（含 filestore）/ 备份 / 复制库
 |   |-- i18n-reload.sh       # 强制刷新已有译文
 |   |-- deploy.sh            # rsync 发布到服务器
-|   `-- check_repo.py        # 仓库自检（也用于 pre-commit）
+|   |-- check_repo.py        # 仓库自检（也用于 pre-commit；含 TODO.md 结构检查）
+|   `-- todo_status.py       # 待办池看板：跑 TODO.md 条目自带的「检测：」条件
 |-- data/                # 运行时数据（不入库）
 `-- backups/             # db-sync.sh 产出的备份 zip（不入库）
 ```

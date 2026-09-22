@@ -12,6 +12,11 @@
 5. 暂时不做：移入「搁置 / 放弃」并写明原因，不删除，保留决策痕迹。
 6. 一个需求对应一个模块；跨模块需求在「模块」列用 `+` 连接（如 `product_reference + web_image_paste`）。
 7. 需求被拆解时，子项直接在条目下用缩进 `- [ ]` 列出，不单独占用顶层 ID。
+8. **可选：`检测：` 条件**（给 `task todo` 看板用）。在条目下缩进写一行
+   `- 检测：<路径> 含 <正则>` / `- 检测：<路径> 不含 <正则>` / `- 检测：<路径> 存在`
+   （路径相对仓库根，支持目录与 glob；写多行则全部满足才算「可能已实现」）。
+   它是「已实现」的**必要条件**，不是验收结论；语法由 `task check` 校验、状态由 `task todo` 执行；
+   条目归档时这几行跟着一起移走，脚本里不维护任何清单。
 
 ## 状态与优先级
 
@@ -36,26 +41,32 @@
 
 ## 待办池
 
-- [ ] T-016 ｜ `product_variant_conversion` ｜ P1 ｜ 变体级数据按谱系继承：新变体的成本 / 内部参考号 / 条码 / 价格表规则 / 补货规则按「来源变体」复制，并做成可开关的配置项
-  - 背景：现在只有供应商价格能共享（勾选后一刀切改为「适用于全部变体」，还会抹平同一供应商对不同变体的价差）；成本 `standard_price` 是**变体级**字段，新变体为 0；`applied_on=0_product_variant` 的价格表规则也不覆盖新变体
-  - 建议：以 `variant_origin_id` 为继承来源；「继承哪些数据 / 冲突怎么办」做成系统参数或产品级选项
-  - 关联：模块 `README.md` →「价格与库存的同步规则」；`AGENTS.md` → L2 P5 缺口 2 / 3
 - [ ] T-017 ｜ `product_variant_conversion` ｜ P1 ｜ 补齐「属性主数据」路径的拦截：删 / 归档属性取值会直接删 / 归档既有变体，绕过保存拦截
   - 背景：`product.template.attribute.value.unlink()` 会调 `ptav_product_variant_ids._unlink_or_archive()`；`product.template.attribute.line.write()` 自己会调 `_create_variant_ids()`。两条路都不经过 `product.template.write()`，本模块的归属确认与拒绝逻辑完全失效
   - 建议：把「会丢变体就拒绝」的判定挂到 `product.template.attribute.value`（以及删 / 归档 `product.attribute.value`）上；至少在会丢变体时给出本模块的明确报错，而不是静默删变体
   - 关联：`AGENTS.md` → L2 P5 缺口 1（最重要的绕过路径）
+  - 检测：product_variant_conversion/models/ 含 _inherit = "(product\.template\.attribute\.value|product\.attribute\.value)"
 - [ ] T-018 ｜ `product_variant_conversion` ｜ P2 ｜ 组合枚举的前置上限保护 + 试写加锁顺序 + 取值被归档时的报错措辞
   - 背景：`_get_variant_conversion_combinations()` 先枚举全部组合、之后才撞 `product.dynamic_variant_limit`；`_analyze_variant_conversion_write()` 在 `FOR UPDATE` 之前执行，并发下分析结果可能过期（靠前置校验与后置断言兜底）；取值被归档时报错指向「变体要被删」，没有点出根因
-  - 建议：先用「各属性有效取值数的乘积」判上限并拒绝；把行锁提前到分析之前；报错区分「属性取值已被归档」
+  - 建议：新增系统参数 `product_variant_conversion.combination_limit`（默认取 `product.dynamic_variant_limit`），用「各属性有效取值数的乘积」在枚举前判上限并拒绝；把行锁提前到分析之前；报错区分「属性取值已被归档」
   - 关联：`AGENTS.md` → L2 P5 缺口 5 / 6
+  - 检测：product_variant_conversion/ 含 combination_limit
 - [ ] T-019 ｜ `product_variant_conversion` ｜ P2 ｜ 弹窗展示在手数量 + 前端逻辑纯函数化与 Hoot 单测 + 补测未覆盖的服务端分支
   - 背景：预览已返回 `variants[].on_hand`，弹窗只渲染了名称；前端（弹窗与保存钩子）无自动化测试；多记录写入、combo 产品、归档变体、dynamic 属性、组合被排除规则过滤、无 `stock` / 无读权限降级等分支有代码无测试
   - 建议：把「载荷构造 / 未分配计数 / 守卫判定」抽成纯函数后加 Hoot 测试；服务端按缺口清单补测试
   - 关联：`AGENTS.md` → L2 P5 缺口 7 / 8 / 9
+  - 检测：product_variant_conversion/static/src/xml/variant_conversion_dialog.xml 含 on_hand
 - [ ] T-020 ｜ `product_variant_conversion` ｜ P2 ｜ 扩展点与可维护性：转换后钩子、批量转换入口、文件拆分、chatter 审计
   - 背景：想给新变体补数据只能在 `_create_variant_conversion_lineage()` 之后插代码；批量转换目前只有拒绝保护；`models/product_template.py` 已 887 行；转换没有留痕（chatter 无记录）
   - 建议：新增正式钩子（如 `_post_variant_conversion_hook`）、批量入口逐产品各自包保存点、按职责拆分文件、转换时 `message_post` 记录台账摘要
   - 关联：`AGENTS.md` → L2 P5「扩展点」与「常见扩展场景」
+  - 检测：product_variant_conversion/models/ 含 _post_variant_conversion_hook
+- [ ] T-021 ｜ `product_packing` + `product_variant_conversion` ｜ P2 ｜ 产品尺寸 → 原生 Volume 的同步在多变体产品上不再落到变体
+  - 背景：`product_packing` 的产品尺寸靠写模板侧 `volume` 同步，而 Odoo 的桥接写入（`_set_product_variant_field()`）只在单变体时落到变体（见模块 `AGENTS.md` → L2 P5「同步规则」）；产品一旦变成多变体，改尺寸不再更新任何变体的 Volume —— 原生行为与该模块的假设冲突
+  - 建议：改为按变体写入（建议命名 `_sync_volume_to_variants()`，只写各变体侧的 `volume`）；先在一个多变体产品上复现现状再定方案
+  - 关联：`product_packing/AGENTS.md`；`product_variant_conversion/AGENTS.md` → L2 P5
+  - 检测：product_packing/models/ 含 _sync_volume_to_variants
+
 
 ---
 
@@ -69,6 +80,32 @@
 
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
+
+- **T-022 价格数据按变体分离（供应商价格 / 价格表规则不再被所有变体共用）** ｜ `product_variant_conversion` ｜ P2
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`19.0.3.4.0`
+  - 起因：模板级价格记录是「一条记录被所有变体共用」，改一个变体就会影响全部变体，与「变体的价格要各自独立」冲突
+  - 做法：默认把本产品模板级的供应商价格（`supplierinfo.product_id` 为空）与价格表规则（`applied_on = '1_product'`）**按变体各复制一份（数值不变）后删除原记录**；新变体从谱系来源继承；`3_global` / `2_product_category` 规则绝不触碰；系统参数 `product_variant_conversion.separate_variant_prices` 可关闭；弹窗勾选框（默认不勾选）勾上时供应商价格退回模板级共享
+  - 安全线：① 变体在同一「价格表 + 数量门槛」上已有自己的规则时不覆盖（避免静默改价）；② 后置断言校验「供应商价格只多不少、原有变体实际售价一分未变、新变体售价与其来源一致」，不符即整单回滚
+  - 验收记录：模块 [`README.md`](product_variant_conversion/README.md) →「价格数据按变体分离」「验证清单」与 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.3.4.0]`；两个环境各 28 项自动化测试全部通过
+  - 遗留：目标环境需验证「转换后各变体价格可独立修改」「模板级记录被拆成各变体一份」「关闭系统参数后保持模板级」；新变体仍不自动获得补货规则（见待办池 `T-021` 与模块 README →「已知边界」）
+
+- **T-023 原产品资料保留给指定变体 + 供应商价格勾选框默认不勾选** ｜ `product_variant_conversion` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**（本条目当日提出、当日完成，未在待办池停留）
+  - 落地版本：`19.0.3.3.0`
+  - 核实结论：**原产品资料无需转移** —— 弹窗里被指定承载某个组合的那条变体，就是原 `product.product` 记录本身（id 不变）；内部参考号 / 条码 / 按变体的供应商价格（`supplierinfo.product_id`）/ 按变体的价格表规则（`applied_on = 0_product_variant`）/ 补货规则（`orderpoint.product_id`）本来都挂在它身上，「已属于该变体」的记录不动、模板级记录保持模板级
+  - 做法：弹窗供应商价格勾选框默认值改为**不勾选**（勾选后仍是「改为适用于全部变体、所有变体统一为同一批数值」）；`_share_vendor_prices_with_variants()` 显式化守卫并返回被改写的记录集；新增 4 项测试把结论钉住（**未新增搬数据的代码**）
+  - 验收记录：模块 [`README.md`](product_variant_conversion/README.md) →「已有业务数据怎么处理」「验证清单」与 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.3.3.0]`；两个环境（只装 product / 加装 stock+sale）各 25 项自动化测试全部通过
+  - 遗留：目标环境需验证弹窗勾选框默认未勾选、勾选后所有变体取到同一价格（清单见模块 `README.md` →「验证清单」）
+
+- **T-016 变体级数据按谱系继承（属性归属审计 + 新变体继承 + 可开关）** ｜ `product_variant_conversion` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`19.0.3.1.0`（属性归属审计 + 结果变体的变体级属性关联展示）、`19.0.3.2.0`（新变体按谱系继承 + 系统参数开关）
+  - 核实结论：**不需要任何数据迁移** —— 条码 / 成本 / 体积 / 重量 / 内部参考号的真身在变体上（`product.product` 自有的存储字段覆盖了 `_inherits` 委托来的模板字段），而本模块保留原 `product.product` 记录 → 默认变体天然带着原值；模板级（销售价 / 税 / 计量单位 / `product_packing` 的纸箱与产品尺寸）全变体共享。唯一变化是多变体后产品表单上那几个桥接字段显示空 / 0（Odoo 原生语义，任何多变体产品都一样）
+  - 做法：`product.variant.lineage` 加三个**非存储 `related`** 字段（`result_default_code` / `result_barcode` / `result_standard_price`）在谱系与台账里展示结果变体带着什么；`_apply_variant_data_inheritance()` 按 `variant_origin_id`（`Derived From`）复制新变体的成本 / 体积 / 重量，系统参数 `product_variant_conversion.inherit_variant_data` 可关；台账加 `inherit_variant_data` 记录；参考号与条码因硬约束刻意不继承（`product_reference` 的「多变体不共用」/ `_check_barcode_uniqueness()` 唯一性）
+  - 验收记录：模块 [`README.md`](product_variant_conversion/README.md) →「属性归属审计」「新变体继承策略」「验证清单」与 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.3.1.0]` / `[19.0.3.2.0]`；两个环境（只装 product / 加装 stock+sale）各 21 项自动化测试全部通过
+  - 异常与维护：字段层级由 `test_field_storage_layers_match_the_audit()` 钉成升级闸门（Odoo 改存储层会先失败）；继承范围与来源见模块 [`AGENTS.md`](product_variant_conversion/AGENTS.md) → L1 约束 15 与 L2 P5
+  - 遗留：目标环境需验证「Variant Lineage 页新增三列 + 提示文案」「继承后的成本 / 体积 / 重量」的界面表现（清单见模块 `README.md` →「验证清单」）；供应商价格仍是一刀切共享、会抹平价差，拟改为按谱系逐变体继承（见待办池 `T-022`）
 
 - **T-015 产品变体转换（追加属性 / 取值而不丢变体 + 归属谱系）** ｜ `product_variant_conversion` ｜ P1
   - 完成日期：2026-09-21 ｜ 状态：**已交付，待目标环境验证**
