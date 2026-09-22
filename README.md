@@ -20,6 +20,7 @@ odoo-addons/           # 本目录即 addons_path
 |-- TODO.md             # 需求唯一入口，任务在这里流转
 |-- DEV_WORKFLOW.md     # 本地开发与热重载工作流（怎么跑、怎么调、怎么拉数据）
 |-- DEV_ENV_SETUP.md    # 开发环境的搭建总结（方案选型 / 实施步骤 / 踩坑与最佳实践）
+|-- STAGE_REPORT_2026-09-22.md  # 阶段总结与交接报告（按模块/任务归档：目标 / 成果 / 关键问题与解法 / 经验教训 / 后续建议 / 交接清单）
 |-- Taskfile.yml        # 统一开发命令入口（task --list）
 |-- .dev/               # 本地开发环境：compose.yml + odoo.conf + docker/（镜像）+ scripts/（脚本）
 |-- .vscode/            # 调试 / 任务 / 设置 / 推荐扩展配置
