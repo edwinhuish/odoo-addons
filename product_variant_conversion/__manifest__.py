@@ -1,6 +1,6 @@
 {
     "name": "Product Variant Conversion",
-    "version": "19.0.4.1.0",
+    "version": "19.0.4.1.1",
     "summary": "Add attributes to a product and keep every existing variant: saving the product form asks for the variant ownership, keeps every variant record (with its stock, orders and invoices) and records the origin of each variant",
     "description": """
         Safe attribute addition and variant expansion for foreign trade SOHO

@@ -41,11 +41,18 @@
 
 ## 待办池
 
+
 - [ ] T-026 ｜ `product_reference` + `sale_product_hover` + `product_image` + `product_variant_conversion` + `sale_order_no` ｜ P2 ｜ 补齐 po 里 `code:` 条目缺失的运行期注释标记（这些前端 / Python 文案一直没翻译）
   - 背景：前端译文由 `web/controllers/utils.py::_local_web_translations()` 读 po 时按 `#. odoo-javascript` 过滤，Python `_()` 由 `CodeTranslations._load_python_translations()` 按 `#. odoo-python` 过滤 —— 缺标记的条目**永远不下发且不报错**（界面一直英文）。`task check` 现在会给警告（`--strict` 算失败），实测受影响条目（`task check` 口径，共 25 条）：`product_reference` 20 条、`sale_product_hover` 2 条、`product_image` / `product_variant_conversion` 各 1 条（均为 JS）、`sale_order_no` 1 条（Python）；`product_card_view` 的 5 条已随 T-025 修掉
   - 建议：给这些模块的 `code:` 条目补上对应注释（按引用文件后缀区分 `.py` → `odoo-python`，`.js` / `.xml` → `odoo-javascript`），逐模块升 `+z` 版本并记 CHANGELOG；补完把 `check_repo.py` 里这两条从 `report.warn` 改回 `report.fail`
   - 验收方式：`task check -- --strict` 不再报这两类警告（`检测：` 条件只能做单条文本匹配，覆盖不了「所有 `code:` 条目都带上标记」，故本条目不写检测行）
   - 关联：`product_card_view/AGENTS.md` → L2 P5；根 `AGENTS.md` 4.3「`code:` 译文在运行时按注释标记放行」
+
+- [ ] T-028 ｜ `product_image` ｜ P2 ｜ manifest description 触发 docutils RST 告警（每次安装都打日志）
+  - 背景：安装 `product_image` 时日志出现 `<string>:9: (ERROR/3) Unexpected indentation.` 与 `<string>:11: (WARNING/2) Block quote ends without a blank line; unexpected unindent.`。原因是 description 的列表项用了**悬挂缩进**（bullet 与续行分行），Odoo 渲染 Apps 描述时用 docutils，报警告（`product_dimension` 重写时已修过同一问题，可参照其写法）
+  - 建议：把列表项改成「一条一行」（不换行）；改完必须同步 `i18n/zh_CN.po` 里 `model:ir.module.module,description:base.module_product_image` 的 `msgid`（必须与 `textwrap.dedent(manifest["description"])` 逐字符一致，`task check` 会卡住）；升 `+z` 版本并记 CHANGELOG
+  - 验收方式：安装 `product_image` 时日志不再出现上述 docutils 告警（暂无自动检测条件，`检测：` 语法只支持单条文本 / 正则匹配，覆盖不了「描述整体 RST 合法」）
+  - 关联：`product_dimension/__manifest__.py` 的描述写法；根 `AGENTS.md` → i18n 约束
 
 ## 搁置 / 放弃
 
@@ -58,6 +65,17 @@
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
 
+- **T-027 权限文件去掉对 sale 用户组的硬编码（`sales_team.group_sale_manager`）** ｜ `product_reference` + `product_image` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_reference` `19.0.2.5.3`、`product_image` `19.0.2.6.4`
+  - 判定（为什么是「删」而不是「换组」）：那行权限是 `1,1,1,1`，与保留的 `base.group_user` 行**完全相同**；
+    而 `sales_team.group_sale_manager` 的隐含链是 `→ group_sale_salesman_all_leads → group_sale_salesman
+    → base.group_user`，销售经理本来就是内部用户 → 该行**不额外授予任何权限**，删除即等价
+  - 影响范围：同一次全仓库排查还发现 `product_image` 有同样写法，一并修掉；新增门禁检查防止复发
+  - 验收记录：模块 `CHANGELOG.md` → `[19.0.2.5.3]` / `[19.0.2.6.4]`；
+    `task test -- product_reference` 与 `task test -- product_image`（均**不装 `sale`**）安装通过；
+    开发库中旧的 `ir.model.access` 记录被 Odoo 自动清理；`task check` 新增「引用未声明依赖模块的用户组」检查
+  - 遗留：`product_image` 的 manifest description 仍会触发 docutils RST 告警，见 `T-028`
 - **T-025 切换器 Card 按钮名国际化（改为 `_t()` getter）** ｜ `product_card_view` ｜ P2 ｜ 视图切换器里的 Card 按钮名未国际化（硬编码 "Card"）
   - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证（界面）**
   - 背景：按钮名来自 JS 侧 patch 的 `session.view_info.card.display_name`（写死 `"Card"`），中文界面仍显示英文；`session.view_info` 是服务端核心提供的白名单、模块级 Python 无法扩展，只能在前端处理；模块 `README.md` →「遗留问题」已记录

@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.4.1.0`
+- 当前版本：`19.0.4.1.1`
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -160,7 +160,7 @@
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
 | `views/product_variant_conversion_views.xml` | 转换台账的列表 / 详情视图与动作 |
 | `security/ir.model.access.csv` | 两个模型的访问规则（`base.group_user` 与 `product.group_product_variant`） |
-| `tests/test_product_variant_conversion.py` | 39 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter、装了 `product_dimension` 时的尺寸继承） |
+| `tests/test_product_variant_conversion.py` | 41 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter、装了 `product_dimension` 时的尺寸继承、装了 `product_reference` 时的共享参考号交接） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目 |
 | `README.md` | 用户可见功能、字段表、归属怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
@@ -415,6 +415,13 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   否则会触发该模块「尺寸不齐 → Volume 归 0」的规则，把继承来的体积冲掉
   （由 `test_new_variants_inherit_variant_dimensions_when_installed()` 钉住）。
   `T-021`（原 `product_packing` 的尺寸同步在多变体下失效）已由该模块的 `19.0.2.0.0` 重写解决。
+- **跨模块协同：产品级共享参考号（`product_reference`）的交接**（`19.0.4.1.1` 起）：该模块的参考号有
+  两层归属（产品级共享 `product_tmpl_id` / 变体级 `product_id`，二选一），且「多变体不共用」——
+  产品表单在 `product_variant_count > 1` 时整块隐藏参考号区域。单变体产品上录入的正是在产品级那一层，
+  转换后两处都看不到它，等于失联。故步骤 ⑦.5 调 `_transfer_shared_references_to_original()` 把这些行
+  改挂到**被保留的原变体**上，并显式重算源产品的 `reference_code_index`（行侧 `write` 只同步新主人）。
+  保守分支：原来就有多条变体时不猜（保持原样 + 日志）；变体上已有同码时产品级那条留原地（避免撞
+  `UNIQUE(product_id, reference_code)`）。未安装该模块时按字段判断跳过。
 - ⚠ **共享供应商价格会抹平变体级价差**：同一供应商对不同变体给不同价时，共享后全是模板级同级记录，
   采购取价按 `price_discounted → sequence → id`（`product.product._select_seller`）只取一条，另一条静默失效。
 

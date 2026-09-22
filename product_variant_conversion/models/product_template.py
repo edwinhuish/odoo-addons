@@ -26,9 +26,13 @@ Odoo 原生在「属性与变体」页就写着警告：增删属性会删除并
 import itertools
 import json
 
+import logging
+
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.fields import Command
+
+_logger = logging.getLogger(__name__)
 
 
 class ProductTemplate(models.Model):
@@ -581,6 +585,12 @@ class ProductTemplate(models.Model):
             if inherit_variant_data:
                 self._apply_variant_data_inheritance(new_variants)
 
+            # ⑦.5 单变体时期留在产品级的「共享参考号」（`product_reference`）交接给被保留的变体：
+            #      产品一旦变成多变体，该模块就整块隐藏产品表单上的参考号区域（它的 L1「多变体不共用」），
+            #      而变体表单只认变体级那些行 —— 不交接的话这些行既看不到也改不了，
+            #      用户会以为「转换把参考号弄丢了」（数据其实还在，只是没有入口）。
+            self._transfer_shared_references_to_original(originals)
+
             # ⑧ 价格数据（供应商价格 / 价格表规则）的归属：默认按变体分离（改一个不影响别的），
             #    勾了「应用到全部变体」才把供应商价格统一成模板级一份
             if separate_variant_prices:
@@ -1032,6 +1042,54 @@ class ProductTemplate(models.Model):
             for name in ("dimension_unit",) + dimension_sizes:
                 values.pop(name, None)
         return values
+
+    def _transfer_shared_references_to_original(self, originals):
+        """把产品级共享参考号交接给被保留的那条变体（单变体 → 多变体时）。
+
+        `product_reference` 的参考号有两种归属（二选一）：产品级共享（``product_tmpl_id``，
+        产品表单维护）与变体级（``product_id``，变体表单维护），且「多变体产品不共用」——
+        产品表单在 ``product_variant_count > 1`` 时整块隐藏该区域。单变体产品上用户录入的正是
+        产品级那一层；转换后它既不在产品表单（已隐藏）、也不在变体表单（那里只认变体级），
+        于是表现为「参考号丢失」。
+
+        这里把它们下移给「被保留的原变体」：语义上它们本来就是这条唯一变体的参考号。
+        只在原来只有一条变体时交接；原来就有多条时无法判断该给谁，保持原样并记日志。
+        未安装 `product_reference` 时按字段判断直接跳过（不硬依赖）。
+
+        :return: 实际交接过去的参考号行；未交接时为空记录集。
+        """
+        self.ensure_one()
+        if "reference_code_line_ids" not in self._fields:
+            return self.env["product.reference.code"].browse()
+        rows = self.reference_code_line_ids
+        if not rows:
+            return rows
+        if len(originals) != 1:
+            _logger.info(
+                "product_variant_conversion: %s has %s original variants, shared references %s "
+                "are left on the product",
+                self.display_name, len(originals), rows.mapped("reference_code"),
+            )
+            return self.env["product.reference.code"].browse()
+
+        kept = originals
+        # 变体上已有同码的行：留在产品级，避免撞 UNIQUE(product_id, reference_code)
+        existing = {
+            code for code in kept.variant_reference_code_line_ids.mapped("reference_code") if code
+        }
+        movable = rows.filtered(lambda row: row.reference_code not in existing)
+        kept_rows = rows - movable
+        if movable:
+            movable.write({"product_id": kept.id, "product_tmpl_id": False})
+            # 参考号行的 write 只同步「新主人」的索引，源产品这一侧要自己重算
+            self._sync_reference_index()
+        if kept_rows:
+            _logger.info(
+                "product_variant_conversion: %s reference(s) kept on the product because the "
+                "variant already has the same code: %s",
+                len(kept_rows), kept_rows.mapped("reference_code"),
+            )
+        return movable
 
     def _apply_variant_data_inheritance(self, new_variants):
         """把新变体的变体级字段从它的谱系来源（``variant_origin_id``）复制过来。

@@ -13,7 +13,7 @@
 - 自定义组件（前端）：字段 widget `product_reference_editor`、额外参考号管理弹窗
   （顶层 `main_components` overlay）、徽标 tooltip 模板
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.2.5.1`（19.0.2.5.1 补应用列表（Apps）中文元数据：`shortdesc` / `summary` / `description` + 分类 `Product` 译文）
+- 当前版本：`19.0.2.5.2`（19.0.2.5.2 修主变体表单的参考号归属：补 `lines_field` 指向变体专属行；19.0.2.5.1 补应用列表（Apps）中文元数据）
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用
@@ -36,12 +36,24 @@
      `_check_single_owner` 兜底；禁止放宽成「两者都为空 / 两者都有」
    - 多变体产品的产品表单整块隐藏 Reference 区域（`invisible="product_variant_count > 1"`），
      参考号只在各变体上维护
+   - **变体侧任何表单都必须显式指定 `lines_field=\"variant_reference_code_line_ids\"`**：
+     widget 默认落在同视图里那个隐藏的 o2m 上，漏写就会去改产品级共享行（`19.0.2.5.2` 修的就是主变体表单）
    - 变体参考号子行创建时必须剥离 context 的 `default_product_tmpl_id`
      （`product.product.create/write` 里强制 `product_tmpl_id=False`），否则双归属报错
    - 去重约束按主人分别成立：`UNIQUE(product_tmpl_id, reference_code)` 与
      `UNIQUE(product_id, reference_code)`
    - 违反后果：变体之间共用参考号（客户 / 工厂编码串味），且报错信息指不出真正归属
 
+1.2. **禁止硬编码可选模块的用户组**（`19.0.2.5.3`）
+   - `depends` 只有 `product`：数据文件（`security/*.csv`、视图 XML）里只允许引用 `base.group_*`
+     或本模块已依赖模块提供的组，**禁止**出现 `sales_team.` / `sale.` / `purchase.` / `stock.` /
+     `account.` 等可选模块的组
+   - 违反后果：在没有该模块的库上安装**直接失败**
+     （`No matching record found for external id 'sales_team.group_sale_manager' in field 'Group'`），
+     而装了 `sale` 的开发库完全看不出来 —— 这类问题只在干净库 / CI 上暴露
+   - 历史：`19.0.2.5.3` 删掉了 `sales_team.group_sale_manager` 那行（权限与 `base.group_user` 行等价，
+     纯冗余）；同一次排查在 `product_image` 也修了同类问题
+   - 校验：`task check` 的「权限 / 视图里引用的用户组」检查会卡住
 2. **搜索在数据库层实现，禁止 Python 侧全表过滤**
    - 冗余可存储字段（均 `Text` + trigram 索引）：产品级 `reference_code_index`、
      变体级 `product.product.variant_reference_code_index`

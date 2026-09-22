@@ -1,5 +1,36 @@
 # 变更日志
 
+## [19.0.2.6.4] - 2026-09-22（修复：权限硬编码了可选模块 sale 的用户组）
+
+### 变更
+
+- **删掉 `security/ir.model.access.csv` 里 `sales_team.group_sale_manager` 那一行**（与
+  `product_reference` `19.0.2.5.3` 同类问题、同一次排查中发现）：本模块 `depends` 只有 `product`，
+  数据文件里却引用了 `sales_team` 的用户组 —— 没装 `sale` 的库上安装会直接失败：
+  `No matching record found for external id 'sales_team.group_sale_manager' in field 'Group'`。
+- 该行权限（`1,1,1,1`）与保留的 `base.group_user` 行完全相同，而销售经理隐含链最终包含
+  `base.group_user`，因此它**不额外授予任何权限**，删除后权限行为等价。
+
+### 影响
+
+- 权限行为不变；模块现在可单独安装（无需 `sale`）
+- 升级时该行对应的 `ir.model.access` 记录会被 Odoo 自动清理
+- 无数据结构 / 字段 / 视图变化，无迁移
+
+### 文档
+
+- 模块 `AGENTS.md`：文件职责表与「维护要点与调试建议」里的「销售经理可配置」改为
+  「内部用户读写；只引用核心组，不硬编码可选模块的用户组」
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_image`（**不装 `sale`**） | 模块加载成功、0 failed ✓ |
+| `task check` | 通过（新增的用户组检查无告警）✓ |
+
+---
+
 ## [19.0.2.6.3] - 2026-09-09（验收通过）
 
 ### 变更（i18n / 文档）

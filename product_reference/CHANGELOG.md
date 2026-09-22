@@ -1,5 +1,84 @@
 # 变更日志
 
+## [19.0.2.5.3] - 2026-09-22（修复：权限硬编码了可选模块 sale 的用户组）
+
+### 变更
+
+- **删掉 `security/ir.model.access.csv` 里 `sales_team.group_sale_manager` 那一行**：本模块 `depends` 只有
+  `product`，却在数据文件里引用 `sales_team`（`sale` / `sale_management` 才带进来的模块）的用户组 ——
+  在**没装 `sale`** 的库上安装会直接失败：
+  `No matching record found for external id 'sales_team.group_sale_manager' in field 'Group'`。
+- **判定依据（为什么删而不是换组）**：删掉的那行给的是 `1,1,1,1`，与保留的 `base.group_user` 行**完全相同**；
+  而 `sales_team.group_sale_manager` 的隐含链是
+  `group_sale_manager → group_sale_salesman_all_leads → group_sale_salesman → base.group_user`，
+  即销售经理本来就是内部用户，已经被 `base.group_user` 那行覆盖 —— 该行**一点权限都没多给**，
+  纯属冗余。删除后权限模型完全等价，且不再依赖任何可选模块。
+
+### 影响
+
+- 权限行为不变（内部用户对本模块模型仍有完整读写权限）；模块现在可单独安装（无需 `sale`）
+- 升级时 Odoo 会自动清理该行对应的 `ir.model.access` 记录（实测开发库中旧记录已消失）
+- 无数据结构变化、无迁移
+
+### 文档
+
+- 模块 `README.md` →「依赖」：把原先的「已知问题」改成权限模型说明（只用核心组）
+- 模块 `AGENTS.md` → L1 新增第 3 条「禁止硬编码可选模块的用户组」
+- 仓库 `.dev/scripts/check_repo.py`：新增「权限 / 视图里引用的用户组必须来自 `base` 或已声明依赖」检查，
+  用已知坏数据自证会报错后才入库
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_reference`（**不装 `sale`**） | 30 个模块加载成功、0 failed（此前直接安装失败）✓ |
+| 权限记录 | 库里只剩 `..._user` → `base.group_user` 一行，旧的 manager 行被自动清理 ✓ |
+| `task check` | 通过（新增的用户组检查无告警）✓ |
+
+---
+
+## [19.0.2.5.2] - 2026-09-22（修复：主变体表单在编产品级共享行）
+
+### 变更
+
+- **主变体表单（`product.product_normal_form_view`）的参考号编辑器改为维护变体专属行**：
+  该视图里 `default_code` 的 widget 补上
+  `options="{'lines_field': 'variant_reference_code_line_ids'}"`，隐藏的元数据 One2many
+  同步换成 `variant_reference_code_line_ids`。
+- **根因**：变体侧有两张表单 —— 「变体独立编辑表单」（`product_variant_easy_edit_view`）早已带了
+  `lines_field`（维护变体专属行），而**主变体表单漏写**这个 option → widget 回落到该视图里那个隐藏的
+  `reference_code_line_ids`（**产品级共享行**）。于是多变体产品的每个变体打开主表单时，编辑的都是
+  同一组共享参考号，与 L1「多变体不共用」以及模块 README「视图」节的描述不一致（实现与文档不符）。
+
+### 影响
+
+- 打开任一变体的主表单，「+」弹窗管理的是**该变体自己的**参考号，与产品表单的共享行互不干扰
+- 单变体产品从变体表单录入的参考号会落在变体级（产品表单看到的是产品级共享行）—— 这正是模块既有的
+  两层语义，与「变体独立编辑表单」保持一致
+- 无数据结构变化、无迁移；已有数据不动（此前误挂在产品级上的行，可用
+  `product_variant_conversion` 的转换交接，或手工改归属）
+
+### 文档
+
+- 模块 `README.md`：视图节说明主变体表单同样维护变体专属行；验证清单同步
+- 模块 `AGENTS.md`：L1 1.1 补「变体侧任何表单都必须显式指定 `lines_field`」这条硬要求
+
+### 遗留（另行登记）
+
+- 权限 CSV 引用了 `sales_team.group_sale_manager`，而 `depends` 只有 `product` ——
+  在没有 `sale` 的库里安装本模块会直接失败（`No matching record found for external id
+  'sales_team.group_sale_manager' in field 'Group'`）。已登记 `TODO.md` → `T-027`。
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| 视图 arch | `ir_ui_view.arch_db->>'en_US' LIKE '%variant_reference_code_line_ids%'` → `t` ✓ |
+| 与快速编辑表单一致 | 两张变体表单的 widget 都指向变体专属行 ✓ |
+| 回归 | `product_variant_conversion` 连同本模块跑 41 项测试 0 failed ✓ |
+
+---
+
 ## [19.0.2.5.1] - 2026-09-09（验收通过）
 
 ### 变更（i18n / 文档）

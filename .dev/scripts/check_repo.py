@@ -12,8 +12,9 @@
  2. 应用列表元数据（shortdesc / summary / description）的 msgid 与 manifest 是否逐字符一致
  3. 源码里残留的中文界面文本（注释不算，需要人工判断的部分用 --strict 卡住）
  4. 所有 XML 是否合法（视图 / QWeb）
- 5. JS 语法（需要 node）
- 6. TODO.md 结构：条目格式、ID 唯一且待办池递增、模块目录存在、文档链接存在、「检测：」条件语法
+ 5. 权限 / 视图里引用的用户组是否来自 `base` 或本模块已声明的依赖（可选模块不得硬编码其用户组）
+ 6. JS 语法（需要 node）
+ 7. TODO.md 结构：条目格式、ID 唯一且待办池递增、模块目录存在、文档链接存在、「检测：」条件语法
 
 退出码：0 通过；1 存在失败项。
 """
@@ -474,6 +475,47 @@ def check_xml(report: Report) -> None:
             report.fail(f"{os.path.relpath(path, REPO_ROOT)}: XML 不合法：{exc}")
 
 
+GROUP_REF_RE = re.compile(r"\b([a-z_][a-z_0-9]*)\.group_[a-z_0-9]+\b")
+
+
+def check_security_groups(report: Report) -> None:
+    """权限 / 视图文件里引用的用户组，必须来自 `base` 或本模块**已声明**的依赖。
+
+    典型错误：`security/ir.model.access.csv` 的 `group_id:id` 写 `sales_team.group_sale_manager`，
+    而 `depends` 只有 `product` —— 装了 `sale` 的库看不出问题，纯 `product` 的库安装时直接失败：
+    `No matching record found for external id 'sales_team.group_sale_manager' in field 'Group'`。
+
+    `sale` / `purchase` / `stock` / `account` 等都是可选模块，一律不得硬编码其用户组；
+    需要权限门槛时用核心组（`base.group_user` 等）或本模块已依赖的模块提供的组。
+    """
+    for manifest_path in sorted(glob.glob(os.path.join(REPO_ROOT, "*", "__manifest__.py"))):
+        module_dir = os.path.dirname(manifest_path)
+        try:
+            manifest = ast.literal_eval(open(manifest_path, encoding="utf-8").read())
+        except Exception:  # noqa: BLE001  其它检查负责报 manifest 本身的问题
+            continue
+        allowed = set(manifest.get("depends") or []) | {"base"}
+        candidates = (
+            glob.glob(os.path.join(module_dir, "security", "*"))
+            + glob.glob(os.path.join(module_dir, "views", "*.xml"))
+        )
+        for path in sorted(candidates):
+            ext = os.path.splitext(path)[1]
+            if ext not in {".csv", ".xml"}:
+                continue
+            content = strip_comments(open(path, encoding="utf-8").read(), ext)
+            for lineno, line in enumerate(content.splitlines(), start=1):
+                for provider in GROUP_REF_RE.findall(line):
+                    if provider in allowed:
+                        continue
+                    report.fail(
+                        f"{os.path.relpath(path, REPO_ROOT)}:{lineno}: 引用了未声明依赖的模块用户组"
+                        f" `{provider}.group_...`（`depends` 里没有 `{provider}`）\n"
+                        f"     可选模块不得硬编码其用户组：换成核心组（`base.group_*`）或本模块"
+                        f"已依赖模块提供的组，否则在没装 `{provider}` 的库上安装会直接失败"
+                    )
+
+
 def check_js(report: Report) -> None:
     import shutil
 
@@ -506,6 +548,7 @@ def main() -> int:
         check_apps_metadata,
         check_residual_chinese,
         check_xml,
+        check_security_groups,
         check_js,
         check_json_files,
         check_todo,

@@ -660,6 +660,70 @@ class TestProductVariantConversion(TransactionCase):
         self.assertEqual(blue.volume, 0.2)
         self.assertEqual(blue.weight, 2.0)
 
+    def test_shared_references_move_to_the_kept_variant_when_installed(self):
+        """装了 product_reference 时：单变体产品上的「产品级共享参考号」交接给被保留的变体。
+
+        产品表单在多变体时整块隐藏参考号区域（该模块 L1「多变体不共用」），不交接的话这些行
+        既看不到也改不了 —— 用户会以为转换把参考号弄丢了。
+
+        跑法：`task test -- product_variant_conversion,product_reference --test-tags=/product_variant_conversion`
+        （本模块不硬依赖 product_reference，未安装时这条用例自动跳过）。
+        """
+        if "reference_code_line_ids" not in self.env["product.template"]._fields:
+            self.skipTest("product_reference is not installed")
+        product = self._create_product()
+        original = product.product_variant_id
+        product.reference_code_line_ids = [Command.create({"reference_code": "CUST-SHARED"})]
+        original.variant_reference_code_line_ids = [
+            Command.create({"reference_code": "VAR-OWN"})
+        ]
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+
+        new_variant = product.product_variant_ids - original
+        self.assertEqual(len(new_variant), 1)
+        self.assertEqual(
+            set(original.variant_reference_code_line_ids.mapped("reference_code")),
+            {"CUST-SHARED", "VAR-OWN"},
+        )
+        self.assertFalse(new_variant.variant_reference_code_line_ids)
+        self.assertFalse(product.reference_code_line_ids)
+        self.assertFalse(product.reference_code_index)
+        self.assertEqual(
+            set(original.variant_reference_code_index.split("\n")),
+            {"CUST-SHARED", "VAR-OWN"},
+        )
+
+    def test_shared_reference_stays_when_variant_already_has_the_same_code(self):
+        """变体上已有同码时，产品级那条留在原地：不删用户数据、也不撞唯一约束。"""
+        if "reference_code_line_ids" not in self.env["product.template"]._fields:
+            self.skipTest("product_reference is not installed")
+        product = self._create_product()
+        original = product.product_variant_id
+        product.reference_code_line_ids = [Command.create({"reference_code": "DUP-CODE"})]
+        original.variant_reference_code_line_ids = [
+            Command.create({"reference_code": "DUP-CODE"})
+        ]
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+
+        self.assertEqual(product.reference_code_line_ids.mapped("reference_code"), ["DUP-CODE"])
+        self.assertEqual(
+            original.variant_reference_code_line_ids.mapped("reference_code"), ["DUP-CODE"]
+        )
+
     def test_new_variants_inherit_variant_dimensions_when_installed(self):
         """装了 product_dimension 时：新变体的尺寸（单位 + 长宽高）也随谱系继承。
 

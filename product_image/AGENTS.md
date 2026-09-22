@@ -149,7 +149,7 @@
 | `static/src/js/product_image_manage.js` | `ProductImageManageDialog` + `useProductImageManage` hook：图片管理弹窗（顶层 overlay 走 main_components），上半大图（仅预览、无删除按钮；主图选中名称行留空）+ 平铺缩略图（拖动排序：pointer 拖拽 + hole 插入位 + transform 避让动画、主图固定首位；删除入口只在网格：每张缩略图含主图 ×，先确认后删，删主图自动提升；点击缩略图只切换弹窗内大图，不回传 widget）；header「批量删除」勾选模式 + 批量确认（先图库后主图）；下半 dropzone + 自实现上传队列（点击/拖放/Ctrl+V，缩略图 + 转圈动画，粘贴不自动关闭）；通过 getItems/onDelete/onReorder/onUploaded 回调与 widget 同步 |
 | `static/src/xml/product_image_manage.xml` | 图片管理弹窗 QWeb 模板 |
 | `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条 / 管理弹窗样式） |
-| `security/ir.model.access.csv` | 普通用户读写业务数据，销售经理可配置 |
+| `security/ir.model.access.csv` | 内部用户（`base.group_user`）读写业务数据；**只引用核心组**，不硬编码 `sale` 等可选模块的用户组（`19.0.2.6.4`） |
 
 ---
 
@@ -268,7 +268,8 @@
 - **扩展 `product.template`**：`One2many` → `product.image.gallery`、`image_gallery_count` 计数字段。主图 `image_1920` 由原生字段独立管理，无同步入口。
 - **widget**：`product_image_gallery`（registry `fields`，替换产品表单 `image_1920` 字段 widget，`fieldDependencies` 声明依赖）；`ProductImagePreviewDialog`（全屏预览）、`ProductImageManageDialog` + `useProductImageManage` hook（顶层 overlay，19.0.2.2.12 替代原 `ProductImageUploadDialog`）。
 - **视图**：产品表单头像字段 widget 改 `product_image_gallery`、列表增「图片数」列；图库独立列表/表单/搜索视图与动作。
-- **安全**：`security/ir.model.access.csv`，普通用户读写业务数据、销售经理可配置。
+- **安全**：`security/ir.model.access.csv`，内部用户读写业务数据；只引用 `base.group_user`，
+  不硬编码 `sale` 等可选模块的用户组（本模块 `depends` 只有 `product`，必须能单独安装）。
 - 仅支持全新安装（无迁移脚本）。
 
 ### 可复用设计思路

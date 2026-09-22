@@ -3,6 +3,46 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.4.1.1] - 2026-09-22（修复：转换后产品级共享参考号无处可去）
+
+### 变更
+
+- **转换时把「产品级共享参考号」交接给被保留的变体**（装了 `product_reference` 时生效）：
+  新增步骤 ⑦.5 `_transfer_shared_references_to_original(originals)`，把
+  `reference_code_line_ids`（`product_tmpl_id` 那一层）改挂到被保留的那条变体上
+  （`write({"product_id": kept.id, "product_tmpl_id": False})`），并显式重算源产品的
+  `reference_code_index`（参考号行的 `write` 只同步「新主人」一侧的索引）。
+- **根因**：`product_reference` 的参考号有两种归属（二选一）—— 产品级共享（产品表单维护）与
+  变体级（变体表单维护），且「多变体产品不共用」：产品表单在 `product_variant_count > 1` 时**整块隐藏**
+  参考号区域。单变体产品上用户录入的正是产品级那一层；转换后它既不在产品表单（已隐藏）、
+  也不在变体表单（那里只认变体级）→ 数据其实还在，但没有任何入口能碰到，
+  表现为「转换把参考号弄丢了」。
+- **保守分支**：
+  - 原来就有多条变体时无法判断该交给谁 → 保持原样并记日志（不猜）；
+  - 变体上已有同码的行（`UNIQUE(product_id, reference_code)`）→ 产品级那条留在原地，
+    不删用户数据、也不撞约束；
+  - 未安装 `product_reference` 时按字段判断跳过（不硬依赖）。
+
+### 影响
+
+- 单变体 → 多变体的转换不再让产品级参考号失联：被保留变体的参考号 = 原有产品级行 + 它自己的变体级行
+- 新变体仍不继承任何参考号（沿用 `product_reference` 的 L1「多变体不共用」）
+- 无数据结构变化、无迁移
+
+### 文档
+
+- 模块 `README.md`：「属性归属审计」新增参考号行、「已知边界」补 N>1 时不交接、验证清单加一条
+- 模块 `AGENTS.md`：L2 P5「同步规则」补交接规则；缺口清单补 N>1 这条
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| 开发库实测（单变体、产品级 `CUST-SHARED` + 变体级 `VAR-OWN` → 转换） | 原变体 = `['CUST-SHARED', 'VAR-OWN']`；新变体为空；产品级为空；源产品索引 `False` ✓ |
+| 自动化测试 | `task test -- product_variant_conversion,product_reference,sale_management --test-tags=/product_variant_conversion` → **41 项 0 failed**（含新增 2 项：正常交接、同码时保守保留）✓ |
+
+---
+
 ## [19.0.4.1.0] - 2026-09-22（产品尺寸随谱系继承；与 product_dimension 打通）
 
 ### 变更
