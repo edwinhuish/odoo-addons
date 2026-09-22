@@ -9,14 +9,31 @@
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
+DIMENSION_UNIT_FIELD = "dimension_unit"
 DIMENSION_FIELDS = (
-    "dimension_unit",
+    DIMENSION_UNIT_FIELD,
     "dimension_length",
     "dimension_width",
     "dimension_height",
 )
 # 立方厘米 → 立方米
 CM3_PER_M3 = 1_000_000.0
+
+
+def volume_from_dimensions(dimension_unit, length, width, height):
+    """按尺寸算体积（立方米）；长宽高任一为 0 时给 0（尺寸不齐则体积不成立）。
+
+    **这是全模块唯一的换算口径**：变体侧的写库同步（`_sync_volume_from_dimensions()`）与
+    模板侧的产品表单预览（`product.template._onchange_dimension_fields()`）都调它，
+    免得两处各算一套、慢慢漂移。厘米按 ``cm³ / 1 000 000`` 换算，米直接相乘。
+    """
+    length = length or 0.0
+    width = width or 0.0
+    height = height or 0.0
+    if not (length > 0 and width > 0 and height > 0):
+        return 0.0
+    factor = CM3_PER_M3 if dimension_unit == "cm" else 1.0
+    return length * width * height / factor
 
 
 class ProductProduct(models.Model):
@@ -53,39 +70,45 @@ class ProductProduct(models.Model):
     )
 
     # ------------------------------------------------------------------
-    # 尺寸 → 原生 Volume（表单与后台两条路都覆盖）
+    # 尺寸 → 原生 Volume（界面上由前端算，后端只兜底）
     # ------------------------------------------------------------------
-
-    @api.onchange(*DIMENSION_FIELDS)
-    def _onchange_dimension_fields(self):
-        """表单里改尺寸时实时刷新 Volume，避免保存前后数值不一致。"""
-        self._sync_volume_from_dimensions()
 
     @api.model_create_multi
     def create(self, vals_list):
         variants = super().create(vals_list)
         for vals, variant in zip(vals_list, variants):
-            if any(name in vals for name in DIMENSION_FIELDS):
+            if variant._should_sync_volume(vals):
                 variant._sync_volume_from_dimensions()
         return variants
 
     def write(self, vals):
         res = super().write(vals)
-        if any(name in vals for name in DIMENSION_FIELDS):
+        if self._should_sync_volume(vals):
             self._sync_volume_from_dimensions()
         return res
+
+    def _should_sync_volume(self, vals):
+        """要不要由后端重算 `volume`。
+
+        界面上的体积由前端算好并随表单一起提交（`static/src/js/dimension_volume.js`），
+        所以**写入值里带了 `volume` 就不再算**：同一件事不重复做两遍，也免得两处口径分歧。
+        只有「写了尺寸、没带体积」的路径才兜底 —— 导入 / API / RPC / 其它模块直接写尺寸
+        （例如 `product_variant_conversion` 按谱系继承）全走这条，漏了它这些路径的体积
+        就会停在旧值上。
+        """
+        if "volume" in vals:
+            return False
+        return any(name in vals for name in DIMENSION_FIELDS)
 
     def _sync_volume_from_dimensions(self):
         """按本变体的尺寸重算原生 `volume`（立方米）；尺寸不齐时归 0。"""
         for variant in self:
-            length = variant.dimension_length or 0.0
-            width = variant.dimension_width or 0.0
-            height = variant.dimension_height or 0.0
-            if not (length > 0 and width > 0 and height > 0):
-                variant.volume = 0.0
-                continue
-            factor = CM3_PER_M3 if variant.dimension_unit == "cm" else 1.0
-            variant.volume = length * width * height / factor
+            variant.volume = volume_from_dimensions(
+                variant.dimension_unit,
+                variant.dimension_length,
+                variant.dimension_width,
+                variant.dimension_height,
+            )
 
     # ------------------------------------------------------------------
     # 校验

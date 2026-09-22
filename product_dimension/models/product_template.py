@@ -12,9 +12,8 @@
 
 from odoo import api, fields, models
 
-DIMENSION_UNIT_FIELD = "dimension_unit"
-DIMENSION_NUMBER_FIELDS = ("dimension_length", "dimension_width", "dimension_height")
-DIMENSION_FIELDS = (DIMENSION_UNIT_FIELD,) + DIMENSION_NUMBER_FIELDS
+from .product_product import DIMENSION_UNIT_FIELD
+
 # 多变体时读出来的空值：Selection 用 False，Float 用 0.0
 EMPTY_DIMENSION_VALUE = {DIMENSION_UNIT_FIELD: False}
 

@@ -6,6 +6,174 @@
 
 ---
 
+## [19.0.4.1.0] - 2026-09-22（修「cm 小体积显示 0」：前端取整参数 + Volume 精度）
+
+### 变更
+
+- **修复：前端取整参数用错，导致任何小于 1 的体积被算成 0。** `roundPrecision()` 的第二参数是
+  **精度因子**（两位小数要传 `0.01`，Odoo 核心的写法是 `parseFloat("1e" + -decimals)`），此前把字段
+  `digits[1]`（`2`）直接传了进去 —— 等于「按 2 的整数倍取整」，于是 50×40×30 cm 的正确体积 0.06
+  在**界面**上显示成 0，随表单提交后**存进库的也是 0**（后端因收到 `volume` 而不再兜底）。
+- **修复：原生「Volume」精度只有 2 位，cm 尺寸的小体积被舍成 0。** 20 × 20 × 20 cm = 0.008 m³、
+  10 × 10 × 10 cm = 0.001 m³ 都会被舍成 0（界面上只看到「Volume = 0」）。新增
+  `hooks.ensure_volume_precision()`：安装（`post_init_hook`）与升级（`migrations/19.0.4.1.0/`）
+  各调一次，把全局「Volume」精度提到 **6 位**（1 cm³ = 0.000001 m³ 刚好能表示），**只升不降**、
+  幂等；管理员自己调更高不会被覆盖，想改小在 设置 → 技术 → 小数精度 里改（模块之后不再干预）。
+- **重构：前端纯规则抽到 `static/src/js/dimension_volume_rules.js`**（不依赖任何 Odoo 模块），
+  补丁只负责挂钩与写回；这样规则能被 **node 直接跑单元测试**
+  （`test_frontend_rules_produce_the_expected_volumes()`）——上面那个 bug 正是「前端逻辑没人测」漏掉的。
+
+### 影响
+
+- 修复后：50×40×30 cm → `Volume = 0.06`；20×20×20 cm → `0.008`；10×10×10 cm → `0.001`（此前均为 0）
+- **全局设置变化**：安装 / 升级会把「Volume」小数精度从 2 位提到 6 位（影响所有模块的体积显示，
+  数值更精确；只升不降，不会覆盖管理员调过的更高值）
+- 无数据结构变化；自动化测试 15 → **17 项**（新增：小体积保留小数、node 实跑前端规则）
+
+### 文档
+
+- 模块 `README.md`：已知限制改写为「精度会被模块提到 6 位」，计算职责小节与验证清单同步
+- 模块 `AGENTS.md`：L1 第 3 条补精度要求；文件职责表加入前端规则文件 / 钩子 / 迁移目录；
+  L2 新增 P8（体积显示 0 的两个真凶 + 「前端逻辑要能测」的教训）
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| dev 库升级 | 迁移日志 `raising the Volume decimal precision from 2 to 6`，`decimal_precision` 中 Volume = 6 ✓ |
+| 小体积实测（dev 库） | 10³ cm → 0.001、20³ cm → 0.008、50³ cm → 0.125 ✓（修复前 0 / 0.01 / 0.13） |
+| `task test -- product_dimension` | 17 项 0 failed（含 node 实跑前端规则的用例）✓ |
+| `task test -- product_variant_conversion,product_dimension` | 43 项 0 failed ✓ |
+| `task check` | 通过 ✓ |
+
+---
+
+## [19.0.4.0.0] - 2026-09-22（前后端职责重划分：体积在浏览器里算，后端只兜底）
+
+### 变更
+
+- **界面侧的体积计算移到前端**：新增 `static/src/js/dimension_volume.js`（`Record._update` 补丁）。
+  表单里改 `dimension_unit` / 长 / 宽 / 高时，浏览器即时算出 `volume` 写回同一个字段、随表单一起提交 ——
+  不需要服务端往返，后端也不再为界面算一遍。
+- **删掉两个尺寸 onchange**（`product.product` 与 `product.template` 上的 `_onchange_dimension_fields`）：
+  Odoo 只为注册过 onchange 的字段发 onchange 请求，去掉之后那些字段的 RPC 响应里自然也不再带体积。
+  模板侧那个 onchange 原本只是为了让产品表单能预览（`19.0.3.1.0` 的补丁），现在统一由前端负责。
+- **后端改为「带体积就不算，不带才兜底」**：新增 `_should_sync_volume()`，`create` / `write` 共用 ——
+  写入值里含 `volume` 时原样采信；只有「写了尺寸、没带体积」的路径（导入 / API / RPC / 其它模块，
+  含 `product_variant_conversion` 的谱系继承与模板桥接的 inverse）才补算，保证库里的体积不落后。
+- **换算口径仍是唯一一处**：后端 `volume_from_dimensions()`；前端按同一规则实现（字段名 / `1 000 000` /
+  按 `digits` 取整），并由 `test_frontend_computation_matches_the_backend_rules()` 守住两处不能只改一边。
+- manifest 描述与 `i18n/zh_CN.po` 按新的职责划分改写（中英同步）。
+
+### 影响
+
+- **职责变化（行为等价）**：界面上的体积仍即时显示且与落库一致；非界面写入仍会自动补算 ——
+  区别只是「界面那次计算」从服务端搬到了浏览器，少一次往返、少一次重复计算
+- `volume` 仍可手工填：改的是 `volume` 本身时前端不介入，后端也因为值里带了 `volume` 而不重算
+- 前端资源需要 `web`（Odoo 的 `auto_install` 模块，实际总在）；万一没有，只是少了界面即时计算，
+  落库仍由后端兜底保证正确 —— 因此 `depends` 保持只有 `product`
+- 自动化测试 13 → **15 项**（新增职责划分的 5 条断言，替换掉 3 条已不适用的服务端预览用例）
+
+### 文档
+
+- 模块 `README.md`：新增「Volume 的计算职责」小节（触发条件 / 完整性校验 / 计算逻辑 / 展示方式 / 职责表），
+  核心设计表、操作要点与验证清单同步
+- 模块 `AGENTS.md`：L1 第 3 条改写为「界面归前端、后端只兜底」；文件职责表加入前端文件；L2 P7 重写为前端即时计算的三条坑
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| 前端资源是否真的进包 | `ir.asset._get_asset_paths("web.assets_backend", {})` 共 2464 条，其中含 `product_dimension/static/src/js/dimension_volume.js` ✓ |
+| `task test -- product_dimension` | 15 项 0 failed ✓ |
+| `task test -- product_variant_conversion,product_dimension` | 43 项 0 failed（谱系继承写入尺寸 + 体积：采信与兜底两条路都覆盖）✓ |
+| `task check` | 通过（含 JS 语法检查）✓ |
+| 界面交互（浏览器里改尺寸即见体积） | **待目标环境复验**（前端行为无法在无浏览器环境里断言） |
+
+---
+
+## [19.0.3.1.0] - 2026-09-22（表单里填完尺寸立刻算出 Volume）
+
+### 变更
+
+- **补上模板侧的表单预览**：新增 `product.template._onchange_dimension_fields()`。此前预览 onchange 只挂在
+  `product.product` 上，而**产品表单的模型是 `product.template`** —— 模板侧是单变体桥接，尺寸要等保存时的
+  inverse 才落到变体上，原生 `volume` 又是 `compute + inverse + store`，于是在产品表单上填完长宽高，
+  `Volume` 一直是 0.00、**保存后才出现**（实测：50×40×30 cm 未保存时 `volume = 0.0`，保存后 0.06）。
+  变体表单侧本来就有 onchange，不受影响。
+- **换算口径收敛为一处**：新增 `product_product.volume_from_dimensions()`，变体侧的写库同步
+  （`_sync_volume_from_dimensions()`）与模板侧的表单预览共用它；字段名常量（`DIMENSION_UNIT_FIELD` /
+  `DIMENSION_FIELDS`）也统一到真身文件，模板侧改为 import —— 免得两处各算一套、慢慢漂移。
+- manifest 描述与 `i18n/zh_CN.po` 补「填完尺寸立刻显示体积」说明（中英同步，门禁校验 msgid 逐字符一致）。
+
+### 影响
+
+- 纯体验修复：模板侧落库语义不变（仍是保存时 inverse 落到那条变体）；多变体产品不受影响（字段在界面上隐藏，
+  预览也不会介入）
+- `volume` 仍可手工填 —— 但只要改动任一尺寸字段，体积即以尺寸为准（长宽高不齐时按既有规则归 0）
+- 自动化测试 10 → **13 项**（新增：产品表单预览、变体表单预览、预览随单位与尺寸齐全度变化）
+
+### 文档
+
+- 模块 `README.md`：功能概述与「操作要点」补即时计算与体积归属优先级，验证清单补三条，测试数同步
+- 模块 `AGENTS.md`：L1 第 3 条改为「两个模型都要有 onchange + 换算口径唯一」；L2 新增 P7（onchange 只在视图所属模型上生效）
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| 产品表单（`Form` 模拟）输入 50×40×30 cm | 未保存 `volume = 0.06`（改造前 0.0）；保存后模板与变体均 0.06 ✓ |
+| 变体表单（`Form` 模拟）输入 1×0.5×0.4 m | 未保存 `volume = 0.2`，保存后一致 ✓ |
+| `task test -- product_dimension` | 13 项 0 failed ✓ |
+| `task test -- product_variant_conversion,product_dimension`（尺寸模块回归） | 43 项 0 failed ✓ |
+| `task check` | 通过 ✓ |
+
+---
+
+## [19.0.3.0.0] - 2026-09-22（挂载点补齐：多变体产品的尺寸终于有地方填）
+
+### 变更
+
+- **新增挂载点：变体快速编辑表单**。尺寸块挂到 `product.product` 的
+  `product_variant_easy_edit_view` 上（原生 Logistics 组的 Volume 之前）。这个表单是
+  **独立 primary 视图、不继承模板表单**，而产品的「变体」按钮
+  （`product_variant_action`）用的正是它 —— 也就是说多变体产品逐条维护变体数据的默认入口
+  原本**看不到也填不了尺寸**，只能靠导入 / API。挂上之后三条入口齐了：
+
+  | 表单 | 挂载方式 | 可见性 |
+  |------|----------|--------|
+  | 产品表单（`product_template_form_view`） | 本模块挂载（Logistics 组、Volume 之前） | 多条变体时隐藏（与原生 Volume 同款门控） |
+  | 变体完整表单（`product_normal_form_view`） | **继承模板表单**，随继承链自动获得，勿重复挂载 | 变体侧 `is_product_variant=True` → 门控为假 → 可见 |
+  | 变体快速编辑表单（`product_variant_easy_edit_view`） | 本模块单独挂载 | 无单变体门控（它本身就是变体） |
+
+- **收紧模板表单的 xpath 锚点**：`//label[@for='volume']` → `//group[@name='group_lots_and_weight']/label[@for='volume']`。
+  松锚点在原生别处再出现 Volume 标签时会命中多个节点、字段被挂两遍（重复字段不报错，只会让用户看到两套输入框）。
+- **明确「与原生 Volume 同进同退」**：尺寸块位于原生 Logistics 组内，而该组受祖先组
+  `groups="uom.group_uom"` 门控 —— 只装 `product` 时没有该组的用户连 `volume` / `weight` 都看不到，
+  尺寸随之一起隐没。这不是挂载缺失，而是与原生一致；已用测试钉住，避免出现「体积还在、尺寸没了」的半截状态。
+- **manifest 描述与 `i18n/zh_CN.po`** 补挂载说明与可见性限制（中英同步，门禁校验 msgid 逐字符一致）。
+
+### 影响
+
+- 用户可见的能力变化：多变体产品现在可以在「变体」快速编辑表单里逐条填尺寸（此前只能在单变体产品上填）
+- 无字段 / 数据结构变化；视图与文案变化，升级即生效
+- 自动化测试 6 → **10 项**（新增：真身归属、三表单挂载、可见性门控、与原生 Volume 同进同退）
+
+### 文档
+
+- 模块 `README.md` →「视图」重写为挂载地图，「已知限制」补可见性门控，测试数同步
+- 模块 `AGENTS.md` → L1 新增「挂载点必须齐全且与原生 Volume 同进同退」；L2 新增挂载类踩坑（继承链、门控、锚点）
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_dimension` | 10 项 0 failed ✓ |
+| 三表单合成 arch（干净库 + 开发库） | 产品表单 / 变体表单 / 变体快速编辑表单均含四个尺寸字段 ✓ |
+| 快速编辑表单 | 独立 primary 视图，改造前 `dimension = 0` 次、改造后 9 次 ✓ |
+
+---
+
 ## [19.0.2.0.1] - 2026-09-22（修复 i18n 静默失效 + 中文打磨）
 
 ### 变更

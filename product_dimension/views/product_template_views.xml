@@ -2,19 +2,32 @@
 <odoo>
 
     <!-- ============================================================ -->
-    <!-- 产品表单：在原生 Logistics 组的 Volume 之前插入「尺寸单位 + 尺寸」。 -->
-    <!-- 这两组字段在模板上只是单变体桥接，真实数据在变体上；可见性沿用原生 -->
-    <!-- volume / weight 的规则：产品有多条变体时在模板表单上隐藏，改到变体 -->
-    <!-- 表单里逐条维护。                                                 -->
-    <!-- 变量名 is_product_variant / product_variant_count 都来自原生视图。 -->
+    <!-- 尺寸字段的挂载地图（改挂载前先读 product_dimension/AGENTS.md → L1.2） -->
+    <!--                                                              -->
+    <!-- 1. 模板表单（product.product_template_form_view）：单变体桥接。  -->
+    <!--    插在原生 Logistics 组的 Volume 之前；产品有多条变体时隐藏    -->
+    <!--    （与原生 volume / weight 同款门控，避免「填了却不生效」）。    -->
+    <!-- 2. 变体表单（product.product_normal_form_view）：它**继承模板    -->
+    <!--    表单**，所以第 1 处会随继承链自动出现在它上面；变体表单里      -->
+    <!--    is_product_variant=True → 门控为假 → 字段可见，且写的是这条    -->
+    <!--    变体自己的尺寸（product.product 上的真身）。                  -->
+    <!--    **不要**再为它单开一处挂载，否则同一组字段会出现两次。        -->
+    <!-- 3. 变体快速编辑表单（product_variant_easy_edit_view）：独立      -->
+    <!--    primary 视图、不继承模板表单，必须单独挂载 —— 产品的「变体」   -->
+    <!--    按钮（product_variant_action）用的正是这个表单，是多变体产品   -->
+    <!--    逐条维护变体数据的默认入口。                                  -->
     <!-- ============================================================ -->
+
     <record id="product_template_form_inherit_dimension" model="ir.ui.view">
         <field name="name">product.template.form.inherit.dimension</field>
         <field name="model">product.template</field>
         <field name="inherit_id" ref="product.product_template_form_view"/>
         <field name="arch" type="xml">
 
-            <xpath expr="//label[@for='volume']" position="before">
+            <!-- 锚点带上 Logistics 组名：只认这个组里的 Volume 标签。省掉组名的话，
+                 原生哪天在别处再加一个 Volume 标签，这处插入会命中两个节点、
+                 字段被挂两遍（重复字段不会报错，只会让用户看到两套输入框）。 -->
+            <xpath expr="//group[@name='group_lots_and_weight']/label[@for='volume']" position="before">
                 <label for="dimension_unit" string="Dimension Unit"
                        invisible="product_variant_count &gt; 1 and not is_product_variant"/>
                 <div class="o_row" name="dimension_unit"
@@ -26,6 +39,34 @@
                        invisible="product_variant_count &gt; 1 and not is_product_variant"/>
                 <div class="o_row" name="dimension_dimensions"
                      invisible="product_variant_count &gt; 1 and not is_product_variant">
+                    <field name="dimension_length" placeholder="L" class="oe_inline" style="max-width: 6rem;"/>
+                    <span class="oe_inline">x</span>
+                    <field name="dimension_width" placeholder="W" class="oe_inline" style="max-width: 6rem;"/>
+                    <span class="oe_inline">x</span>
+                    <field name="dimension_height" placeholder="H" class="oe_inline" style="max-width: 6rem;"/>
+                </div>
+            </xpath>
+
+        </field>
+    </record>
+
+    <record id="product_variant_easy_edit_inherit_dimension" model="ir.ui.view">
+        <field name="name">product.product.easy.edit.inherit.dimension</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_variant_easy_edit_view"/>
+        <field name="arch" type="xml">
+
+            <!-- 这里就是变体本身，不做单变体门控：原生 volume / weight 在这个表单里
+                 也没有 invisible 条件，尺寸保持同样处理。块放在原生 Logistics 组的
+                 Volume 之前（该组自带 invisible="type != 'consu'"）。 -->
+            <xpath expr="//group[@name='weight']/label[@for='volume']" position="before">
+                <label for="dimension_unit" string="Dimension Unit"/>
+                <div class="o_row" name="dimension_unit">
+                    <field name="dimension_unit" class="oe_inline" style="max-width: 7rem;"/>
+                </div>
+
+                <label for="dimension_length" string="Dimensions"/>
+                <div class="o_row" name="dimension_dimensions">
                     <field name="dimension_length" placeholder="L" class="oe_inline" style="max-width: 6rem;"/>
                     <span class="oe_inline">x</span>
                     <field name="dimension_width" placeholder="W" class="oe_inline" style="max-width: 6rem;"/>

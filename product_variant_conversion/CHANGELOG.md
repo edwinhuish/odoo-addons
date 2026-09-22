@@ -3,6 +3,52 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.5.0.0] - 2026-09-22（谱系来源判定更准 + 修复「没装 product_reference 时转换必崩」）
+
+### 变更
+
+- **谱系来源判定换算法**（新增 `_find_variant_conversion_origin()` / `_get_variant_conversion_origin_key()`）：
+  改为按「**转换前就存在的取值**」匹配 —— 只看新变体保留着老取值的那些属性轴，候选原变体在这些轴上的
+  取值必须完全一致，一致的有多个时取最具体的那个，仍并列才判为不唯一。
+
+  旧算法比对的是「转换前存在的**属性轴**上的取值组合」，而本次新加的取值同样落在这些轴上，于是
+  **给已有属性加取值**（最常见的一种转换）时新变体永远匹配不上任何原变体：只有一条原变体时才靠兜底
+  规则指对，多条原变体时新变体一律「无来源」，`product_dimension` 的尺寸 / 原生 Volume / 成本
+  **就此丢失**。现在 `Red/M`、`Blue/M` 这类原变体能被准确认出来，新变体的数据落到**对应**的
+  `product.product` 上（新增两条测试钉住映射与尺寸继承）。
+- **修复：未装 `product_reference` 时每一次转换都失败**。`_transfer_shared_references_to_original()`
+  在跳过分支里 `browse` 了 `product.reference.code` —— 模块没装时该模型不在注册表，`env[模型名]`
+  直接抛 `KeyError`，转换整单回滚。纯 `product` 环境下（本模块只依赖 `product`）这是必现故障：
+  HEAD 上实测 33/43 条用例 error，修复后 0 error。改为返回硬依赖 `product.product` 的空记录集。
+- **修复：`_log_variant_conversion()` 在程序化调用时拿 `None` 报错**。它用的是入参 `added_attributes`
+  （程序化调用不传时为 `None`），改为用推断后的 `new_attributes`。
+- **移除不再需要的 `previous_attribute_lines` 参数**（`_convert_to_multi_variant()` 及其内部快照）：
+  来源判定按各变体携带的取值认，不再依赖「改动前的属性行快照」，`write()` 相应少传一个参数。
+
+### 影响
+
+- 行为变化：给已有属性加取值时，新变体不再「无来源」，而是准确挂到对应原变体上并继承其变体级数据
+  （成本 / 体积 / 重量 / 装了 `product_dimension` 时的尺寸）；判定确实不唯一时仍然留空，不乱指
+- 修复类变化：没有 `product_reference` 的环境（含只装 `product` 的干净库）转换恢复可用
+- 无数据结构变化、无迁移；测试 39 → **43 项**
+
+### 文档
+
+- 模块 `README.md`：「新变体继承策略」补来源判定规则与「加取值」举例，测试数与验证清单同步
+- 模块 `AGENTS.md` → L2 P5 更新来源判定与跨模块协同说明；文件职责表补两个新方法
+- 模块 `CHANGELOG.md` 本条目；根 `README.md` / `AGENTS.md` 版本行同步
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant_conversion`（只装 `product`） | 43 项 0 failed / **0 error**（修复前 33 error）✓ |
+| `… -- product_variant_conversion,product_dimension` | 43 项 0 failed（含尺寸落到对应变体的新用例）✓ |
+| `… -- product_variant_conversion,product_reference` | 43 项 0 failed（走参考号交接分支）✓ |
+| `… -- product_variant_conversion,stock,sale_management` | 43 项 0 failed ✓ |
+
+---
+
 ## [19.0.4.1.1] - 2026-09-22（修复：转换后产品级共享参考号无处可去）
 
 ### 变更

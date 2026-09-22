@@ -14,7 +14,7 @@
 - 继承模型：`product.product`（尺寸真身）、`product.template`（单变体桥接）
 - 自定义组件（前端模块）：无
 - 主依赖：`product`（不依赖 `stock` / `sale` / `purchase`）
-- 当前版本：`19.0.2.0.1`（19.0.2.0.1 修复 i18n：po 的 `#:` 引用行 / 多行 msgstr / `#. odoo-python` 标记三类静默失效，并打磨中文；19.0.2.0.0 改名 + 尺寸下沉到变体）
+- 当前版本：`19.0.4.0.0`（19.0.4.0.0 前后端职责重划分：界面侧体积改由前端算、后端只兜底且不再返回体积，规则两处一致并由测试守住；19.0.3.1.0 补模板侧预览并收敛换算口径；19.0.3.0.0 补齐「变体快速编辑表单」挂载点、收紧视图锚点、明确与原生 `Volume` 同进同退；19.0.2.0.1 修复 i18n 三类静默失效并打磨中文；19.0.2.0.0 改名 + 尺寸下沉到变体）
 
 ---
 
@@ -32,11 +32,31 @@
    - 视图上这些字段必须带 `invisible="product_variant_count > 1 and not is_product_variant"`，避免「填了却不生效」
    - 违反后果：用户在产品表单填了尺寸却悄悄丢失；或模板与变体数据互相覆盖
 
-3. **尺寸变化必须同步原生 `Volume`（表单与后台两条路）**
-   - `@api.onchange` 覆盖表单实时预览，`create` / `write` 覆盖导入 / API / 批量写入
-   - 厘米按 `cm³ / 1 000 000` 换算，米直接相乘，结果恒为立方米
-   - 长宽高任一为 0 时 `volume` 归 0（与前身模块一致）
-   - 违反后果：表单与数据库体积不一致，运费 / 装载 / 报价计算出错
+2.1 **挂载点必须齐全，且与原生 `Volume` 同进同退**
+   - 三个表单都要有尺寸块：产品表单（本模块插入原生 Logistics 组、`Volume` 之前）、
+     变体完整表单（`product_normal_form_view`，**继承模板表单自动获得，禁止重复挂载**）、
+     变体快速编辑表单（`product_variant_easy_edit_view`，独立 primary 视图，必须单独挂载 ——
+     产品的「变体」按钮用的就是它）
+   - xpath 锚点必须带组名（`//group[@name='group_lots_and_weight']/label[@for='volume']`），
+     否则原生新增 Volume 标签时字段会被挂两遍
+   - 可见性由原生 Logistics 组的 `groups="uom.group_uom"` 门控决定：与 `volume` / `weight` 一起显示或一起隐藏，
+     **不允许**出现「体积还在、尺寸没了」
+   - 违反后果：多变体产品在界面上没有尺寸入口（只能导入 / API）；或用户看到两套尺寸输入框
+   - 详见 L2 P6
+
+3. **体积的计算职责：界面归前端，后端只兜底**
+   - **界面**（`static/src/js/dimension_volume.js`）：`dimension_unit` / 长 / 宽 / 高任一被改动，就在浏览器里
+     算好 `volume` 写回同一个字段、随表单一起提交 —— 后端**不再注册任何尺寸 onchange**，因此没有服务端
+     往返，也没有「后端再算一遍」
+   - **后端**（`create` / `write` + `_should_sync_volume()`）：写入值里带了 `volume` 就原样采信、不重算；
+     只有「写了尺寸、没带体积」的路径（导入 / API / 其它模块，以及模板侧桥接的 inverse）才兜底补算
+   - 规则必须**两处一致**：`cm` 走 `cm³ / 1 000 000`、`m` 直接相乘、长宽高任一为 0 则体积为 0，并按键位
+     `digits` 取整。后端口径的唯一出处是 `product_product.volume_from_dimensions()`；前端实现在
+     `static/src/js/dimension_volume_rules.js`（无 Odoo 依赖，可被 node 直接跑测试）
+   - **精度**：`volume` 是 `digits='Volume'` 的原生字段，出厂只有 2 位 —— cm 尺寸下 0.008 m³ 会被舍成 0。
+     模块在安装（`hooks.post_init_hook`）与升级（`migrations/19.0.4.1.0/`）时把它提到 **≥ 6 位**（只升不降），
+     两处调用同一个 `hooks.ensure_volume_precision()`
+   - 违反后果：界面显示与落库值不一致（运费 / 装载 / 报价算错）；或导入 / API 写进来的尺寸不更新体积
 
 4. **所有用户可见文本源语言为英文（`en_US`）**
    - Python / XML 中不写中文界面文案；中文只放在 `i18n/zh_CN.po` 的 `msgstr`
@@ -73,10 +93,14 @@
 |------|------|
 | `__manifest__.py` | 模块元数据、版本、依赖、数据文件登记、`pre_init_hook` 声明 |
 | `hooks.py` | 安装前钩子：把旧 `product_packing` 留在模板上的尺寸数据搬到变体上 |
-| `models/product_product.py` | 尺寸真身（单位 + 长宽高）、尺寸 → 原生 `Volume` 同步、非负校验 |
+| `models/product_product.py` | 尺寸真身（单位 + 长宽高）、`volume_from_dimensions()`（**全模块唯一换算口径**）、`_should_sync_volume()`（要不要兜底重算）、非负校验 |
 | `models/product_template.py` | 单变体桥接：读镜像 + 写回变体（与原生 `volume` / `weight` 同构） |
-| `views/product_template_views.xml` | 在产品表单 Logistic 组内插入尺寸单位与尺寸 |
-| `tests/test_product_dimension.py` | 6 项自动化测试（Volume 同步、单变体桥接、多变体独立、非负校验） |
+| `static/src/js/dimension_volume_rules.js` | 体积计算的**纯规则**（无 Odoo 依赖）：单位换算、完整性判断、按位数取整；模块测试用 node 直接跑它 |
+| `static/src/js/dimension_volume.js` | 界面侧体积计算：`Record._update` 补丁，改尺寸 / 单位即算好并写回 `volume` |
+| `hooks.py` | 安装前搬旧数据；安装后 `ensure_volume_precision()`（确保「Volume」精度 ≥ 6 位） |
+| `migrations/<版本>/` | 升级路径的补丁脚本（`post_init_hook` 只在安装时跑，升级要靠它） |
+| `views/product_template_views.xml` | 尺寸块的**挂载地图**（文件头注释）：模板表单插入 + 变体快速编辑表单挂载；两个锚点都带组名 |
+| `tests/test_product_dimension.py` | 17 项自动化测试（Volume 同步、前后端职责（无 onchange / 采信表单体积 / 兜底补算 / JS 规则一致 + node 实跑前端规则）、小体积精度、单变体桥接、多变体独立、非负校验、真身归属、三表单挂载、可见性门控） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里；`i18n/` 不进 `data`） |
 | `README.md` | 用户可见功能、字段表、迁移步骤、已知限制、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
@@ -142,9 +166,54 @@
 **预防**：`task check` 已内建四类校验（引用行写法 / 条目缺引用行 / 缺 `odoo-python`·`odoo-javascript`
 标记 / 行结构不合法），这几类问题都会在提交前卡住。
 
----
+### P6：视图挂载的三条坑（实测踩过：多变体产品在界面上根本没有尺寸入口）
 
-## 常见扩展场景
+- **坑 1：变体表单不是「另一个视图」，而是继承链的一环**。`product.product` 的完整表单
+  `product_normal_form_view` **继承**模板表单 `product_template_form_view`，所以在模板表单上插入的块会自动出现在
+  它上面（变体侧 `is_product_variant = True` → `product_variant_count > 1 and not is_product_variant` 为假 → 可见）。
+  **为它再挂一次会让同一组字段出现两遍**。
+- **坑 2：产品的「变体」按钮用的是另一个视图**。`product_variant_action` 的 form 是
+  `product_variant_easy_edit_view` —— **独立 primary 视图、不继承模板表单**，必须单独挂载
+  （实测：改造前该表单合成 arch 里尺寸字段 0 处，挂载后 9 处）。漏了它，多变体产品逐条维护变体数据时看不到尺寸。
+- **坑 3：锚点要写全**，别只写 `//label[@for='volume']`。松锚点在原生别处再出现 Volume 标签时会命中多个节点、
+  字段被挂两遍（重复字段不报错，只让用户看到两套输入框）；把组名带上才稳。
+- **附带的可见性事实**：原生 Logistics 组受祖先组 `groups="uom.group_uom"` 门控 —— 只装 `product` 时，没有该组的
+  用户连 `volume` / `weight` 都看不到，尺寸随之隐没**是对的**（与原生一致），不是挂载失败。
+  排查这类问题时先看 `volume` 在不在合成 arch 里，再怀疑挂载。
+- **校验**：`test_dimension_block_is_mounted_on_every_variant_form`（三表单都挂）与
+  `test_dimension_block_follows_the_logistics_group_gate`（与 `volume` 同进同退）会卡住这两类回归。
+
+### P7：体积的前端即时计算（实测踩过）
+
+- **坑 1：`@api.onchange` 只在「视图所属模型」上生效。** 早期把预览 onchange 只挂在 `product.product` 上，
+  结果**产品表单**（模型 `product.template`）填完尺寸体积一直是 0.00、保存后才出现：模板侧是单变体桥接
+  （尺寸要等保存时的 inverse 才落到变体），而原生 `volume` 是 `compute + inverse + store`，保存前不会自己算。
+  → 现在界面侧统一交给前端补丁（不用 onchange），后端不为界面计算。
+- **坑 2：`Record.update()` 是排队执行的，别在它内部同步读 `this.data`。** 前端补丁钩在
+  `Record.prototype._update`（变更已落到 `data` 之后）而不是 `update`；在 `update` 的同步部分读 `this.data`
+  会拿到改动前的旧值，算出来的体积滞后一拍。
+- **坑 3：体积仍要能靠后端兜底。** 导入 / API / 其它模块（含 `product_variant_conversion` 的继承）只写尺寸时，
+  必须补算，否则库里体积停在旧值。判定收在 `_should_sync_volume()`：带 `volume` 就不算。
+- **校验**：`test_no_server_side_onchange_for_dimensions()`（后端不再有尺寸 onchange）、
+  `test_frontend_computation_matches_the_backend_rules()`（前端 JS 的字段名 / 换算常数 / 取整与后端一致，
+  防止只改一边）、`test_volume_sent_by_the_form_is_kept()` 与
+  `test_volume_is_filled_in_when_only_dimensions_are_written()`（职责划分的落库行为）。
+
+  ### P8：体积「显示 0」的两个真凶（实测踩过）
+
+  1. **`roundPrecision()` 的第二参数是「精度因子」，不是小数位数。** Odoo 核心的用法是
+  `roundPrecision(value, parseFloat("1e" + -decimals))` —— 两位小数要传 `0.01`。曾把字段 `digits[1]`（`2`）
+  直接传进去，等于「按 2 的整数倍取整」→ **任何小于 1 的体积都变成 0**：界面显示 0，保存下去也是 0
+  （后端因为收到 `volume` 就不再兜底）。现在前端纯规则自己实现 `roundToDecimals(value, decimals)`，
+  并由 node 实跑的单测看着（`test_frontend_rules_produce_the_expected_volumes()`）。
+  2. **原生「Volume」精度出厂只有 2 位。** cm 尺寸下 20 × 20 × 20 cm = 0.008 m³ 会被舍成 0 ——
+  这是 Odoo 的**全局**设置，不是本模块字段的问题。处置：安装与升级时把它提到 ≥ 6 位（只升不降）。
+  - **教训**：前端逻辑不加测试就会这样翻车。把纯规则抽成无依赖文件、用 node 跑断言，是这类模块
+  能拿到的最低成本保护。
+
+  ---
+
+  ## 常见扩展场景
 
 ### 新增尺寸单位（如 inch）
 

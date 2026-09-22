@@ -758,6 +758,93 @@ class TestProductVariantConversion(TransactionCase):
         self.assertAlmostEqual(new_variant.dimension_height, 30.0)
         self.assertAlmostEqual(new_variant.volume, 0.06, places=6)
 
+    def test_adding_a_value_maps_new_variants_to_the_right_origin(self):
+        """给已有属性加取值：新变体按「另一个属性轴上的取值」准确挂到对应原变体上。
+
+        这是最常见的一种转换。旧实现比对的是「转换前存在的属性轴上的取值组合」，而新变体身上
+        那个**新加的取值**也落在这些轴上，于是它永远匹配不上任何原变体 —— 只有一条原变体时
+        才靠兜底规则勉强指对，多条原变体时新变体就成了「无来源」。
+        """
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        self._configure(product, self.size, self.size_m)
+        red_m = self._variant_of(product, self.color_red + self.size_m)
+        blue_m = self._variant_of(product, self.color_blue + self.size_m)
+        self.assertEqual(len(product.product_variant_ids), 2)
+
+        # 给 Size 加取值 L：新增 Red/L 与 Blue/L 两条变体
+        commands = self._set_commands(product, self.size, self.size_m + self.size_l)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.color_red + self.size_m), red_m),
+            self._row(self._combination_of(preview, self.color_blue + self.size_m), blue_m),
+            self._row(self._combination_of(preview, self.color_red + self.size_l)),
+            self._row(self._combination_of(preview, self.color_blue + self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+
+        self.assertEqual(len(product.product_variant_ids), 4)
+        red_l = self._variant_of(product, self.color_red + self.size_l)
+        blue_l = self._variant_of(product, self.color_blue + self.size_l)
+        # 来源按 Color 轴认出来：Red/L 来自 Red/M、Blue/L 来自 Blue/M
+        self.assertEqual(red_l.variant_origin_id, red_m)
+        self.assertEqual(blue_l.variant_origin_id, blue_m)
+
+        # 台账里的谱系行与变体字段必须一致（归属可追溯）
+        conversion = product.variant_conversion_ids.sorted("id")[-1]
+        added = conversion.lineage_ids.filtered(lambda line: not line.is_kept)
+        self.assertEqual(
+            {line.result_variant_id: line.origin_variant_id for line in added},
+            {red_l: red_m, blue_l: blue_m},
+        )
+
+    def test_adding_a_value_inherits_dimensions_from_the_right_variant(self):
+        """承接上一条：新变体继承的是它**对应**那条原变体的尺寸与体积（装了 product_dimension 时）。
+
+        跑法：`task test -- product_variant_conversion,product_dimension --test-tags=/product_variant_conversion`
+        （本模块不硬依赖 product_dimension，未安装时这条用例自动跳过。）
+        """
+        if "dimension_unit" not in self.env["product.product"]._fields:
+            self.skipTest("product_dimension is not installed")
+        product = self._create_product(attribute=self.color, values=self.color.value_ids)
+        self._configure(product, self.size, self.size_m)
+        red_m = self._variant_of(product, self.color_red + self.size_m)
+        blue_m = self._variant_of(product, self.color_blue + self.size_m)
+        red_m.write({
+            "dimension_unit": "cm",
+            "dimension_length": 50.0,
+            "dimension_width": 40.0,
+            "dimension_height": 30.0,
+        })
+        blue_m.write({
+            "dimension_unit": "m",
+            "dimension_length": 1.0,
+            "dimension_width": 1.0,
+            "dimension_height": 1.0,
+        })
+
+        commands = self._set_commands(product, self.size, self.size_m + self.size_l)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.color_red + self.size_m), red_m),
+            self._row(self._combination_of(preview, self.color_blue + self.size_m), blue_m),
+            self._row(self._combination_of(preview, self.color_red + self.size_l)),
+            self._row(self._combination_of(preview, self.color_blue + self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+
+        red_l = self._variant_of(product, self.color_red + self.size_l)
+        blue_l = self._variant_of(product, self.color_blue + self.size_l)
+        # 尺寸落到**对应**的变体上，体积各算各的
+        self.assertEqual(red_l.dimension_unit, "cm")
+        self.assertAlmostEqual(red_l.dimension_length, 50.0)
+        self.assertAlmostEqual(red_l.volume, 0.06, places=6)
+        self.assertEqual(blue_l.dimension_unit, "m")
+        self.assertAlmostEqual(blue_l.dimension_length, 1.0)
+        self.assertAlmostEqual(blue_l.volume, 1.0, places=6)
+        # 原变体的数据不被改动
+        self.assertAlmostEqual(red_m.volume, 0.06, places=6)
+        self.assertAlmostEqual(blue_m.volume, 1.0, places=6)
+
     def test_variant_data_inheritance_can_be_switched_off(self):
         """系统参数关掉后新变体不再继承：保持 Odoo 默认的空 / 0，台账记为未继承。"""
         self.env["ir.config_parameter"].sudo().set_param(

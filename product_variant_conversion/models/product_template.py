@@ -179,8 +179,7 @@ class ProductTemplate(models.Model):
             self._get_variant_conversion_specification(),
             variant_mapping=variant_mapping,
             share_vendor_prices=share_vendor_prices,
-            # 属性行在第①步已经写成目标配置了，谱系与台账要用改动前的快照
-            previous_attribute_lines=affected["previous_attribute_lines"],
+            # 台账要记「本次真正新加了哪些属性」：属性行在第①步已写成目标配置，读不出来了
             added_attributes=affected["added_attributes"],
         )
         # ③ 本次保存的其余字段（价格等）照常落库；属性行已在①②处理完，不再重复写
@@ -270,8 +269,8 @@ class ProductTemplate(models.Model):
         """
         self.ensure_one()
         variants = self.product_variant_ids
-        # 改动前的属性行 / 属性：写入后就读不到「原来是什么」了，而谱系要靠它判断
-        # 「新变体派生自哪条既有变体」，台账也要记「本次真正新加了哪些属性」
+        # 改动前的属性：写入后就读不到「原来是什么」了，而台账要记「本次真正新加了哪些属性」
+        # （谱系判定不看属性行，它按各变体携带的取值认来源，见 _find_variant_conversion_origin）
         before_lines = self._get_variant_conversion_attribute_lines()
         before_attributes = before_lines.attribute_id
         before_values = {
@@ -332,7 +331,6 @@ class ProductTemplate(models.Model):
                 "before_count": len(variants),
                 "combinations": combinations,
                 "specification": specification,
-                "previous_attribute_lines": before_lines,
                 "added_attributes": spec_attributes - before_attributes,
             }
             savepoint.rollback()
@@ -465,7 +463,7 @@ class ProductTemplate(models.Model):
     # ------------------------------------------------------------------
 
     def _convert_to_multi_variant(self, specification, variant_mapping=None, share_vendor_prices=False,
-                                  previous_attribute_lines=None, added_attributes=None):
+                                  added_attributes=None):
         """给产品追加属性 / 取值，生成缺失的变体，并保留全部既有变体。
 
         :param list specification: 每个属性一项，形如::
@@ -480,10 +478,11 @@ class ProductTemplate(models.Model):
             的规则补默认值（已有属性保持原取值、新加属性取本次的第一个取值）。
         :param bool share_vendor_prices: 是否把仅适用于原变体的供应商价格改为
             「适用于本产品的全部变体」。
-        :param previous_attribute_lines: 改动**前**的变体生成属性行。留空时按当前配置推断
-            （程序化调用的常态）；``write()`` 会从改动前的快照传进来，因为那时属性行已经
-            被写成目标配置了，而谱系要靠改动前的属性轴判断「新变体派生自哪条既有变体」。
         :param added_attributes: 本次真正新加的属性（写进转换台账）。留空时按当前配置推断。
+
+        谱系判定不需要「改动前的属性行快照」：来源是按**转换前各变体携带的取值**（进入本方法
+        时先拍下的 `old_values`）来认的，属性行那时已经被 ``write()`` 写成目标配置也不影响。
+        
         :return: 新创建的 product.product 记录集（不含被保留的既有变体）。
         :rtype: product.product
         """
@@ -522,12 +521,10 @@ class ProductTemplate(models.Model):
                 }))
 
         with self.env.cr.savepoint():
-            # 转换前的快照：属性行、各变体的取值组合、以及本次真正「新加」的属性
+            # 转换前的快照：各变体的取值组合（谱系判定按它认来源）、本次真正「新加」的属性
             # （先做组合数上限检查：超限的配置在枚举前就拒绝，见 T-018）
             self._check_variant_conversion_combination_cap(
                 self._get_variant_conversion_attribute_lines())
-            old_lines = (previous_attribute_lines if previous_attribute_lines is not None
-                         else self._get_variant_conversion_attribute_lines())
             old_values = {
                 variant: variant.product_template_attribute_value_ids for variant in originals
             }
@@ -577,7 +574,7 @@ class ProductTemplate(models.Model):
             # ⑥ 显式记录归属：转换台账 + 谱系行 + 变体上的来源字段
             new_variants = self.product_variant_ids - originals
             self._create_variant_conversion_lineage(
-                originals, anchors, old_values, old_lines, new_variants,
+                originals, anchors, old_values, new_variants,
                 new_attributes, attribute_lines, share_vendor_prices,
                 inherit_variant_data, separate_variant_prices)
 
@@ -598,9 +595,10 @@ class ProductTemplate(models.Model):
             elif share_vendor_prices:
                 self._share_vendor_prices_with_variants(originals)
 
-            # ⑨ 扩展点 + chatter 留痕（T-020）
+            # ⑨ 扩展点 + chatter 留痕（T-020）：用 `new_attributes`（推断后的实际值）而不是
+            #    入参 `added_attributes` —— 程序化调用不传它时，chatter 会拿到 None 而报错
             self._post_variant_conversion_hook(originals, new_variants, anchors)
-            self._log_variant_conversion(originals, new_variants, added_attributes)
+            self._log_variant_conversion(originals, new_variants, new_attributes)
 
         return new_variants
 
@@ -888,30 +886,26 @@ class ProductTemplate(models.Model):
     # 辅助：谱系与供应商价格
     # ------------------------------------------------------------------
 
-    def _create_variant_conversion_lineage(self, originals, anchors, old_values, old_lines,
+    def _create_variant_conversion_lineage(self, originals, anchors, old_values,
                                            new_variants, added_attributes, attribute_lines,
                                            share_vendor_prices, inherit_variant_data,
                                            separate_variant_prices):
         """写转换台账 + 变体谱系，并在 product.product 上留可搜索的来源字段。
 
-        「原变体」的判定：新变体在**转换前就存在的属性轴**上的取值组合，与哪个原变体重合，
-        它就派生自哪个原变体（这些属性轴正是转换前各变体互相区分的地方）。判定不唯一时
-        宁可不指，也不乱指。
+        「原变体」的判定见 ``_find_variant_conversion_origin()``：新变体在**转换前就存在的
+        取值**上与哪个原变体重合，它就派生自哪个原变体。判定不唯一时宁可不指，也不乱指。
         """
         self.ensure_one()
         spec_ptavs = self.env["product.template.attribute.value"]
         for line in attribute_lines:
             spec_ptavs |= line.product_template_value_ids._only_active()
 
-        def _signature(variant):
-            return frozenset(variant.product_template_attribute_value_ids.filtered(
-                lambda ptav: ptav.attribute_line_id in old_lines).ids)
-
-        origin_by_signature = {}
-        for variant in originals:
-            signature = _signature(variant)
-            origin_by_signature[signature] = (
-                False if signature in origin_by_signature else variant)
+        # 「转换前就存在的取值」：判定来源只认这些 ptav。本次新加的取值（新属性带来的、
+        # 或给已有属性新增的取值）不参与匹配 —— 加取值时新变体正是「老取值 + 一个新取值」，
+        # 把新取值也纳入比较会让它匹配不上任何原变体。
+        old_ptavs = self.env["product.template.attribute.value"]
+        for values in old_values.values():
+            old_ptavs |= values
 
         rows = []
         for variant in originals:
@@ -926,7 +920,7 @@ class ProductTemplate(models.Model):
                 "added_value_ids": [Command.set(((anchors[variant] & spec_ptavs) - previous).ids)],
             })
         for variant in new_variants:
-            origin = origin_by_signature.get(_signature(variant))
+            origin = self._find_variant_conversion_origin(variant, originals, old_ptavs)
             if not origin and len(originals) == 1:
                 origin = originals
             previous = old_values.get(origin, self.env["product.template.attribute.value"])
@@ -962,6 +956,54 @@ class ProductTemplate(models.Model):
                 self.env["product.product"].browse(
                     row["result_variant_id"]).variant_origin_id = row["origin_variant_id"]
         return conversion
+
+    def _get_variant_conversion_origin_key(self, variant, old_ptavs):
+        """变体组合里属于「转换前就存在的取值」的那部分（一组 ``product.template.attribute.value``）。
+
+        本次新加的取值不在 `old_ptavs` 里，因此天然被排除 —— 这正是「加取值」时还能认出
+        新变体来自哪条原变体的关键。
+        """
+        return frozenset(variant.product_template_attribute_value_ids.filtered(
+            lambda ptav: ptav in old_ptavs))
+
+    def _find_variant_conversion_origin(self, variant, originals, old_ptavs):
+        """给新变体找唯一来源变体；找不到或判定不唯一时返回空记录集。
+
+        判定规则：只看新变体**保留着老取值**的那些属性轴，候选原变体在这些轴上的取值必须与之
+        完全一致。一致的有多个时取「最具体」的（老取值最多的）那个，仍然并列就判为不唯一。
+
+        举例（原变体 Red/S、Green/S，本次给 Size 加取值 M）：
+
+        - 新变体 Red/M 的老取值是 `{Color: Red}`；`Red/S` 投影到 Color 轴也正好是 `{Color: Red}`，
+          `Green/S` 则是 `{Color: Green}` → 唯一命中 `Red/S` ✓
+        - 新变体 Blue/M（Color 与 Size 都加了新取值）老取值为空 → 无从判断 → 不指 ✓
+
+        :param product.product variant: 本次转换新建的变体。
+        :param product.product originals: 转换前的变体（已被原地保留）。
+        :param product.template.attribute.value old_ptavs: 转换前各变体携带过的取值。
+        :return: 来源变体；判定不唯一 / 无候选时为空记录集。
+        :rtype: product.product
+        """
+        key = self._get_variant_conversion_origin_key(variant, old_ptavs)
+        # 一个老取值都没保留（例如那条唯一的属性上取的是新加的值）：没有可比的轴，
+        # 多条原变体时无从判断，直接判为不唯一。
+        if not key and len(originals) > 1:
+            return self.env["product.product"]
+        axes = {ptav.attribute_line_id for ptav in key}
+        best = self.env["product.product"]
+        best_size = -1
+        ambiguous = False
+        for original in originals:
+            origin_key = self._get_variant_conversion_origin_key(original, old_ptavs)
+            if frozenset(ptav for ptav in origin_key if ptav.attribute_line_id in axes) != key:
+                continue
+            if len(origin_key) > best_size:
+                best, best_size, ambiguous = original, len(origin_key), False
+            elif len(origin_key) == best_size:
+                ambiguous = True
+        if ambiguous or best_size < 0:
+            return self.env["product.product"]
+        return best
 
     def _post_variant_conversion_hook(self, originals, new_variants, anchors):
         """转换完成后的扩展点（在保存点内、写完台账与继承之后调用）。
@@ -1057,10 +1099,15 @@ class ProductTemplate(models.Model):
         未安装 `product_reference` 时按字段判断直接跳过（不硬依赖）。
 
         :return: 实际交接过去的参考号行；未交接时为空记录集。
+            未安装 `product_reference` 时字段与模型都不存在，只能给一个空集
+            （调用方只做真值判断，不会读它的字段）。
         """
         self.ensure_one()
         if "reference_code_line_ids" not in self._fields:
-            return self.env["product.reference.code"].browse()
+            # 注意不能在这里 browse `product.reference.code`：模块没装时它不在注册表里，
+            # `env[模型名]` 会直接抛 KeyError —— 那会让**每一次**转换都失败（含没有参考号的
+            # 纯 `product` 环境）。给 `product.product` 的空集即可，它是本模块的硬依赖。
+            return self.env["product.product"].browse()
         rows = self.reference_code_line_ids
         if not rows:
             return rows

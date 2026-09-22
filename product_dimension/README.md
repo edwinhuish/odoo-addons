@@ -11,6 +11,7 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 
 - 在产品表单原生的 **Logistics** 组里（`Volume` 之前）新增 **Dimension Unit** 与 **Dimensions**（长 × 宽 × 高），不另开标签页
 - 尺寸变化时按所选单位自动重算该变体的原生 `Volume`：厘米按 `cm³ / 1 000 000`、米按直接相乘，结果恒为立方米
+- **表单里填完尺寸 / 换单位立刻显示 `Volume`**：这一步在浏览器里算（不发服务端请求），随表单一起提交；导入 / API 等非界面路径由后端兜底补算
 - **尺寸与 Volume 都是变体级的**：多变体产品里每条变体各填各的尺寸、各算各的体积，互不影响
 - 产品有多条变体时，产品表单上这些字段自动隐藏（与原生 `Volume` 字段的可见性规则一致），改到变体表单里逐条维护
 - 配合 [`product_variant_conversion`](../product_variant_conversion/README.md) 做变体转换时，**尺寸随谱系继承**：新变体继承它来源变体的尺寸，体积随之算出
@@ -26,8 +27,30 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 | 尺寸真身在变体上 | `dimension_unit` / `dimension_length` / `dimension_width` / `dimension_height` 定义在 `product.product` 上。理由：Odoo 的 `volume` / `weight` 本来就是变体级字段，尺寸是体积的来源，放在同一层才不会出现「模板有尺寸、变体各自有体积」的错位（这是 `T-021` 要解决的问题） |
 | 模板侧只是「单变体桥接」 | `product.template` 上的同名字段是 `compute` + `inverse` + `store=True` 的镜像：单变体时读 / 写都落在那条变体上，多条变体时读出空值、写入不牵动任何变体 —— 与原生 `volume` / `weight` 同构（`store=True` 让它们像原生字段一样可搜索 / 分组） |
 | 可见性沿用原生规则 | 插入的字段与 `Volume` 一样带 `invisible="product_variant_count > 1 and not is_product_variant"`：单变体产品与变体表单上看得到，多变体产品的模板表单上隐藏，避免出现「填了却不生效」的静默失败 |
-| Volume 同步覆盖两条路 | `@api.onchange`（表单实时预览）+ `create` / `write`（后台批量、导入、API），保证表单与数据库一致 |
+| Volume 由前端算、后端兜底 | 界面里的体积在浏览器里即时算出并随表单提交；后端只在「写了尺寸、没带体积」的路径（导入 / API / 其它模块）补算 —— 职责划分见下节「Volume 的计算职责」 |
 | 校验在模型层 | `@api.constrains` 校验非负，报错带字段名、产品名与具体数值 |
+
+### Volume 的计算职责
+
+| 场景 | 谁算 | 说明 |
+|------|------|------|
+| 表单里改 `Dimension Unit` / 长 / 宽 / 高 | **前端** | `static/src/js/dimension_volume.js`（`Record._update` 补丁）即时算出并写回同一个 `Volume` 字段，随表单一起提交；不走服务端往返，后端也没有尺寸 onchange |
+| 界面保存 | **后端不重算** | 提交值里已带 `volume` → `_should_sync_volume()` 判定「不用算」，原样落库（同一件事不做两遍） |
+| 导入 / API / RPC / 其它模块直接写尺寸 | **后端兜底** | 只写尺寸、没带 `volume` 时补算，保证库里体积不落后（`product_variant_conversion` 的谱系继承、模板侧桥接的 inverse 都走这条） |
+
+**触发条件**（前端）：表单中的 `dimension_unit` / `dimension_length` / `dimension_width` /
+`dimension_height` 任一被改动即重算；改的是 `Volume` 自己（用户手填）或只是加载记录时都不介入。
+
+**完整性校验**：单位 `cm` 按厘米换算、其余（`m` 或未设置）按米；长宽高必须**都 > 0**，否则体积给 `0`
+（与落库规则完全一致，避免「界面一个值、保存后另一个值」）。
+
+**计算逻辑**：`cm` → `长 × 宽 × 高 / 1 000 000`，`m` → `长 × 宽 × 高`，再按键位精度 `digits`
+（模块安装时已确保不低于 6 位，见「已知限制」）取整，与后端写入时的舍入对齐。前端常数与后端口径必须一致，
+由 `test_frontend_computation_matches_the_backend_rules()` 与 node 实跑的
+`test_frontend_rules_produce_the_expected_volumes()` 一起守着。
+
+**展示方式**：写回的就是表单里那个原生 `Volume` 字段本身（同一位置、同一字段，不新增只读副本），
+保存时随表单一起提交。
 
 ---
 
@@ -62,8 +85,16 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 
 ## 视图
 
-- **产品表单**：在原生 Logistics 组的 `Volume` 之前插入 `Dimension Unit` 与 `Dimensions`（长 × 宽 × 高）；可见性规则与原生 `Volume` 相同
-- 不新增列表列（前身的「纸箱」「CBM」列随纸箱字段一起移除）
+尺寸块的挂载点（**改挂载前先读 `AGENTS.md` → L1.2 与 L2 P5**）：
+
+| 表单 | 挂载方式 | 可见性 |
+|------|----------|--------|
+| 产品表单（`product_template_form_view`） | 本模块插入原生 Logistics 组、`Volume` 之前 | 多条变体时隐藏（与原生 `Volume` 同款门控） |
+| 变体完整表单（`product_normal_form_view`） | 它**继承模板表单**，随继承链自动获得 —— **不要重复挂载** | 变体侧 `is_product_variant = True` → 门控为假 → 可见 |
+| 变体快速编辑表单（`product_variant_easy_edit_view`） | 本模块单独挂载（该视图独立 primary、不继承模板表单） | 无单变体门控（它本身就是变体） |
+
+- **第三条为什么必须有**：产品的「变体」按钮（`product_variant_action`）用的就是这个表单，它是多变体产品逐条维护变体数据的默认入口；漏了它，多变体产品在界面上就没有尺寸入口（只能导入 / API）。
+- 不新增列表列（前身的「纸箱」「CBM」列随纸箱字段一起移除）。
 
 ---
 
@@ -71,10 +102,11 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 
 | 限制 | 说明 |
 |------|------|
-| `Volume` 只有 2 位小数 | 原生 `Volume` 按 Odoo 的「Volume」小数精度存储，**默认 2 位小数**（由 `product` 模块提供），所以小于 0.01 m³ 的体积会被舍入为 0（例如 10×10×10 cm）。产品确实这么小时，请在 设置 → 技术 → 小数精度 里把 `Volume` 调高（例如 6）。这是 Odoo 的原生设置，模块不会替你改全局精度。 |
+| `Volume` 的精度（模块会调到 6 位） | 原生 `Volume` 按 Odoo 的「Volume」小数精度存储，出厂值是 **2 位** —— cm 尺寸下 20 × 20 × 20 cm 这种很常见的体积（0.008 m³）会被舍成 0，界面上只看到「Volume = 0」。模块在**安装与升级时把它提到 6 位**（只升不降；1 cm³ = 0.000001 m³ 刚好能表示）。需要别的位数在 设置 → 技术 → 小数精度 里改，模块之后不再干预。 |
 | 尺寸不齐则体积归 0 | 长宽高任一为 0 时 `volume` 归 0（与前身模块的行为一致）；即「先填全尺寸，体积才成立」。 |
 | 多变体产品的模板表单不显示尺寸 | 与原生 `Volume` / `Weight` 一致：此时模板上的桥接字段读出空值，写入也不生效（界面上已隐藏，正常操作碰不到）。通过 RPC 硬写模板字段不会影响任何变体。 |
 | 归档 / 删除变体不清理尺寸 | 尺寸只是变体上的普通字段，随变体一起被归档或删除。 |
+| 可见性受原生 Logistics 组门控 | 尺寸块位于原生 Logistics 组内，而该组受祖先组 `groups="uom.group_uom"` 门控：只装 `product` 时，没有「计量单位管理」权限的用户连 `volume` / `weight` 都看不到，尺寸随之一起隐没。这是与原生**一致**的行为（不允许出现「体积还在、尺寸没了」的半截状态），已用测试钉住。 |
 
 ---
 
@@ -114,9 +146,11 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 
 ### 操作要点
 
+- 在产品表单或变体表单里填完长宽高，`Volume` **当场就算出来**（浏览器端计算，结果按 2 位小数取整），保存后落库的数值与界面一致
 - 切换「尺寸单位」后，已录入的长宽高数值**保持不变**，`Volume` 按新单位重算
 - 任一边长为 0 时 `Volume` 显示为 0
-- 多变体产品：在产品表单上这些字段不显示，请到**变体表单 / 变体列表**逐条维护
+- **改动任一尺寸字段就会按尺寸重算体积**：如果某个产品是手工填的 `Volume`（没填尺寸），一旦开始填尺寸，体积即以尺寸为准（长宽高没填全时按上面的规则给 0）
+- 多变体产品：在产品表单上这些字段不显示，请到**变体表单**（含「变体」按钮打开的快速编辑表单）逐条维护
 
 ---
 
@@ -130,11 +164,23 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 | 旧数据搬运 | 开发库实测：旧模板列 `50 / 40 / 30 cm` → 变体侧 `cm / 50 / 40 / 30`，`volume = 0.06`（安装前钩子日志 `recomputed volume for 1 variants`） | 通过 |
 | 单一产品表单显示 | 单变体消费品产品表单 Logistics 组内可见 `Dimension Unit` 与 `Dimensions` | 待验证 |
 | Volume 自动更新（cm） | 50×40×30 cm → `Volume = 0.06` | 通过（自动化测试） |
+| 前端即时算体积 | 在表单里改尺寸 / 单位，`Volume` 立刻更新（浏览器端计算，不请求后端） | 待目标环境界面复验（资源已确认进 `web.assets_backend`；逻辑由 JS 规则一致性测试守住） |
+| 后端不再为界面算 | 尺寸字段上不再注册 onchange（RPC 里不会返回由后端算出的体积） | 通过（自动化测试 `test_no_server_side_onchange_for_dimensions`） |
+| 表单提交的体积被采信 | 与尺寸一起提交 `volume` 时原样落库，后端不重算 | 通过（自动化测试 `test_volume_sent_by_the_form_is_kept`） |
+| 非界面路径仍兜底 | 只写尺寸（导入 / API / 其它模块）时体积自动补算 | 通过（自动化测试 `test_volume_is_filled_in_when_only_dimensions_are_written`） |
+| 前后端规则一致 | 前端 JS 的字段名 / 换算常数 / 取整方式与后端口径一致 | 通过（自动化测试 `test_frontend_computation_matches_the_backend_rules`） |
+| 小体积保留小数（cm） | 20×20×20 cm → `Volume = 0.008`（2 位精度下曾被舍成 0） | 通过（自动化测试 + dev 库实测） |
+| 前端规则行为 | 用 node 真跑前端纯规则（cm / m、完整性、按位数取整） | 通过（自动化测试 `test_frontend_rules_produce_the_expected_volumes`） |
+| 精度自动提升 | 安装 / 升级后「Volume」精度 ≥ 6（只升不降） | 通过（迁移脚本日志 + dev 库实测：2 → 6） |
 | Volume 自动更新（m） | 1×0.5×0.4 m → `Volume = 0.2` | 通过（自动化测试） |
 | 尺寸清空归零 | 任一边长置 0 → `Volume = 0` | 通过（自动化测试） |
 | 单变体桥接 | 模板字段读写都落到那条变体上（读镜像、写回变体） | 通过（自动化测试） |
 | 多变体各自独立 | 两条变体填不同尺寸 → 各自 `volume` 独立；模板侧读出空值、写入不牵动变体 | 通过（自动化测试） |
 | 非负校验 | 负数尺寸被 `ValidationError` 拒绝 | 通过（自动化测试） |
+| 真身在变体 | 四个字段在 `product.product` 上是存储字段（非 compute / related），模板侧是 compute 镜像 | 通过（自动化测试） |
+| 三表单挂载 | 产品表单 / 变体完整表单 / 变体快速编辑表单都能取到四个尺寸字段 | 通过（自动化测试 + 干净库实测） |
+| 多变体可维护 | 多变体产品的「变体」快速编辑表单里可逐条填尺寸 | 通过（合成 arch 实测：该表单改造前 0 处尺寸字段、改造后 9 处）；目标环境界面待复验 |
+| 与原生 Volume 同进同退 | 原生 Logistics 组被门控时不出现「体积在、尺寸没了」 | 通过（自动化测试：两种用户的合成 arch 比对） |
 | 转换后尺寸跟随变体 | 普通产品转多变体后，新变体继承来源变体的尺寸与体积 | 通过（自动化测试，见 `product_variant_conversion` 的 `test_new_variants_inherit_variant_dimensions_when_installed`） |
 | 中英双语 | 字段标签 / 报错 / 占位符在中文环境为中文，英文环境为英文 | 通过（数据库核对：字段标签 / help / selection / 视图术语；运行期报错实测为中文）；界面待目标环境复验 |
 | 应用列表中文名 | 中文环境「应用」搜 `product_dimension`：标题「产品尺寸」、摘要与描述为中文、分类「库存 / 产品」 | 通过（数据库核对 shortdesc / summary / description）；界面待目标环境复验 |
@@ -142,7 +188,7 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 ### 自动化测试跑法
 
 ```bash
-task test -- product_dimension                                    # 本模块 6 项
+task test -- product_dimension                                    # 本模块 17 项
 task test -- product_variant_conversion,product_dimension \
      --test-tags=/product_variant_conversion                      # 含「尺寸随变体继承」的集成用例
 ```

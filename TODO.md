@@ -48,10 +48,10 @@
   - 验收方式：`task check -- --strict` 不再报这两类警告（`检测：` 条件只能做单条文本匹配，覆盖不了「所有 `code:` 条目都带上标记」，故本条目不写检测行）
   - 关联：`product_card_view/AGENTS.md` → L2 P5；根 `AGENTS.md` 4.3「`code:` 译文在运行时按注释标记放行」
 
-- [ ] T-028 ｜ `product_image` ｜ P2 ｜ manifest description 触发 docutils RST 告警（每次安装都打日志）
-  - 背景：安装 `product_image` 时日志出现 `<string>:9: (ERROR/3) Unexpected indentation.` 与 `<string>:11: (WARNING/2) Block quote ends without a blank line; unexpected unindent.`。原因是 description 的列表项用了**悬挂缩进**（bullet 与续行分行），Odoo 渲染 Apps 描述时用 docutils，报警告（`product_dimension` 重写时已修过同一问题，可参照其写法）
-  - 建议：把列表项改成「一条一行」（不换行）；改完必须同步 `i18n/zh_CN.po` 里 `model:ir.module.module,description:base.module_product_image` 的 `msgid`（必须与 `textwrap.dedent(manifest["description"])` 逐字符一致，`task check` 会卡住）；升 `+z` 版本并记 CHANGELOG
-  - 验收方式：安装 `product_image` 时日志不再出现上述 docutils 告警（暂无自动检测条件，`检测：` 语法只支持单条文本 / 正则匹配，覆盖不了「描述整体 RST 合法」）
+- [ ] T-028 ｜ `product_image` + `product_reference` + `product_variant_conversion` + `sale_order_no` + `sale_product_hover` + `web_image_paste` + `web_multi_tabs` ｜ P2 ｜ manifest description 用悬挂缩进，触发 docutils RST 告警（每次安装都打日志）
+  - 背景：安装时日志出现 `<string>:9: (ERROR/3) Unexpected indentation.` 与 `<string>:11: (WARNING/2) Block quote ends without a blank line; unexpected unindent.`。原因是 description 的列表项用了**悬挂缩进**（bullet 与续行分行），Odoo 渲染 Apps 描述时用 docutils 报警告。已装库实测确认会打告警的是 `product_image` 与 `product_reference`；另有 5 个模块（`product_variant_conversion` / `sale_order_no` / `sale_product_hover` / `web_image_paste` / `web_multi_tabs`）扫出同样写法、尚未逐个装库验证 —— **共 7 个模块**。`product_dimension` 重写时已修过同一问题，可参照它的写法
+  - 建议：逐模块把列表项改成「一条一行」（不换行）；改完必须同步该模块 `i18n/zh_CN.po` 里 `model:ir.module.module,description:base.module_<模块>` 的 `msgid`（必须与 `textwrap.dedent(manifest["description"])` 逐字符一致，`task check` 会卡住）；每模块升 `+z` 版本并记 CHANGELOG
+  - 验收方式：安装该模块时日志不再出现上述 docutils 告警（暂无自动检测条件：`检测：` 语法只支持单条文本 / 正则匹配，覆盖不了「描述整体 RST 合法」；试过用 docutils 复现该告警未成功，装库看日志最可靠）
   - 关联：`product_dimension/__manifest__.py` 的描述写法；根 `AGENTS.md` → i18n 约束
 
 ## 搁置 / 放弃
@@ -64,6 +64,41 @@
 
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
+
+- **T-032 修「cm 尺寸的小体积被显示 / 保存成 0」** ｜ `product_dimension` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境界面复验**
+  - 落地版本：`product_dimension` `19.0.4.1.0`
+  - 现象：Dimension Unit = Centimeters 时，体积有小数就显示成 0（如 50×40×30 cm 应为 0.06，界面与库里都是 0）
+  - 两个根因（都实测复现）：① 前端把 `roundPrecision()` 的第二参数当小数位数传了 `2`，而它要的是**精度因子**（`0.01`）→ 等于按 2 的整数倍取整，**任何小于 1 的体积都变 0**，再随表单提交把 0 存进库（后端收到 `volume` 就不再兜底）；② 原生「Volume」全局精度出厂 2 位，cm 尺寸下 20³ cm（0.008 m³）也被舍成 0
+  - 做法：① 前端纯规则抽到 `static/src/js/dimension_volume_rules.js`（无 Odoo 依赖），自己实现 `roundToDecimals(value, decimals)`，补丁只负责挂钩与写回；② 新增 `hooks.ensure_volume_precision()`，安装（`post_init_hook`）与升级（`migrations/19.0.4.1.0/`）各调一次，把「Volume」精度提到 6 位（只升不降、幂等）
+  - 验收记录：模块 `CHANGELOG.md` → `[19.0.4.1.0]`；dev 库迁移日志 `raising the Volume decimal precision from 2 to 6`，实测 10³/20³/50³ cm → 0.001 / 0.008 / 0.125（此前 0 / 0.01 / 0.13）；`product_dimension` 17 项（含 **node 实跑前端规则**的新用例）、`product_variant_conversion,product_dimension` 43 项 0 failed；`task check` 通过
+  - 遗留：界面即时显示需目标环境复验；「Volume」精度是全局设置（模块只升不降），其他模块的体积显示会一并变精确
+
+- **T-031 体积计算改由前端负责（后端只兜底、不再返回体积）** ｜ `product_dimension` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境界面复验**
+  - 落地版本：`product_dimension` `19.0.4.0.0`
+  - 目标：界面里改尺寸 / 单位时由前端即时算出 `volume`，不再让后端为界面计算，也不再在 onchange 响应里返回体积
+  - 做法：① 新增 `static/src/js/dimension_volume.js`（`Record._update` 补丁：改尺寸 / 单位即算好并写回同一个 `Volume` 字段，按字段 `digits` 取整）；② 删掉两个尺寸 onchange（`product.product` / `product.template`），Odoo 不再为这些字段发 onchange 请求；③ 后端改为 `_should_sync_volume()`：带 `volume` 就不算、不带才兜底补算，`create` / `write` 共用
+  - 规则一致性：前端与后端同一套规则（`cm → cm³ / 1 000 000`、`m` 直接相乘、长宽高任一为 0 归 0、按 `digits` 取整），后端唯一出处 `volume_from_dimensions()`，由 `test_frontend_computation_matches_the_backend_rules()` 守住两处不能只改一边
+  - 验收记录：模块 `CHANGELOG.md` → `[19.0.4.0.0]`；`ir.asset._get_asset_paths("web.assets_backend", {})` 确认前端文件已进包（2464 条之一）；`product_dimension` 15 项、`product_variant_conversion,product_dimension` 43 项 0 failed；`task check` 通过
+  - 遗留：浏览器里的即时显示需目标环境复验（无头环境无法断言前端行为）；`depends` 保持仅 `product`（`web` 是 `auto_install`，缺失时只是少了界面即时计算，落库仍由后端保证正确）
+
+- **T-030 输入尺寸后即时算出 Volume（补齐产品表单预览）** ｜ `product_dimension` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_dimension` `19.0.3.1.0`
+  - 起因：产品表单上填完长宽高，`Volume` 一直是 0.00、**保存后才出现**（用户会以为模块没生效）。根因是预览 onchange 只挂在 `product.product` 上，而产品表单的模型是 `product.template`；模板侧尺寸要等保存时 inverse 才落到变体，原生 `volume` 又是 `compute + inverse + store`，保存前不会自己算出来
+  - 做法：① 新增 `product.template._onchange_dimension_fields()`（单变体时把算好的体积写进模板 `volume`，保存时由原生 `_set_volume` 落到那条变体）；② 换算口径收敛为唯一函数 `product_product.volume_from_dimensions()`，表单预览与写库同步共用，字段名常量统一到真身文件
+  - 验收记录：模块 `CHANGELOG.md` → `[19.0.3.1.0]`；`odoo.tests.common.Form` 实测「未保存即 `0.06` / `0.2`」（改造前 `0.0`）；`product_dimension` 13 项 0 failed、`product_variant_conversion,product_dimension` 43 项 0 failed；`task check` 通过
+  - 遗留：无（`volume` 仍可手工填，但改动任一尺寸字段后即以尺寸为准，已写进模块 README「操作要点」）
+
+- **T-029 尺寸挂载点补齐 + 转换来源映射可靠性** ｜ `product_dimension` + `product_variant_conversion` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_dimension` `19.0.3.0.0`、`product_variant_conversion` `19.0.5.0.0`
+  - 起因一（挂载）：多变体产品在界面上没有尺寸入口 —— 产品的「变体」按钮（`product_variant_action`）用的是 `product_variant_easy_edit_view`，它是**独立 primary 视图、不继承模板表单**，原先完全没挂载；完整变体表单则是靠继承模板表单自动获得（`is_product_variant = True` 让门控为假）
+  - 起因二（映射）：「给已有属性加取值」时新变体永远匹配不上任何原变体（旧判定把**新加的取值**也算进比对），多条原变体时新变体一律无来源 → 尺寸 / 体积 / 成本丢失
+  - 做法：① 补挂变体快速编辑表单；收紧模板表单锚点为 `//group[@name='group_lots_and_weight']/label[@for='volume']`（防字段挂两遍）；用测试钉住「三表单都挂」与「尺寸块与原生 `volume` 同进同退（原生 Logistics 组受 `groups="uom.group_uom"` 门控）」。② 谱系来源改为按**转换前已存在的取值**判定（`_find_variant_conversion_origin()`）：只看新变体保留老取值的属性轴、投影比较、多候选取最具体，仍并列才留空。③ 顺带修掉既有 bug：未装 `product_reference` 时 `_transfer_shared_references_to_original()` 在跳过分支里 `browse` 不存在的模型 → `KeyError` → **每一次转换都失败**（HEAD 上实测 33/43 条用例 error）；以及 `_log_variant_conversion()` 程序化调用拿到 `None` 报错的隐患；移除了不再需要的 `previous_attribute_lines` 参数
+  - 验收记录：模块 [`product_dimension/CHANGELOG.md`](product_dimension/CHANGELOG.md) → `[19.0.3.0.0]`、[`product_variant_conversion/CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.5.0.0]`；`product_dimension` **10 项**、`product_variant_conversion` **43 项 × 四种配置**（只装 `product` / 加装 `product_dimension` / 加装 `product_reference` / 加装 `stock` + `sale_management`）全部 0 failed / 0 error；干净库（只装 `product_dimension`）合成 arch 实测三表单均含尺寸块；`task check` 通过
+  - 遗留：目标环境复验界面（多变体产品从「变体」按钮进表单能填尺寸）；`T-028` 仍是 7 个模块的告警待清理
 
 - **T-027 权限文件去掉对 sale 用户组的硬编码（`sales_team.group_sale_manager`）** ｜ `product_reference` + `product_image` ｜ P1
   - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
