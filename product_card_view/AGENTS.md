@@ -18,7 +18,7 @@
 - 自定义前端：`views` 注册表 **`card`**（新 view type，`kanbanView` 派生）
 - 主依赖：`stock`（`product` 经其传递依赖）
 - 可选集成（**不在 `depends`**）：`product_image`（多图图库）、`sale` / `purchase`（注入 Card 入口）
-- 当前版本：`19.0.2.0.1`（19.0.2.0.1 补应用列表（Apps）中文元数据：`shortdesc` / `summary` / `description` + 分类 `Product` 译文）
+- 当前版本：`19.0.2.0.6`（19.0.2.0.6 注入改为读取时计算 —— 覆盖 `_compute_views()`，解决「全新安装时 sale / purchase 未装导致漏注入」；19.0.2.0.5 完成 T-025 Card 按钮名国际化、19.0.2.0.4 产品列表默认 Card）
 
 ---
 
@@ -83,9 +83,12 @@
    - JS `_t()` 术语 → `code:addons/product_card_view/static/src/js/product_card_record.js:0`
 2. JS `_t()` 字符串与 QWeb 里的文本、tooltip 文案保持一致，改了源文本必须同步 po。
 3. 占位符 / 拼接：前端已全部用单词翻译或模板变量，禁止把翻译拆碎。
-4. **已知缺口**：切换器的 Card 按钮名来自 JS patch 的 `session.view_info.card.display_name`（硬编码
-   `"Card"`，未走 `_t()`），中文界面仍显示英文。官方 type 的名称由服务端提供故可翻译，自定义 type
-   无此通道；如需中文化，改为 `_t("Card")` + 补 po，并注意模块加载期翻译可能未就绪（建议 getter 延迟求值）。
+4. **Card 按钮名走 `_t()`（T-025 已解决）**：官方 view type 的名称由服务端提供，自定义 type 只能在前端给
+   `session.view_info.card.display_name` —— 它必须写成 **getter** `() => _t("Card")`：本文件在模块加载期
+   执行，而 `_t()` 返回的 `TranslatedString` 会把「构造时译文未就绪」固化成 lazy，之后取值直接抛
+   `Cannot translate string: translations have not been loaded`。po 条目见
+   `code:addons/product_card_view/static/src/js/product_card_view.js:0`，且**必须带 `#. odoo-javascript`**
+   （前端译文靠它放行，见 L2 P5）。
 5. 收尾动作：改英文源文本 → 同步 `i18n/zh_CN.po` → 提升版本 → `-u` + 强刷浏览器，中英文各验一遍。
 6. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description` 后，必须同步 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_product_card_view` 三条（`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`，逐字符一致），改 `category` 则同步 `model:ir.module.category,name:base.module_category_inventory_product`。这些记录归属 `base` 且 `noupdate=True`，导入只补缺失语种、不覆盖库里已有值；改译文后的强制刷新方式见根 [`AGENTS.md`](../AGENTS.md) 4.8。违反后果：中文环境「应用」列表显示英文，或译文与英文源文本长期不同步。
 
@@ -115,7 +118,7 @@
 | ArchParser | `ProductCardArchParser extends KanbanArchParser`，parse 时若无 `<templates>` 则注入虚拟 `<t t-name="card">` | server 校验 card arch 禁止 OWL 指令（`t-name`），arch 不能写模板；但 `KanbanArchParser` 缺 card 模板会抛 `Missing 'card' template`。实际卡片由 Renderer 自绘，不读该模板 |
 | arch 根 | 必须是 `<card>`（不能写 `<kanban>`） | server 校验 arch 根必须与 type 一致 |
 | 动作注入（硬依赖） | `product.product_template_action` / `product_template_action_all` / `stock.product_template_action_product`：覆盖 `view_mode="kanban,list,card,form"` + 各加一条 `act_window.view` 记录 | `_compute_views` 由 `view_ids` + `view_mode` 派生 `action.views`，缺任一段都可能不出按钮；`_unique_mode_per_action` 要求每个 action 各一条记录 |
-| 动作注入（可选） | `<function>` 调 `_sync_product_card_views()`，用 `env.ref(..., raise_if_not_found=False)` 判断后创建 + 登记 `ir.model.data` | `sale` / `purchase` 不在 `depends`，XML 里直接 `ref` 会 ParseError；`<function>` 在 install / upgrade 都执行且幂等 |
+| 动作注入（可选） | 覆盖 `ir.actions.act_window._compute_views()`：凡 `res_model = 'product.template'` 的动作，把 card 放到 `views` 最前 | 客户端切换器的条目与默认视图都只认服务端算出的 `action.views`（`views[0]` 即默认视图）。**读取时计算**与安装顺序无关、不写别的模块的数据，也不必猜 xmlid（`purchase.product_normal_action_puchased` 这种拼写很容易漏）；演进过程与三个反例见 L2 P4 |
 | 可选图库 | `Gallery = env.get("product.image.gallery")`，为 `None` 则跳过查询 | 未装 `product_image` 时模型不存在，直接 `env["..."]` 会 KeyError |
 | 瀑布流 | JS 计算列数，卡片 `position:absolute` 放最矮列；resize / img load / `pcv-resize` 重算 | CSS 多列无法保证「按内容高度填空隙」，JS 才能均衡列高 |
 
@@ -127,7 +130,7 @@
   - `ir.actions.act_window.view.view_mode` += `card`
 - 新增数据记录：
   - `ir.ui.view`：`product_card_view.product_template_card_view`（type=`card`）
-  - `ir.actions.act_window.view`：3 条硬依赖 + 最多 2 条可选（sale / purchase）
+  - `ir.actions.act_window.view`：3 条静态声明（product ×2 + stock，声明式兜底）。sale / purchase / account 的动作**不写任何记录** —— card 由 `_compute_views()` 的覆盖在读取时注入
   - 扩展已有 `ir.actions.act_window` 的 `view_mode` 字段值（3 ~ 5 条）
 - 卸载模块：上述记录随 `ir.model.data` 级联移除；官方动作的 `view_mode` 字段会被写回为不含 `card`
   的值吗——**不会自动回滚**（Odoo 不记录字段覆盖前的值），卸载后需重新确认官方动作 `view_mode`。
@@ -229,7 +232,38 @@ export async function fillProductCardPayload(records) {
 - **正确做法**：可选依赖一律不进 `depends`；需要建记录时改由 `<function>` 调 Python 方法，
   方法内用 `env.ref(..., raise_if_not_found=False)` 判断，命中才创建并登记 `ir.model.data`
   （`noupdate=True`）。方法要幂等（先 `search_count`），因为 `<function>` 在每次 install / upgrade 都会跑
-- **局限**：若 `sale` 在本模块之后才安装，需再升级一次本模块才会注入
+- **局限**：若 `sale` 在本模块之后才安装，需再升级一次本模块才会注入（`<function>` 只在 install / upgrade 执行，无法自动感知新装模块）
+- **2026-09-22 实测演进（保留结论，避免重蹈）**：这块前后试过三种做法，最后落到「读取时计算」：
+  1. **只改 `view_mode`** ✗：客户端切换器的条目只来自服务端算出的 `action.views`
+     （`action_service.js::_executeActWindowAction` 遍历 `action.views` 再查 `session.view_info`），
+     而 `view_mode` 是普通 Char、会被外部数据重放打回默认值 → 销售 / 采购入口什么都不显示。
+  2. **建 `ir.actions.act_window.view` 记录** △：`action.views` 先读 `view_ids`，记录确实能稳定提供
+     `(view_id, 'card')`，但有四个坑 —— `(act_window_id, view_mode)` 唯一约束与升级期 flush 交错会撞
+     `duplicate key`；按 action 的 xmlid 末段拼新 xmlid 会与静态记录撞名
+     （`product.product_template_action` 与 `sale.product_template_action` 末段相同）导致静态 xmlid 被改指；
+     排序受 `_order = 'sequence,id'` 中「NULL 排最后」影响（要让 card 当默认视图反而必须写非 NULL 值）；
+     **最致命的是安装顺序** —— `sale` / `purchase` 通常在本模块之后安装，`<function>` 那一次执行看不到
+     它们的 action、之后没有重跑机会，`task init -- --fresh` 就是这样漏掉的。
+  3. **覆盖 `ir.actions.act_window._compute_views()`** ✓（现行方案）：对
+     `res_model = 'product.template'` 的动作直接把 card 放到 `views` 最前。与安装顺序、模块组合都无关，
+     不往别的模块的数据里写任何东西；客户端只读 `action.views`，切换器按钮与默认视图一次到位。
+- **结论**：遇到「给别的模块的 action 注入入口」这类需求，优先**读取时计算**（override 计算字段 / 视图），
+  而不是往对方的数据里写记录 —— 后者要额外处理安装顺序、唯一约束、xmlid 撞名与排序四件事。
+
+### P5：`code:` 译文的两个「静默失效」与 `_t` 的时机陷阱（T-025 实测）
+
+- **前端 / Python 译文靠注释标记放行**：`web/controllers/utils.py::_local_web_translations()` 在运行时读模块的
+  po，只收带 `JAVASCRIPT_TRANSLATION_COMMENT`（`#. odoo-javascript`）的条目；Python 的 `_()` 则由
+  `CodeTranslations._load_python_translations()` 按 `#. odoo-python` 过滤。缺标记 = 永远不下发，且**不报任何错**
+  （界面一直英文）。本模块曾有 5 条 `product_card_record.js` 的条目就是这样失效的。
+- **`_t()` 不能在模块加载期调用**：`TranslatedString` 构造时执行
+  `this.lazy = !translatedTerms[translationLoaded]`，一旦在译文就绪前构造，`valueOf()` 会**永久**抛
+  `Cannot translate string: translations have not been loaded`。需要「早注册、晚取值」的场景一律用 getter
+  （`translationIsReady.then(...)` 也能等，但往非响应式对象上写值不会触发重渲染，按钮名不会更新）。
+- **自检要能真的验到**：`task check` 里这条检查一开始是坏的 —— 按 `"\n\n"` 切条目遇 CRLF 行尾切不开
+  （整份文件被当成一个条目），`code:` 引用又带 `:0` 行号后缀导致 `endswith('.py')` 恒为假。修好后立刻暴露出
+  仓库里另有 5 个模块存在同类问题（见 `TODO.md` → `T-026`）。教训：写「静默失效」类检查时，先用一条
+  **已知坏数据**验证它确实会报错，否则等于没写。
 
 ---
 

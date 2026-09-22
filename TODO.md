@@ -41,17 +41,11 @@
 
 ## 待办池
 
-- **T-021 产品尺寸模块重写：product_packing → product_dimension（移除纸箱 + 尺寸下沉到变体）** ｜ `product_dimension` + `product_variant_conversion` ｜ P2
-  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
-  - 落地版本：`product_dimension` `19.0.2.0.0`、`product_variant_conversion` `19.0.4.1.0`
-  - 起因：原 `product_packing` 的产品尺寸靠写**模板侧** `volume` 同步，而 Odoo 的桥接写入只在单变体时落到变体 → 产品一旦变成多变体，改尺寸就不再更新任何变体的 Volume
-  - 做法：模块改名为 `product_dimension` 并**只保留物流尺寸**（尺寸单位 cm / m + 长宽高）；**尺寸下沉到 `product.product`**（模板侧退化为单变体桥接，与原生 `volume` / `weight` 同构）；移除全部纸箱字段 / 分组 / 列表列 / 校验；新增 `pre_init_hook` 把旧模块留在模板上的尺寸数据搬到变体并按单位重算 Volume；补 6 项自动化测试；`product_variant_conversion` 的按谱系继承清单带上尺寸四件套（只在来源尺寸齐全时复制，避免把继承来的体积冲掉）
-  - 验收记录：模块 [`product_dimension/README.md`](product_dimension/README.md)（含「从 product_packing 迁移」与验证清单）、[`product_dimension/CHANGELOG.md`](product_dimension/CHANGELOG.md) → `[19.0.2.0.0]`、[`product_variant_conversion/CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.4.1.0]`
-  - 实测：开发库旧数据搬运成功（`filled 56 variant rows` + `recomputed volume for 1 variants`，变体侧得到 `cm / 50 / 40 / 30`、`volume = 0.06`，模板侧镜像同步）；卸掉旧模块记录后加载无告警；`product_dimension` 6 项、`product_variant_conversion`（连同本模块）39 项测试全部通过
-  - 遗留：目标环境需按「**先装新模块、再卸旧模块**」的顺序迁移并核对界面；`Volume` 默认只有 2 位小数属 Odoo 原生设置（见模块 README →「已知限制」）；纸箱能力已移除，如需要请另立模块
-
-
----
+- [ ] T-026 ｜ `product_reference` + `sale_product_hover` + `product_image` + `product_variant_conversion` + `sale_order_no` ｜ P2 ｜ 补齐 po 里 `code:` 条目缺失的运行期注释标记（这些前端 / Python 文案一直没翻译）
+  - 背景：前端译文由 `web/controllers/utils.py::_local_web_translations()` 读 po 时按 `#. odoo-javascript` 过滤，Python `_()` 由 `CodeTranslations._load_python_translations()` 按 `#. odoo-python` 过滤 —— 缺标记的条目**永远不下发且不报错**（界面一直英文）。`task check` 现在会给警告（`--strict` 算失败），实测受影响条目（`task check` 口径，共 25 条）：`product_reference` 20 条、`sale_product_hover` 2 条、`product_image` / `product_variant_conversion` 各 1 条（均为 JS）、`sale_order_no` 1 条（Python）；`product_card_view` 的 5 条已随 T-025 修掉
+  - 建议：给这些模块的 `code:` 条目补上对应注释（按引用文件后缀区分 `.py` → `odoo-python`，`.js` / `.xml` → `odoo-javascript`），逐模块升 `+z` 版本并记 CHANGELOG；补完把 `check_repo.py` 里这两条从 `report.warn` 改回 `report.fail`
+  - 验收方式：`task check -- --strict` 不再报这两类警告（`检测：` 条件只能做单条文本匹配，覆盖不了「所有 `code:` 条目都带上标记」，故本条目不写检测行）
+  - 关联：`product_card_view/AGENTS.md` → L2 P5；根 `AGENTS.md` 4.3「`code:` 译文在运行时按注释标记放行」
 
 ## 搁置 / 放弃
 
@@ -63,6 +57,24 @@
 
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
+
+- **T-025 切换器 Card 按钮名国际化（改为 `_t()` getter）** ｜ `product_card_view` ｜ P2 ｜ 视图切换器里的 Card 按钮名未国际化（硬编码 "Card"）
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证（界面）**
+  - 背景：按钮名来自 JS 侧 patch 的 `session.view_info.card.display_name`（写死 `"Card"`），中文界面仍显示英文；`session.view_info` 是服务端核心提供的白名单、模块级 Python 无法扩展，只能在前端处理；模块 `README.md` →「遗留问题」已记录
+  - 建议：改为 `_t("Card")`（`@web/core/l10n/translation`）并在 `i18n/zh_CN.po` 补 `code:addons/product_card_view/static/src/js/product_card_view.js:0` + `#. odoo-javascript` 的条目；若模块加载时翻译尚未就绪，用 `Object.defineProperty` 的 getter 让它在切换器渲染时才求值
+  - 关联：模块 `README.md` →「国际化」/「遗留问题」；`AGENTS.md` → L2 P2
+  - 检测：product_card_view/static/src/js/product_card_view.js 不含 display_name: "Card"
+- **T-021 产品尺寸模块重写：product_packing → product_dimension（移除纸箱 + 尺寸下沉到变体）** ｜ `product_dimension` + `product_variant_conversion` ｜ P2
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_dimension` `19.0.2.0.0`、`product_variant_conversion` `19.0.4.1.0`
+  - 起因：原 `product_packing` 的产品尺寸靠写**模板侧** `volume` 同步，而 Odoo 的桥接写入只在单变体时落到变体 → 产品一旦变成多变体，改尺寸就不再更新任何变体的 Volume
+  - 做法：模块改名为 `product_dimension` 并**只保留物流尺寸**（尺寸单位 cm / m + 长宽高）；**尺寸下沉到 `product.product`**（模板侧退化为单变体桥接，与原生 `volume` / `weight` 同构）；移除全部纸箱字段 / 分组 / 列表列 / 校验；新增 `pre_init_hook` 把旧模块留在模板上的尺寸数据搬到变体并按单位重算 Volume；补 6 项自动化测试；`product_variant_conversion` 的按谱系继承清单带上尺寸四件套（只在来源尺寸齐全时复制，避免把继承来的体积冲掉）
+  - 验收记录：模块 [`product_dimension/README.md`](product_dimension/README.md)（含「从 product_packing 迁移」与验证清单）、[`product_dimension/CHANGELOG.md`](product_dimension/CHANGELOG.md) → `[19.0.2.0.0]`、[`product_variant_conversion/CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.4.1.0]`
+  - 实测：开发库旧数据搬运成功（`filled 56 variant rows` + `recomputed volume for 1 variants`，变体侧得到 `cm / 50 / 40 / 30`、`volume = 0.06`，模板侧镜像同步）；卸掉旧模块记录后加载无告警；`product_dimension` 6 项、`product_variant_conversion`（连同本模块）39 项测试全部通过
+  - 遗留：目标环境需按「**先装新模块、再卸旧模块**」的顺序迁移并核对界面；`Volume` 默认只有 2 位小数属 Odoo 原生设置（见模块 README →「已知限制」）；纸箱能力已移除，如需要请另立模块
+
+
+---
 
 - **T-022 价格数据按变体分离（供应商价格 / 价格表规则不再被所有变体共用）** ｜ `product_variant_conversion` ｜ P2
   - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**

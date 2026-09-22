@@ -25,54 +25,38 @@ class IrUiView(models.Model):
 class IrActionsActWindowView(models.Model):
     _inherit = "ir.actions.act_window.view"
 
-    # 扩展 view_mode Selection，新增 'card'（让 ir.actions.act_window.view 记录可用 card）
+    # 扩展 view_mode Selection，新增 'card'（让 ir.actions.act_window.view 记录可用 card；
+    # 本模块静态声明的 3 条 card 记录需要它，见 views/product_card_views.xml）
     view_mode = fields.Selection(selection_add=[("card", "Card")], ondelete={"card": "cascade"})
 
-    @api.model
-    def _sync_product_card_views(self):
-        """条件性注入 card 视图到 sale / purchase 的产品动作。
 
-        sale / purchase 为可选依赖（不在 __manifest__.depends 中）：仅当对应
-        模块已安装（其 act_window xmlid 可解析）时才创建 act_window.view 记录，
-        未安装则跳过。由 product_card_views.xml 的 <function> 在 install/upgrade
-        时调用，幂等——已存在 card 记录则跳过。
+class IrActionsActWindow(models.Model):
+    _inherit = "ir.actions.act_window"
+
+    @api.depends("view_ids.view_mode", "view_mode", "view_id.type")
+    def _compute_views(self):
+        """把 card 视图放到所有 `product.template` 动作的 `views` 最前面。
+
+        为什么在这里做（而不是往别的模块的 action 里建记录）：客户端切换器的条目与服务端算出来的
+        `action.views` 一一对应，并且取 `views[0]` 作默认视图（见 `action_service.js::_executeActWindowAction`）。
+        「给 action 建 `ir.actions.act_window.view` 记录」那条路有**安装顺序**问题：本模块装完时
+        `sale` / `purchase` 往往还没装，那一刻的 `<function>` 看不到它们的 action，之后也没有重跑机会
+        —— 全新安装（`task init -- --fresh`）就会漏掉销售 / 采购入口。改成读取时计算后，与安装顺序、
+        模块组合都无关，也不再往别的模块的数据里写东西（本模块自己的 3 条静态声明仍保留）。
+
+        依赖模块自带的 card 视图存在（`product_card_view.product_template_card_view`）；
+        未加载时（例如注册表早期）直接跳过，不影响原生行为。
         """
+        super()._compute_views()
         card_view = self.env.ref(
             "product_card_view.product_template_card_view", raise_if_not_found=False
         )
         if not card_view:
             return
-        # (本模块登记的 ir.model.data name, 目标 action 的完整 xmlid)
-        targets = (
-            ("product_template_action_sale_card_view", "sale.product_template_action"),
-            ("product_normal_action_puchased_card_view", "purchase.product_normal_action_puchased"),
-        )
-        for rec_name, action_xmlid in targets:
-            action = self.env.ref(action_xmlid, raise_if_not_found=False)
-            if not action:
-                continue  # 对应模块未安装，跳过
-            if self.search_count(
-                [("act_window_id", "=", action.id), ("view_mode", "=", "card")]
-            ):
-                continue  # 已存在，幂等跳过
-            rec = self.create(
-                {
-                    "act_window_id": action.id,
-                    "view_id": card_view.id,
-                    "view_mode": "card",
-                    "sequence": 3,
-                }
-            )
-            self.env["ir.model.data"].create(
-                {
-                    "name": rec_name,
-                    "module": "product_card_view",
-                    "model": "ir.actions.act_window.view",
-                    "res_id": rec.id,
-                    "noupdate": True,
-                }
-            )
-        return True
+        for action in self.filtered(lambda act: act.res_model == "product.template"):
+            # 已经带了 card 的（静态声明那条）也重排到最前，保证「默认打开卡片视图」这一点一致
+            others = [(view_id, mode) for view_id, mode in action.views if mode != "card"]
+            action.views = [(card_view.id, "card")] + others
 
 
 class ProductTemplate(models.Model):

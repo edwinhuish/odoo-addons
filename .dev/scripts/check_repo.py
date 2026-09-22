@@ -300,7 +300,9 @@ def check_po_files(report: Report) -> None:
     """
     for po_file in sorted(glob.glob(os.path.join(REPO_ROOT, "*", "i18n", "*.po"))):
         relative = os.path.relpath(po_file, REPO_ROOT)
-        content = open(po_file, encoding="utf-8").read()
+        # 统一行尾：仓库里的 po 有的是 CRLF，按 `"\n\n"` 切块会切不开（整份文件被当成一个条目，
+        # 于是「缺 `#. module:`」「缺 odoo-javascript 标记」这类检查全部失效）
+        content = open(po_file, encoding="utf-8").read().replace("\r\n", "\n")
         msgids = [unescape(raw) for raw in MSGID_RE.findall(content)]
         duplicates = [key for key, count in collections.Counter(msgids).items() if count > 1]
         if duplicates:
@@ -316,7 +318,7 @@ def check_po_files(report: Report) -> None:
                 f"{relative}:{lineno}: 不符合 po 语法（多行文本必须写成带引号的续行）：{line[:60]}"
             )
 
-        for block in content.split("\n\n"):
+        for block in re.split(r"\n\s*\n", content):
             raw = MSGID_RE.search(block)
             if not raw:
                 continue  # 纯注释块
@@ -343,14 +345,22 @@ def check_po_files(report: Report) -> None:
             # `code:` 引用的运行期译文另有要求（CodeTranslations 按注释过滤）：
             # Python（.py）条目要带 `#. odoo-python`，JS / OWL 模板（.js / .xml）条目要带
             # `#. odoo-javascript`；缺标记的条目不生效 —— 界面一直英文，且不报错。
-            code_targets = [t[len("code:"):] for t in ref_tokens if t.startswith("code:")]
+            # `code:` 引用形如 `code:addons/<module>/.../x.py:0`：末尾那个 `:0` 是行号，
+            # 判断扩展名前必须先剥掉（否则 endswith('.py') 永远为假，这段检查等于没写）
+            code_targets = [
+                t[len("code:"):].rsplit(":", 1)[0]
+                for t in ref_tokens
+                if t.startswith("code:")
+            ]
+            # 先按警告报：仓库里还有若干模块的 po 缺这两类标记（等于这些文案一直没翻译），
+            # 清扫计划见 TODO.md → T-026；`task check -- --strict` 会把它们算失败。
             if any(t.endswith(".py") for t in code_targets) and not PY_COMMENT_RE.search(block):
-                report.fail(
+                report.warn(
                     f"{relative}: 含 Python `code:` 引用的条目缺 `#. odoo-python` 注释"
                     f"（Python 译文不会生效）：{head}"
                 )
             if any(t.endswith((".js", ".xml")) for t in code_targets) and not JS_COMMENT_RE.search(block):
-                report.fail(
+                report.warn(
                     f"{relative}: 含 JS / OWL `code:` 引用的条目缺 `#. odoo-javascript` 注释"
                     f"（前端译文不会生效）：{head}"
                 )

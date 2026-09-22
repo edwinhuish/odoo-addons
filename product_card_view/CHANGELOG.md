@@ -5,6 +5,228 @@
 
 ---
 
+## [19.0.2.0.6] - 2026-09-22（注入改为读取时计算：修掉全新安装漏注入）
+
+### 变更
+
+- **换掉注入机制**：不再往 `sale` / `purchase` / `account` 的 action 里建 `ir.actions.act_window.view`
+  记录、也不写它们的 `view_mode`，改为覆盖 `ir.actions.act_window._compute_views()` —— 凡
+  `res_model = 'product.template'` 的动作，把 card 放到 `views` 最前（客户端切换器的按钮与默认视图
+  都只认服务端算出的 `action.views`，`views[0]` 即默认视图）。
+- **根因（用户实测：`task init -- --fresh` 后销售 / 采购没有 Card）**：本模块 `depends` 只有 `stock`，
+  全新安装时它在 `sale` / `purchase` **之前**装完，那一刻的 `<function>` 看不到这两个模块的 action，
+  之后再没有重跑机会 —— 也就是此前文档里那条「后装需再升级一次」的限制，在真实安装流程里必然发生。
+  读取时计算与安装顺序、模块组合都无关。
+- 附带简化：删掉 `_sync_product_card_views()`、`CARD_SEQUENCE`、XML 里的 `<function>`，以及跨模块写
+  `view_mode` / 建记录 / 登记 xmlid 的全部逻辑（唯一约束、xmlid 撞名、sequence 排序四个坑随之消失）。
+  本模块自己的 3 条静态声明（product ×2 + stock）保留作声明式兜底。
+
+### 影响
+
+- 全新库（`task init -- --fresh`）与既有库升级后，库存 / 销售 / 采购 / 发票入口的产品列表**默认都在 Card**，
+  切换器保留 Kanban / List / Form / Activity
+- 不再修改其它模块的数据；`ir.act_window_view` 里只剩本模块声明的 3 条 card 记录
+- 无数据结构变化、无迁移
+
+### 文档
+
+- 模块 `README.md` / `AGENTS.md`：注入机制改写为「读取时计算」，删除已不存在的「后装需再升级」限制；
+  L2 P4 保留三种做法的演进结论（为什么最终不选「往别的模块的数据里写记录」）
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task init -- --fresh`（全新安装） | 7 个 `product.template` 动作 `views[0]` 均为 card；库里 card 记录仅 3 条（静态声明）✓ |
+| 销售 / 采购 / 发票 | `views = card → kanban → list → form → activity` ✓ |
+| `task check` | 通过 ✓ |
+
+---
+
+## [19.0.2.0.5] - 2026-09-22（T-025：切换器 Card 按钮名国际化）
+
+### 变更
+
+- **Card 按钮名走 `_t()` 并中文化**（`static/src/js/product_card_view.js`）：
+  `session.view_info.card.display_name` 从硬编码 `"Card"` 改为 **getter** `() => _t("Card")`。
+  - 为什么必须用 getter：`_t()` 返回的 `TranslatedString` 在**构造时**判断译文是否就绪
+    （`this.lazy = !translatedTerms[translationLoaded]`），而本文件在模块加载期执行、早于译文就绪；
+    直接调用会把 `lazy` 固化下来，之后任何取值都抛
+    `Cannot translate string: translations have not been loaded`。getter 让翻译在切换器读取时（译文已就绪）再算。
+- **补 po**：新增 `code:addons/product_card_view/static/src/js/product_card_view.js:0` → `Card` / 「卡片」。
+- **顺带修掉 5 条一直没生效的 JS 译文**：`product_card_record.js` 的 `Product image` / `Next image` /
+  `Previous image` / `Reference` / `On hand` 原本缺 `#. odoo-javascript` 注释 —— 前端译文由
+  `web/controllers/utils.py::_local_web_translations()` 在运行时读 po、**按该注释筛选**，缺了就永远不下发
+  （这些文案一直显示英文，且不报任何错）。现已补齐。
+
+### 影响
+
+- 中文界面切换器显示「卡片」，英文界面仍为「Card」
+- 图片 alt / 上下一张 / 参考号 / 在手数量这些 JS 文案的中文现在真的会生效
+- 无数据结构变化、无迁移
+
+### 文档
+
+- 模块 `README.md`：国际化节的「已知缺口」改为已解决并写清 getter 的原因；「遗留问题」移除该条
+- 模块 `AGENTS.md`：i18n 约束第 4 条改写为正确做法；新增 L2 P5（`code:` 条目的运行期标记 + `_t` 的时机陷阱）
+- 仓库 `.dev/scripts/check_repo.py`：修掉「按 `"\n\n"` 切块遇 CRLF 失效」与「`code:` 引用带行号后缀导致
+  扩展名判断永远为假」两个缺陷后，「缺 `odoo-python` / `odoo-javascript` 标记」这条检查才真正生效；
+  由于仓库里还有 5 个模块存在同类问题（记入 `TODO.md` → `T-026`），该检查暂按**警告**报出，
+  `task check -- --strict` 会算失败
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| po 条目 | 新增 `Card -> 卡片`；5 条 JS 条目补上 `#. odoo-javascript` ✓ |
+| 前端下发链路 | 调用前端同一个函数 `_local_web_translations(product_card_view/i18n/zh_CN.po)` → 返回 6 条，含 `Card -> 卡片` ✓ |
+| `task check` | 通过（本模块不再有相关警告）✓ |
+| 待目标环境验证 | 中文界面切换器实际显示「卡片」（需强刷浏览器） |
+
+---
+
+## [19.0.2.0.4] - 2026-09-22（产品列表默认打开 Card 视图）
+
+### 变更
+
+- **把 Card 定为产品列表的默认视图**：插入的 `ir.actions.act_window.view` 记录带
+  `sequence = 0`（模块常量 `CARD_SEQUENCE`），排在原生视图之前 —— 客户端
+  `_executeActWindowAction` 取 `views[0]` 作默认视图，因此库存 / 销售 / 采购 / 发票入口打开
+  产品列表时直接进入卡片视图。
+  - 关键点：`ir.actions.act_window.view._order = 'sequence,id'`，而原生视图行的 `sequence` 是
+    **NULL**，PostgreSQL 升序把 NULL 排在最后 —— 只要 card 的 `sequence` 是**非 NULL**（0 即可）
+    它就排在最前。`19.0.2.0.3` 曾把 `sequence` 置成 NULL 让 card 退到最后（默认视图不变），
+    本版按需求改回最前。
+  - 归一：`-u` 时会把历史记录里 `sequence` 为空 / 0 的 card 行补成 0（幂等）。
+- 静态声明的 3 条记录（`product` ×2 + `stock`）同样显式写 `sequence=0`，与注入的记录保持同一语义。
+
+### 影响
+
+- 7 个 `product.template` 动作的默认视图统一为 card：`views` 形如
+  `['card', 'kanban', 'list', 'form', ...]`（销售 / 采购 / 发票还带 activity）
+- 切换器里 Kanban / List / Form / Activity 全部保留，可随时切回；`mobile_view_mode` 仍是 kanban
+- 无数据结构变化、无迁移；连续两次 `-u` 稳定通过
+
+### 文档
+
+- 模块 `README.md` / `AGENTS.md`：把「默认打开视图不变」改为「默认打开 Card 视图」，
+  并把 L2 P4 第 2 条改写成正确结论（`sequence` 必须**非 NULL** 才能排在最前）
+
+### 验证记录
+
+| 入口（`product.template` 动作） | 默认 | views |
+|----|------|-------|
+| `sale.product_template_action`（销售 / 产品） | card | card → kanban → list → form → activity |
+| `purchase.product_normal_action_puchased`（采购 / 产品） | card | 同上 |
+| `account.product_product_action_sellable` / `..._purchasable`（发票） | card | 同上 |
+| `product.product_template_action` / `_all`、`stock.product_template_action_product`（库存） | card | card → kanban → list → form |
+
+---
+
+## [19.0.2.0.3] - 2026-09-22（Card 入口修复（第二版）：改回「建记录」并修正排序）
+
+### 变更
+
+- **`19.0.2.0.2` 的做法不成立**：那一版只改目标动作的 `view_mode`、不建 `ir.actions.act_window.view`
+  记录（理由是「`_compute_views()` 会把缺失模式补成 `(False, mode)`，照样能出按钮」）。实测**销售 /
+  采购入口仍然没有 Card**：客户端切换器的条目只来自服务端算出来的 `action.views`
+  （`action_service.js::_executeActWindowAction` 里 `for (const [, type] of action.views)`），
+  当时 `action.views` 里根本没有 card —— `view_mode` 是普通 Char，会被外部数据重放 / 回滚打回默认值
+  （实测见过 `list,card,form` 变回 `list,form`）。
+- **本版做法与静态声明的三个动作完全一致**：既补 `view_mode`，又建一条 `ir.actions.act_window.view`
+  记录（`view_id` 指向模块的 card 视图），并登记带**模块前缀**的 xmlid
+  （`sale_product_template_action_card_view`、`purchase_product_normal_action_puchased_card_view` 等），
+  避免与静态记录撞名。
+- **新记录的 `sequence` 必须留 NULL**：原生视图行的 `sequence` 是 NULL，而
+  `ir.actions.act_window.view._order = 'sequence,id'` 在升序里把**非 NULL 排在 NULL 之前** —— 写数字
+  （如 3）会把 Card 顶成 `views[0]`，而客户端用 `views[0]` 作默认视图，于是列表会默认打开卡片视图。
+  不写 `sequence` 之后，带原生 `view_ids` 的入口（销售 / 采购 / 发票）顺序变成
+  `kanban → list → form → activity → card`，**默认视图不变**；早期版本留下的 `sequence=3` 会在 `-u`
+  时自动归一（Integer 用 ORM 写不出 NULL，只能显式 SQL 置空）。
+- `flush_all()` + savepoint + 模块前缀 xmlid 三件套，解决了 `19.0.2.0.2` 期间踩到的
+  `ir_act_window_view_unique_mode_per_action` 唯一约束冲突（升级期 flush 交错、xmlid 撞名）。
+
+### 影响
+
+- 升级后：库存 / 销售 / 采购 / 发票入口的切换器都会出现 Card；带原生 `view_ids` 的入口默认视图不变
+- 硬依赖的三个动作（`product` ×2 + `stock` ×1）没有原生 `view_ids`，Card 作为唯一的显式视图仍排在最前
+  （即这三个入口默认打开卡片视图）—— 与本次修复前一致，未改动
+- 无数据结构变化、无迁移；连续两次 `-u` 稳定通过
+
+### 文档
+
+- 模块 `README.md` / `AGENTS.md`：把 `19.0.2.0.2` 写的「只改 `view_mode`」结论改正为
+  「记录 + `sequence` 留 NULL」，并把客户端判据（`action.views`）与排序坑写进 L2 P4
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| 销售 `sale.product_template_action` | `views = kanban, list, form, activity, card`（默认 kanban）✓ |
+| 采购 `purchase.product_normal_action_puchased` | 同上 ✓ |
+| 发票 `account.product_product_action_sellable` / `..._purchasable` | 同上 ✓ |
+| 库存 `stock.product_template_action_product` | Card 记录仍在，顺序与修复前一致 ✓ |
+| 连续两次 `-u product_card_view` | 均通过（无唯一约束冲突）✓ |
+
+---
+
+## [19.0.2.0.2] - 2026-09-22（修复：Card 在销售 / 采购 / 发票入口不显示）
+
+### 变更
+
+- **修复 Card 视图入口缺失**：`_sync_product_card_views()` 改为按 `res_model = 'product.template'`
+  扫描**所有**窗口动作（不再写死 `sale.product_template_action` / `purchase.product_normal_action_puchased`
+  两个 xmlid），给每个动作的 `view_mode` 补上 `card`（插在 `form` 之前，与静态声明的
+  `kanban,list,card,form` 同序）。
+- **不再动态创建 `ir.actions.act_window.view` 记录**：`_compute_views()` 会把 `view_mode` 里、
+  `view_ids` 中缺失的模式补成 `(False, mode)`，客户端据此渲染切换器按钮、服务端再解析该类型在模型上的
+  默认视图 —— 本模块 `product.template` 只有一张 card 视图，`(False, 'card')` 必然解析到它。
+  静态声明的 3 条记录保持不变（硬依赖模块，显式声明更直观）。
+- 根因有两层：
+  1. 原实现只补 `act_window.view` 记录、**没写 `view_mode`** —— 而静态声明的那三个动作两者都写，做法不一致；
+  2. 目标动作由 `sale` / `purchase`（可选依赖）定义，本模块安装时它们通常还没装，`<function>` 那一次执行
+     拿不到，之后再没有重跑机会 → 记录永远不会被创建（库里只有 product / stock 的 3 条）。
+- 现在覆盖 7 个动作：库存 `stock.product_template_action_product`、销售 `sale.product_template_action`、
+  采购 `purchase.product_normal_action_puchased`、发票 `account.product_product_action_sellable` /
+  `..._purchasable`、以及 `product` 自带的两个动作。
+
+### 踩坑（实现过程中实测，已写进 `AGENTS.md` → L2 P4）
+
+- **不要在这条路径上动态建 `ir.actions.act_window.view`**：`(act_window_id, view_mode)` 上有唯一约束
+  `ir_act_window_view_unique_mode_per_action`，而 install / `-u` 期间本方法会与 XML 静态记录的写入交错
+  （Odoo 在 `search` 之前会先 flush 待写数据），动态 `create` 直接撞
+  `duplicate key value violates unique constraint ... (188, card)`。
+- **按 action 的 xmlid 末段拼新 xmlid 会撞名**：`product.product_template_action` 与
+  `sale.product_template_action` 的末段都是 `product_template_action`，拼出来的
+  `product_card_view.product_template_action_card_view` 与静态记录同名 → `_update_xmlids` 会把静态
+  xmlid 改指到另一条记录，下一次 `-u` 静态 XML 更新那条记录时同样撞唯一约束。
+
+> 若曾用中间版本（仅存在于 2026-09-22 本地调试期间）升级过，库里的 card 记录与 xmlid 会被改乱，
+> 需手工恢复：删掉多出来的动态记录及其 `ir_model_data`，再把
+> `product_card_view.product_template_action_card_view` 指回 `act_window_id = 188` 的那条记录。
+
+### 影响
+
+- `task update -- product_card_view` 后，上述入口的视图切换器都会出现 Card 按钮；**默认打开的视图不变**
+  （`views` 的计算顺序仍是 `view_ids` 优先，kanban / list 仍是各自入口的默认视图）
+- 无数据结构变化、无迁移
+- **时机限制仍在**：`sale` / `purchase` 若在本模块之后安装，需要再跑一次 `-u product_card_view`
+  （可选依赖的 data 注入无法自动重放）
+
+### 文档
+
+- 模块 `README.md`：「核心设计」「视图」「安装与使用」「验证清单」「后续维护」「遗留问题」同步为新机制
+- 模块 `AGENTS.md`：技术设计表与 L2 P4 补「按 `res_model` 扫描 + `view_mode` 与记录都要写」的结论
+
+### 验证记录
+
+- 开发库核对（`ir_act_window` + `ir_act_window_view`）：7 个 `product.template` 动作的 `view_mode` 均含 `card`
+  （`kanban,list,card,form` / `list,card,form`），静态声明的 3 条 card 记录 xmlid 归属正确，无重复、无遗漏
+- **连续执行两次 `-u product_card_view` 均通过**（升级稳定性，这正是修复前的故障点）
+- 待目标环境验证：销售 / 采购 / 发票入口的切换器实际出现 Card 按钮
+
+---
+
 ## [19.0.2.0.1] - 2026-09-09（验收通过）
 
 ### 变更（i18n / 文档）

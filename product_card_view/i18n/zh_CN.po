@@ -14,29 +14,40 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 #. module: product_card_view
+#. odoo-javascript
 #: code:addons/product_card_view/static/src/js/product_card_record.js:0
 msgid "Product image"
 msgstr "产品图片"
 
 #. module: product_card_view
+#. odoo-javascript
 #: code:addons/product_card_view/static/src/js/product_card_record.js:0
 msgid "Next image"
 msgstr "下一张图片"
 
 #. module: product_card_view
+#. odoo-javascript
 #: code:addons/product_card_view/static/src/js/product_card_record.js:0
 msgid "Previous image"
 msgstr "上一张图片"
 
 #. module: product_card_view
+#. odoo-javascript
 #: code:addons/product_card_view/static/src/js/product_card_record.js:0
 msgid "Reference"
 msgstr "参考号"
 
 #. module: product_card_view
+#. odoo-javascript
 #: code:addons/product_card_view/static/src/js/product_card_record.js:0
 msgid "On hand"
 msgstr "在手数量"
+
+#. module: product_card_view
+#. odoo-javascript
+#: code:addons/product_card_view/static/src/js/product_card_view.js:0
+msgid "Card"
+msgstr "卡片"
 
 #. module: base
 #: model:ir.module.module,shortdesc:base.module_product_card_view

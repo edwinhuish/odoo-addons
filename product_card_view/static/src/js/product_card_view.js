@@ -2,6 +2,7 @@
 
 import { kanbanView } from "@web/views/kanban/kanban_view";
 import { KanbanArchParser } from "@web/views/kanban/kanban_arch_parser";
+import { _t } from "@web/core/l10n/translation";
 import { registry } from "@web/core/registry";
 import { session } from "@web/session";
 
@@ -21,9 +22,17 @@ if (!session.view_info) {
 if (!("card" in session.view_info)) {
     session.view_info.card = {
         icon: "oi oi-view-kanban",
-        display_name: "Card",
         multi_record: true,
     };
+    // display_name 必须是「延迟求值」的 getter：本文件在模块加载期执行，早于译文就绪，
+    // 而 `_t()` 返回的 TranslatedString 会把「构造时译文还没加载」固化成 lazy，之后任何
+    // 取值都抛 `Cannot translate string: translations have not been loaded`。
+    // 用 getter 在切换器读取时（译文已就绪）再翻译，顺便让按钮名跟着语言走。
+    Object.defineProperty(session.view_info.card, "display_name", {
+        get: () => _t("Card"),
+        enumerable: true,
+        configurable: true,
+    });
 }
 
 // card arch 经 server 验证禁止 owl 指令（t-name），故 arch 无 <templates>；
