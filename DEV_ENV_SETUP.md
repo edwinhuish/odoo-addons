@@ -24,7 +24,7 @@
 ```bash
 task up                 # 起环境（首次自动建库 + 装模块 + 演示数据）
 task logs               # 跟日志（Odoo 日志走 stdout）
-task update -- product_packing      # 升级模块（-u）
+task update -- product_dimension      # 升级模块（-u）
 task test -- product_image          # 跑测试
 task init -- --fresh    # 把 dev 库删掉重建（含演示数据）
 task reset              # 连 filestore 一起清空，回到最干净
@@ -230,7 +230,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8069   # 303（跳登�
 
 ```bash
 task logs                          # 跟日志
-task update -- product_packing     # 改了模型字段 / manifest / 静态资源 → 升级模块
+task update -- product_dimension     # 改了模型字段 / manifest / 静态资源 → 升级模块
 task test -- product_image         # 跑测试（先重建 test 库）
 task debug                         # 启动并挂调试端口 5678，然后 VS Code 按 F5
 task bash / shell / psql           # 进容器 / Odoo shell / 连数据库

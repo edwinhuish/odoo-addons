@@ -37,7 +37,7 @@ modules:
 addons:
   - product_card_view
   - product_image
-  - product_packing
+  - product_dimension
   - product_reference
   - product_variant_conversion
   - sale_order_no

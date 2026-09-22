@@ -151,7 +151,7 @@ modules:
 addons:
   - product_card_view
   - product_image
-  - product_packing
+  - product_dimension
   - product_reference
   - product_variant_conversion
   - sale_order_no
@@ -409,13 +409,13 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 1. ✅ `task up` / `task rebuild`：镜像构建 + 启动 + **首次自动建库**（`dev` 库；网页登录 `admin/admin` 是 Odoo 建库自带默认值，数据库管理页密码见 `odoo.conf`）
 2. ✅ `http://localhost:8069` 返回 303（跳转登录页）
 3. ✅ 容器里能看到仓库：`ls /mnt/extra-addons` 列出各模块与文档
-4. ✅ 模块被发现且装得上：`task install -- product_packing` → 库里 `state = installed`
+4. ✅ 模块被发现且装得上：`task install -- product_dimension` → 库里 `state = installed`
 5. ✅ `task`（默认列命令）、`task ps`、`task check`、从子目录调用都能正常工作
-6. ✅ `task update -- product_packing`：停服务 → `-u` → 起服务，一条命令跑通
+6. ✅ `task update -- product_dimension`：停服务 → `-u` → 起服务，一条命令跑通
 7. ✅ `task db-sync -- dump dev`：产出 846KB 的 zip，内含 `dump.sql` + `filestore/`
 8. ✅ `task db-sync -- duplicate dev dev_copy`、`task db-sync -- load <zip> dev_loaded` 均成功（验证后已 `task odoo -- db drop` 清掉）
-9. ✅ `task test -- product_packing`：重建 `test` 库 → 退出码 0（默认只跑该模块的 tag）
-10. ✅ `task i18n -- zh_CN product_packing`：`odoo shell` 路径跑通，处理到 `product_packing/i18n/zh_CN.po`
+9. ✅ `task test -- product_dimension`：重建 `test` 库 → 退出码 0（默认只跑该模块的 tag）
+10. ✅ `task i18n -- zh_CN product_dimension`：`odoo shell` 路径跑通，处理到 `product_dimension/i18n/zh_CN.po`
 11. ✅ 缺参/非法参数一律拒绝执行（exit 201）：`task update`、`task update -- --stop-after-init`、`task install`、
    `task test`、`task odoo`、`task db-sync`、`task db-sync -- dup`、`task pull`（缺 SSH_HOST/REMOTE_DB）、
    `task deploy`（缺 DEPLOY_HOST）都给出用法提示

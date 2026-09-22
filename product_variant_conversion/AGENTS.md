@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.4.0.0`
+- 当前版本：`19.0.4.1.0`
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -160,7 +160,7 @@
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
 | `views/product_variant_conversion_views.xml` | 转换台账的列表 / 详情视图与动作 |
 | `security/ir.model.access.csv` | 两个模型的访问规则（`base.group_user` 与 `product.group_product_variant`） |
-| `tests/test_product_variant_conversion.py` | 38 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter） |
+| `tests/test_product_variant_conversion.py` | 39 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter、装了 `product_dimension` 时的尺寸继承） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目 |
 | `README.md` | 用户可见功能、字段表、归属怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
@@ -408,8 +408,13 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
     `product.pricelist.item` 与 `stock.warehouse.orderpoint` 也不继承（规则各自带适用条件，盲目复制会产生重复规则）；
     `supplierinfo` → 仍由弹窗勾选框决定（一刀切共享，见下方 ⚠）。
     来源为空时跳过、保持空值，不猜测。
-- ⚠ **跨模块注意**：`product_packing` 的产品尺寸靠写模板侧 `volume` 同步，而桥接写入只在单变体时落到变体
-  → 产品变成多变体后，改尺寸不再更新任何变体的 Volume（原生行为与它的假设冲突，已记 TODO `T-021`）。
+- **跨模块协同：产品尺寸（`product_dimension`）**（`19.0.4.1.0` 起）：该模块把尺寸放在**变体**上
+  （`dimension_*`），模板侧只是单变体桥接，所以「尺寸 + 各自的 Volume」天然逐变体独立；
+  本模块的按谱系继承清单会在这些字段存在时带上它们（`_get_variant_conversion_inherited_fields()`），
+  新变体因此继承来源变体的尺寸与体积。只在**来源尺寸齐全**（长宽高都 > 0）时才复制尺寸 ——
+  否则会触发该模块「尺寸不齐 → Volume 归 0」的规则，把继承来的体积冲掉
+  （由 `test_new_variants_inherit_variant_dimensions_when_installed()` 钉住）。
+  `T-021`（原 `product_packing` 的尺寸同步在多变体下失效）已由该模块的 `19.0.2.0.0` 重写解决。
 - ⚠ **共享供应商价格会抹平变体级价差**：同一供应商对不同变体给不同价时，共享后全是模板级同级记录，
   采购取价按 `price_discounted → sequence → id`（`product.product._select_seller`）只取一条，另一条静默失效。
 

@@ -41,11 +41,14 @@
 
 ## 待办池
 
-- [ ] T-021 ｜ `product_packing` + `product_variant_conversion` ｜ P2 ｜ 产品尺寸 → 原生 Volume 的同步在多变体产品上不再落到变体
-  - 背景：`product_packing` 的产品尺寸靠写模板侧 `volume` 同步，而 Odoo 的桥接写入（`_set_product_variant_field()`）只在单变体时落到变体（见模块 `AGENTS.md` → L2 P5「同步规则」）；产品一旦变成多变体，改尺寸不再更新任何变体的 Volume —— 原生行为与该模块的假设冲突
-  - 建议：改为按变体写入（建议命名 `_sync_volume_to_variants()`，只写各变体侧的 `volume`）；先在一个多变体产品上复现现状再定方案
-  - 关联：`product_packing/AGENTS.md`；`product_variant_conversion/AGENTS.md` → L2 P5
-  - 检测：product_packing/models/ 含 _sync_volume_to_variants
+- **T-021 产品尺寸模块重写：product_packing → product_dimension（移除纸箱 + 尺寸下沉到变体）** ｜ `product_dimension` + `product_variant_conversion` ｜ P2
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_dimension` `19.0.2.0.0`、`product_variant_conversion` `19.0.4.1.0`
+  - 起因：原 `product_packing` 的产品尺寸靠写**模板侧** `volume` 同步，而 Odoo 的桥接写入只在单变体时落到变体 → 产品一旦变成多变体，改尺寸就不再更新任何变体的 Volume
+  - 做法：模块改名为 `product_dimension` 并**只保留物流尺寸**（尺寸单位 cm / m + 长宽高）；**尺寸下沉到 `product.product`**（模板侧退化为单变体桥接，与原生 `volume` / `weight` 同构）；移除全部纸箱字段 / 分组 / 列表列 / 校验；新增 `pre_init_hook` 把旧模块留在模板上的尺寸数据搬到变体并按单位重算 Volume；补 6 项自动化测试；`product_variant_conversion` 的按谱系继承清单带上尺寸四件套（只在来源尺寸齐全时复制，避免把继承来的体积冲掉）
+  - 验收记录：模块 [`product_dimension/README.md`](product_dimension/README.md)（含「从 product_packing 迁移」与验证清单）、[`product_dimension/CHANGELOG.md`](product_dimension/CHANGELOG.md) → `[19.0.2.0.0]`、[`product_variant_conversion/CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.4.1.0]`
+  - 实测：开发库旧数据搬运成功（`filled 56 variant rows` + `recomputed volume for 1 variants`，变体侧得到 `cm / 50 / 40 / 30`、`volume = 0.06`，模板侧镜像同步）；卸掉旧模块记录后加载无告警；`product_dimension` 6 项、`product_variant_conversion`（连同本模块）39 项测试全部通过
+  - 遗留：目标环境需按「**先装新模块、再卸旧模块**」的顺序迁移并核对界面；`Volume` 默认只有 2 位小数属 Odoo 原生设置（见模块 README →「已知限制」）；纸箱能力已移除，如需要请另立模块
 
 
 ---

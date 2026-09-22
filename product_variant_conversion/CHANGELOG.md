@@ -3,6 +3,31 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.4.1.0] - 2026-09-22（产品尺寸随谱系继承；与 product_dimension 打通）
+
+### 变更
+
+- **按谱系继承清单新增产品尺寸**：装了 [`product_dimension`](../product_dimension/README.md)（前身 `product_packing`，
+  `19.0.2.0.0` 改名重写）时，`_get_variant_conversion_inherited_fields()` 会把 `dimension_unit` /
+  `dimension_length` / `dimension_width` / `dimension_height` 一并算进继承清单 —— 尺寸是体积的来源，
+  只继承体积会让新变体出现「有体积、没尺寸」的错位。按字段是否存在判断，**不硬依赖**那个模块（未安装时行为完全不变）。
+- **只在来源尺寸齐全时复制尺寸**：长宽高有 0 时不复制这几个尺寸字段，否则会触发 `product_dimension`
+  「尺寸不齐 → Volume 归 0」的规则，把刚继承来的体积冲掉（`_get_variant_conversion_inheritance_values()`）。
+- 新增集成测试 `test_new_variants_inherit_variant_dimensions_when_installed()`（未装该模块时自动跳过）。
+
+### 影响
+
+- 行为变化仅在装了 `product_dimension` 时发生（新变体多继承四个尺寸字段）；不装则完全不变
+- 无数据结构变化、无迁移；测试 38 → 39 项
+
+### 文档
+
+- 模块 `README.md`：「属性归属审计」表的产品尺寸行改为**变体级**、「新变体继承策略」表新增尺寸行、测试数同步
+- 模块 `AGENTS.md` → L2 P5「同步规则」把原 `product_packing` 的跨模块注意改写为「与 `product_dimension` 协同」（`T-021` 已解决）
+- 仓库 `TODO.md`：`T-021` 交付归档
+
+---
+
 ## [19.0.4.0.0] - 2026-09-22（T-017 / T-018 / T-019 / T-020 一次交付）
 
 ### 变更

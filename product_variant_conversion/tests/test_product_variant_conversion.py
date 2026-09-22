@@ -646,7 +646,7 @@ class TestProductVariantConversion(TransactionCase):
         self.assertEqual(len(new_variants), 2)
         for variant in new_variants:
             origin = variant.variant_origin_id
-            self.assertTrue(origin, "新变体应当有谱系来源")
+            self.assertTrue(origin, "a new variant should always have a lineage origin")
             self.assertEqual(variant.standard_price, origin.standard_price)
             self.assertEqual(variant.volume, origin.volume)
             self.assertEqual(variant.weight, origin.weight)
@@ -659,6 +659,40 @@ class TestProductVariantConversion(TransactionCase):
         self.assertEqual(red.standard_price, 10.0)
         self.assertEqual(blue.volume, 0.2)
         self.assertEqual(blue.weight, 2.0)
+
+    def test_new_variants_inherit_variant_dimensions_when_installed(self):
+        """装了 product_dimension 时：新变体的尺寸（单位 + 长宽高）也随谱系继承。
+
+        跑法：`task test -- product_variant_conversion,product_dimension --test-tags=/product_variant_conversion`
+        （本模块不硬依赖 product_dimension，未安装时这条用例自动跳过）。
+        """
+        if "dimension_unit" not in self.env["product.product"]._fields:
+            self.skipTest("product_dimension is not installed")
+        product = self._create_product()
+        original = product.product_variant_id
+        original.write({
+            "dimension_unit": "cm",
+            "dimension_length": 50.0,
+            "dimension_width": 40.0,
+            "dimension_height": 30.0,
+        })
+        self.assertAlmostEqual(original.volume, 0.06, places=6)
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+
+        new_variant = product.product_variant_ids - original
+        self.assertEqual(len(new_variant), 1)
+        self.assertEqual(new_variant.dimension_unit, "cm")
+        self.assertAlmostEqual(new_variant.dimension_length, 50.0)
+        self.assertAlmostEqual(new_variant.dimension_width, 40.0)
+        self.assertAlmostEqual(new_variant.dimension_height, 30.0)
+        self.assertAlmostEqual(new_variant.volume, 0.06, places=6)
 
     def test_variant_data_inheritance_can_be_switched_off(self):
         """系统参数关掉后新变体不再继承：保持 Odoo 默认的空 / 0，台账记为未继承。"""

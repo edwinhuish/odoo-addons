@@ -999,6 +999,40 @@ class ProductTemplate(models.Model):
         """
         return self._get_variant_conversion_bool_parameter("inherit_variant_data")
 
+    def _get_variant_conversion_inherited_fields(self):
+        """按谱系继承的变体级字段名。
+
+        基础三项：成本 / 体积 / 重量。装了 `product_dimension` 时补上它的尺寸四件套
+        （单位 + 长宽高）—— 尺寸是体积的来源，只继承体积、丢下尺寸会让新变体出现
+        「有体积、没尺寸」的错位。这里按字段是否存在判断，不硬依赖那个模块。
+        """
+        names = ["standard_price", "volume", "weight"]
+        dimension_fields = (
+            "dimension_unit",
+            "dimension_length",
+            "dimension_width",
+            "dimension_height",
+        )
+        variant_fields = self.env["product.product"]._fields
+        if all(name in variant_fields for name in dimension_fields):
+            names += list(dimension_fields)
+        return names
+
+    def _get_variant_conversion_inheritance_values(self, origin):
+        """要按谱系复制给新变体的字段值（来源变体 → 新变体）。
+
+        尺寸四件套只在来源的尺寸**齐全**（长宽高都大于 0）时才复制：`product_dimension`
+        的规则是「尺寸不全就把 Volume 归 0」，而来源本来就没填尺寸时，把尺寸复制过去会把
+        刚继承来的体积冲掉（新旧变体就不一致了）。
+        """
+        values = {name: origin[name] for name in self._get_variant_conversion_inherited_fields()}
+        dimension_sizes = ("dimension_length", "dimension_width", "dimension_height")
+        if any(name in values for name in dimension_sizes) and not all(
+                values.get(name) for name in dimension_sizes):
+            for name in ("dimension_unit",) + dimension_sizes:
+                values.pop(name, None)
+        return values
+
     def _apply_variant_data_inheritance(self, new_variants):
         """把新变体的变体级字段从它的谱系来源（``variant_origin_id``）复制过来。
 
@@ -1013,10 +1047,6 @@ class ProductTemplate(models.Model):
             origin = variant.variant_origin_id
             if not origin:
                 continue
-            variant.write({
-                "standard_price": origin.standard_price,
-                "volume": origin.volume,
-                "weight": origin.weight,
-            })
+            variant.write(self._get_variant_conversion_inheritance_values(origin))
             inherited |= variant
         return inherited

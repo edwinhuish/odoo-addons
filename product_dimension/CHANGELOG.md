@@ -2,6 +2,51 @@
 
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复 / 文档 +z。
+> **注意**：本模块在 `19.0.2.0.0` 由 `product_packing` 改名而来，更早的条目是旧名时期的历史记录。
+
+---
+
+## [19.0.2.0.0] - 2026-09-22（改名 + 尺寸下沉到变体；T-021 交付）
+
+### 变更
+
+- **模块改名 `product_packing` → `product_dimension`**（显示名 `Product Packing` → **`Product Dimensions`**）：目录、manifest、i18n 术语、文档全部改名。
+- **移除「纸箱与包装」**：`carton_*` 系列字段（装箱数 / 纸箱长宽高 / 纸箱单位 / 毛重 / 净重 / CBM / 尺寸规格）、
+  产品表单的 `Carton & Packing` 组、产品列表的「Carton」「CBM」列、纸箱校验全部删除。
+- **只保留物流尺寸**：尺寸单位（cm / m）+ 长 × 宽 × 高，仍在产品表单的原生 Logistics 组里、`Volume` 之前。
+- **尺寸下沉到变体（T-021 的核心）**：
+  - 真身改为 `product.product.dimension_unit / dimension_length / dimension_width / dimension_height`，
+    原生 `volume` 由**该变体自己的**尺寸算出；
+  - `product.template` 上的同名字段改为 `compute + inverse + store` 的**单变体桥接**（与原生 `volume` / `weight` 同构）：
+    多变体产品的模板表单上隐藏、读出空值、写入不牵动任何变体；
+  - 结果：多变体产品的每条变体各持一份尺寸与体积，改一条不影响别的。
+- **数据搬运**：新增 `pre_init_hook`（`hooks.py`）：安装时把旧模块留在 `product_template` 上的
+  `product_dimension_unit / product_length / product_width / product_height` 复制给该模板的**全部**变体，
+  并按单位重算 `volume`（幂等，旧列不存在时什么都不做）。
+- **补自动化测试**：本模块此前零测试，新增 6 项（Volume 同步 cm / m、清空尺寸归零、单变体桥接读写、多变体各自独立、非负校验）。
+- **与 `product_variant_conversion` 打通**：该模块的按谱系继承清单在装了本模块时带上尺寸四件套，
+  转换出的新变体继承其来源变体的尺寸与体积（该模块 `19.0.4.1.0`）。
+
+### 影响
+
+- **破坏性**：尺寸字段从模板移到变体（新字段名 `dimension_*`）。旧列经安装前钩子搬运后即可卸载旧模块；
+  引用旧字段名 `product_dimension_unit` / `product_length` 等的外部脚本 / 报表需改用 `dimension_*`（读变体）。
+- **纸箱能力移除**：原纸箱字段与其数据不再保留；如需纸箱信息请另立模块。
+- 无新增依赖；`i18n/zh_CN.po` 按新术语集重建（含应用列表元数据改名）。
+- 迁移顺序必须是**先装新模块、再卸旧模块**（卸载会删掉旧列）。
+
+### 文档
+
+- `README.md` 重写：功能概述 / 核心设计（归属 + 桥接）/ 字段表 / 视图 / **已知限制**（`Volume` 默认只有 2 位小数、尺寸不齐体积归 0、多变体产品的模板表单不显示）/ **从 product_packing 迁移** / 验证清单 / i18n
+- `AGENTS.md` 重写：L1 六条约束（真身在变体、桥接语义与原生一致、必须同步 Volume、迁移必须走钩子等）、i18n 约束（含 `description` 的 RST 安全）、文件职责、L2 踩坑档案、T-021 交付记录
+- 根 `README.md` / `AGENTS.md` / `TODO.md` 同步模块名与版本
+
+### 验收记录（T-021）
+
+- 开发库实测：安装新模块 → 钩子搬运日志 `filled 56 variant rows ...` + `recomputed volume for 1 variants`；
+  变体侧得到 `cm / 50 / 40 / 30`、`volume = 0.06`，模板侧镜像同步；卸载旧模块后加载无告警
+- 自动化测试：`product_dimension` 6 项通过；`product_variant_conversion` 连同本模块跑 39 项通过
+- 待目标环境验证：全新安装、中英文界面、应用列表中文名、旧库迁移后的界面核对
 
 ---
 

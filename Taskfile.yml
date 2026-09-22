@@ -3,7 +3,7 @@
 #
 #   task                 # 列出所有命令
 #   task up              # 启动 → http://localhost:8069（首次自动建库装 base）
-#   task update -- product_image product_packing   # 升级模块（-u）
+#   task update -- product_image product_dimension   # 升级模块（-u）
 #   task logs            # 跟日志
 #
 # 注意：带参数的任务必须用 `--` 分隔（task 把裸参数当任务名）：
@@ -121,7 +121,7 @@ tasks:
     preconditions:
       # 必须给模块名，且只接受模块名（挡掉 task update、task update -- --stop-after-init 这类误用）
       - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[A-Za-z0-9_]+([[:space:],]+[A-Za-z0-9_]+)*$"'
-        msg: '没给模块名，已拒绝执行。用法：task update -- <模块...>（多个用空格分隔，例：task update -- product_image product_packing）'
+        msg: '没给模块名，已拒绝执行。用法：task update -- <模块...>（多个用空格分隔，例：task update -- product_image product_dimension）'
     cmds:
       - |
         mods=$(echo "{{.CLI_ARGS}}" | tr ' ' ',')
@@ -140,7 +140,7 @@ tasks:
     deps: [docker-check]
     preconditions:
       - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[A-Za-z0-9_]+([[:space:],]+[A-Za-z0-9_]+)*$"'
-        msg: '没给模块名，已拒绝执行。用法：task install -- <模块...>（例：task install -- product_packing）'
+        msg: '没给模块名，已拒绝执行。用法：task install -- <模块...>（例：task install -- product_dimension）'
     cmds:
       - |
         mods=$(echo "{{.CLI_ARGS}}" | tr ' ' ',')
