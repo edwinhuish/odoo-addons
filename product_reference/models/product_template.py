@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
-"""扩展 product.template，挂载参考号明细、产品母型号，并支持按参考号搜索。
+"""扩展 product.template，挂载参考号明细、产品级编号，并支持按参考号搜索。
 
 关键约束（详见模块 AGENTS.md L1）：
-1. 参考号用独立模型 + One2many，禁止逗号分隔塞单个 Char
+1. 参考号用独立模型 + One2many，禁止逗号分隔塞单个 Char；产品级与变体级两层
+   各自独立、都可见（不再按变体数隐藏）
 2. 搜索在数据库层：冗余可存储字段 ``reference_code_index`` + trigram 索引
-3. ``_search_display_name`` 让 Many2one / 下拉 / 快速搜索命中参考号（含母型号）
+3. ``_search_display_name`` 让 Many2one / 下拉 / 快速搜索命中参考号（含变体层）
 4. ``web_search_read`` 在列表请求 name 时附加「命中参考号」提示
-5. 母型号只存 ``base_reference``：**单变体产品不写它**（型号只写变体的
-   ``default_code``），只有「单变体 → 多变体」时由 ``product_variant_conversion``
-   把编号上移过来；禁止改写原生 ``default_code`` 的桥接语义
+5. 产品级编号存 ``base_reference``，并**叠加**在原生 ``default_code`` 的
+   compute / inverse 之上（``base_reference`` 优先；单变体产品两处同值、多变体产品
+   只写 ``base_reference``）—— 消费方（卡片视图等）因此只需读原生 ``default_code``，
+   不必知道本模块存在
 """
 
 from odoo import _, api, fields, models
@@ -52,27 +54,84 @@ class ProductTemplate(models.Model):
             tmpl.reference_code_count = len(tmpl.reference_code_line_ids)
 
     # ------------------------------------------------------------------
-    # 母型号（base reference）
+    # 模板级产品编号（base reference）
     # ------------------------------------------------------------------
-
-    # 多变体产品（G001-WT / G001-BK）的「产品型号」无处可存：原生 `default_code` 是
-    # 变体自有字段，模板侧在多变体时只是空桥接（`_compute_template_field_from_variant_field`
-    # 只在单变体时镜像变体值）。因此母型号用本字段单独存储，与变体数量完全解耦。
     #
-    # 写入时机只有两个（**不做双向镜像，也不在单变体产品上落值**）：
-    #   - 多变体产品：用户在产品表单的 `Base Ref.` 里直接维护；
-    #   - 单变体 → 多变体：由 `product_variant_conversion` 把原变体的编号上移过来。
-    # 单变体产品的型号只写在那条变体的 `default_code` 上（真身），产品侧不落值，
-    # 因此不存在「两处需要同步」的问题（改编号不必同时改两处、也不会写漏一处）。
+    # 多变体产品（G001-WT / G001-BK）的「产品编号」（G001）需要存在**产品**这一层：
+    # 原生 `default_code` 是 `product.product` 的自有字段，模板侧在多变体时只是空桥接
+    # （`_compute_template_field_from_variant_field` 只在单变体时镜像变体值）。
+    #
+    # 因此：
+    # 1. 新增本字段存产品级编号（存储 + trigram 索引 + 复制时带走）；
+    # 2. **重写模板级 `default_code` 的 compute 与 inverse**（见下面两个方法）：
+    #    - 读：`base_reference` 优先，其次才是原生单变体桥接 —— 于是产品表单的 `Ref.`
+    #      输入框、产品列表 / Many2one 的 `[编号] 名称`、列表搜索都自动带上产品编号；
+    #    - 写：单变体产品同时写两处（`base_reference` + 那条变体的 `default_code`），
+    #      多变体产品只写 `base_reference`（变体编号各归各的变体）。
     base_reference = fields.Char(
         string="Base Reference",
         index="trigram",
         copy=True,
-        help="Model shared by every variant of this product (e.g. G001 for the variants G001-WT "
-             "and G001-BK). It is filled when a single-variant product is turned into a product "
-             "with several variants, and is then the only place where the model is stored, since "
-             "every variant carries its own reference.",
+        help="Product reference of the template itself, used by products with several variants "
+             "(e.g. G001 for the variants G001-WT and G001-BK). The template reference "
+             "(default_code) computes to this value when it is set, so the product form, the "
+             "product list and the searches show it; on a single-variant product the template "
+             "reference and the variant reference are kept equal.",
     )
+
+    @api.depends("product_variant_ids.default_code", "base_reference")
+    def _compute_default_code(self):
+        """模板级 ``default_code``：``base_reference``（产品编号）优先，其次原生单变体桥接。
+
+        原生实现只在单变体时镜像变体编号；这里在它之上叠加「产品级编号优先」，
+        使多变体产品在**原生的**编号口径（表单 `Ref.`、列表 `[编号] 名称`、列表搜索、
+        `display_name`）里也有值，而不必让消费方（卡片视图等）知道本模块存在。
+        """
+        super()._compute_default_code()
+        for tmpl in self:
+            if tmpl.base_reference:
+                tmpl.default_code = tmpl.base_reference
+
+    def _set_default_code(self):
+        """写入模板级编号：单变体产品写回那条变体（原生），两处都记 ``base_reference``。
+
+        - 单变体产品：原生 `_set_default_code()` 把值写到那条唯一的变体上（随后的
+          变体 hook 会把 `base_reference` 一起同步），这里再兜一次底；
+        - 多变体产品：原生写入不落任何变体（Odoo 语义），这里写入 `base_reference`。
+
+        ⚠ 这里只写 `base_reference` 一个字段：**不要再顺手写 `default_code`**
+        （那会再次触发本方法 → 无限递归）。变体侧的统一出口是
+        `_sync_single_variant_default_code()`。
+        """
+        super()._set_default_code()
+        for tmpl in self:
+            if tmpl.base_reference != tmpl.default_code:
+                tmpl.base_reference = tmpl.default_code
+
+    def _sync_single_variant_default_code(self):
+        """单变体产品：把产品级编号同步到那条变体的 ``default_code``。
+
+        「直接写 `base_reference`」那条路（API / 脚本 / 数据导入）的收口：
+        单变体产品两处必须同值；多变体产品的变体编号与产品编号无关，**不动**。
+        写变体不会回头再触发本方法（变体侧 hook 只在两处不同时才写 `base_reference`），
+        因此链路必然收敛。
+        """
+        for tmpl in self:
+            variants = tmpl.product_variant_ids
+            if len(variants) == 1 and variants.default_code != tmpl.base_reference:
+                variants.default_code = tmpl.base_reference
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        templates = super().create(vals_list)
+        templates._sync_single_variant_default_code()
+        return templates
+
+    def write(self, vals):
+        res = super().write(vals)
+        if "base_reference" in vals:
+            self._sync_single_variant_default_code()
+        return res
 
     def _sync_reference_index(self):
         """把所有参考号拼接写入 ``reference_code_index``（搜索索引）。
@@ -109,12 +168,12 @@ class ProductTemplate(models.Model):
         domain = super()._search_display_name(operator, value)
         if not (isinstance(value, str) and value):
             return domain
-        # 产品级共享参考号 + 母型号 + 各变体的参考号（多变体产品的参考号不共用，
-        # 但在产品列表 / Many2one 里按任一变体的参考号都应能找到这个产品）
+        # 产品级共享参考号 + 各变体的参考号（两层各自独立，但在产品列表 / Many2one 里
+        # 按任一变体的参考号都应能找到这个产品）。
+        # 产品级编号（多变体产品的 base_reference）不必单独并入：它已经进了模板级
+        # `default_code` 的 compute，原生那一支就能命中（见 `_compute_default_code`）
         extra = Domain.OR([
             Domain("reference_code_index", operator, value),
-            # 母型号：多变体产品的 default_code 是空的，用 G001 必须能搜到这个产品
-            Domain("base_reference", operator, value),
             Domain("product_variant_ids", "any", [
                 ("variant_reference_code_index", operator, value),
             ]),

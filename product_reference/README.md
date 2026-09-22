@@ -13,18 +13,18 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 - 原生 Odoo `default_code`（Reference）输入框直接放在产品名下方（产品模板表单与产品变体表单都有），
   标签为 `Ref.`（中英界面一致）；输入框内右端「+」按钮以弹窗管理额外参考号
 - 产品存在额外参考号时显示「+N」徽标，悬停徽标弹出参考号清单 tooltip
-- **多变体产品的参考号不共用**：产品表单在 `product_variant_count > 1` 时隐藏 `Ref.` 输入框与
-  额外参考号入口，每个变体各自维护一份参考号（变体专属行，与产品级共享行相互独立）
-- **产品母型号 `base_reference`**（`19.0.2.6.0`，`19.0.2.7.0` 定策略）：多变体产品（`G001-WT` / `G001-BK`）
-  的产品型号（`G001`）有地方存、在产品表单上可维护、可被搜索；单变体产品**只有一处编号**
-  （变体的 `default_code`），转成多变体时该编号自动上移成母型号
+- **参考号分两层、各自独立且都可见**：产品表单始终维护产品编号与产品级参考号，每个变体另有
+  一份自己的参考号（变体专属行，与产品级共享行相互独立）
+- **产品级编号 `base_reference`**（`19.0.2.6.0` 新增字段，`19.0.3.0.0` 定最终形态）：多变体产品
+  （`G001-WT` / `G001-BK`）的产品编号（`G001`）存在这里，并**叠加进原生 `default_code` 的 compute**
+  —— 产品表单 / 列表 / `[编号] 名称` / 搜索都能看到它；单变体产品的产品编号与那条变体的编号**两处同值**
 - 参考号用独立明细模型 + `One2many` 挂在 `product.template` 上
 - 同一产品内参考号不可重复；不同产品间允许同参考号，重复时命中提示区分
 - 搜索能力在数据库层实现：冗余可存储字段 `reference_code_index`（产品级）与
-  `variant_reference_code_index`（变体级），均配 trigram 索引；母型号 `base_reference` 直接建索引
+  `variant_reference_code_index`（变体级），均配 trigram 索引；产品编号 `base_reference` 直接建索引
 - 产品列表搜索框、Many2one 下拉、搜索建议、快速搜索均可按参考号命中；
   产品级搜索同时覆盖其各变体的参考号（在变体里加的参考号，在 Products 里也能搜到）
-  与多变体产品的母型号（搜 `G001` 命中该产品）
+  与多变体产品的产品编号（搜 `G001` 命中该产品）
 - 命中参考号时，列表结果显示「产品名（命中参考号：xxx）」便于区分
 - 参考号行支持增删改排序，支持在列表内直接批量录入
 
@@ -37,9 +37,9 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 | 原生 Reference 就在产品名下方 | 产品模板表单与产品变体表单的标题区（`oe_title`）内、产品名下方直接放置 Odoo 原生 `default_code`；标签固定 `Ref.`（中英界面一致，不做本地化翻译），复用原生 `CharField`，无需切页签 |
 | 输入框内「+」管理额外参考号 | 「+」内置在输入框右端，点击打开管理弹窗，列表式增删改排序/停用；改动挂在产品表单 record 上，点产品「保存」才入库 |
 | 徽标 + 原生 tooltip | 存在启用中的额外参考号时显示「+N」徽标，悬停弹出清单（Odoo 原生 `data-tooltip-template` + `data-tooltip-info`）；只读态同样保留 tooltip |
-| 多变体不共用 | 参考号行有两种归属（二选一）：产品级共享（`product_tmpl_id`，产品表单维护）、变体级（`product_id`，变体表单维护）；多变体产品的产品表单隐藏 `Ref.` 输入框与额外参考号入口（该位置改显示母型号） |
-| 母型号独立字段 | 多变体产品的产品型号存 `product.template.base_reference`（存储字段 + trigram 索引），**不改写原生 `default_code` 的桥接语义**；单变体产品**不写**它（编号只落变体），转多变体时由 `product_variant_conversion` 上移进来 |
-| 单一真值、不做镜像 | 同一份编号绝不同时写两层：单变体产品写变体 `default_code`，多变体产品写产品 `base_reference`，两者由「转换」这一个动作衔接 —— 避免两处写入路径漏掉一处导致长期不一致 |
+| 两层参考号各自独立 | 参考号行有两种归属（二选一）：产品级（`product_tmpl_id`，产品表单维护）、变体级（`product_id`，变体表单维护）。**两层都可见、都可在各自表单上维护**（`19.0.3.0.0` 起不再按变体数隐藏） |
+| 产品级编号叠加进原生字段 | `product.template.base_reference`（存储 + trigram 索引）存产品编号，并叠加进原生 `default_code` 的 compute（**`base_reference` 优先**）：产品表单、列表、`display_name`、搜索、以及其它模块读原生字段都能拿到它 |
+| 写入按变体数分流 | `default_code` 的 inverse：单变体产品写两处（`base_reference` + 那条变体的 `default_code`），多变体产品只写 `base_reference`；从变体侧改编号时单变体产品反向同步（`_sync_single_variant_base_reference`） |
 | 独立明细模型 | 参考号存于 `product.reference.code`，禁止逗号分隔塞进单个 `Char` |
 | 数据库层搜索 | 冗余字段 `reference_code_index`（`Text` + trigram 索引）拼接所有参考号，由参考号行增删改时自动同步 |
 | `_search_display_name` 扩展 | Many2one 下拉、搜索建议、快速搜索按 `reference_code_index` 命中产品 |
@@ -58,7 +58,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 | `reference_code_line_ids` | `One2many` → `product.reference.code` | 该产品的所有参考号明细 |
 | `reference_code_count` | `Integer`（compute） | 参考号数量 |
 | `reference_code_index` | `Text`（store + trigram 索引） | 所有参考号拼接的搜索索引，自动维护，勿手工编辑 |
-| `base_reference` | `Char`（store + trigram 索引 + `copy=True`） | 产品母型号（多变体产品的产品型号）；单变体产品上留空，转多变体时上移进来 |
+| `base_reference` | `Char`（store + trigram 索引 + `copy=True`） | 产品级编号；**叠加进原生 `default_code` 的 compute（优先级最高）**，单变体产品与变体编号两处同值 |
 
 ### `product.product`（扩展，变体）
 
@@ -85,7 +85,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 
 - **产品表单（模板 + 变体）**：产品名称下方直接放置原生 `default_code`（Reference）输入框，
   输入框内右端「+」打开额外参考号管理弹窗；不再新增任何页签，常规信息页 / Codes 组的原生
-  Reference 隐藏避免重复；**多变体产品（`product_variant_count > 1`）整块隐藏**
+  Reference 隐藏避免重复；**两种产品形态都显示**（`19.0.3.0.0` 起不再按变体数隐藏）
 - **变体侧两张表单都维护变体专属行**：「变体独立编辑表单」与**主变体表单**都通过
   `options="{'lines_field': 'variant_reference_code_line_ids'}"` 指定维护变体自己的参考号，
   与产品表单的共享行互不干扰（`19.0.2.5.2` 起；此前主变体表单漏写该 option，回落到继承来的
@@ -164,43 +164,38 @@ odoo -d <db> -u product_reference --stop-after-init
 
 - 产品表单与产品变体表单的标题区、产品名下方直接放置 Odoo 原生的 `default_code` 字段，标签 `Ref.`。
 - 标签 `Ref.` 中英界面一致（`i18n/zh_CN.po` 中该条 `msgstr` 同样为 `Ref.`），不随语言变化。
-- 它就是 Odoo 原生的内部参考字段：产品模板表单改的是模板级 `default_code`，变体表单改的是该变体
-  自己的 `default_code`；**多变体产品的产品表单不显示这个输入框**（`product_variant_count > 1` 时隐藏），
-  参考号在各变体上分别维护 —— 那个位置改为显示母型号 `Base Ref.`（见下节）。
+- 它就是 Odoo 原生的内部参考字段，但模板级那一支被本模块**叠加**了：值 = 产品编号
+  （`base_reference`，见下节）优先，其次才是原生单变体桥接。因此**单变体产品**在这里改就是改
+  那条变体的编号（两处同值），**多变体产品**在这里改就是改产品编号（只写 `base_reference`）。
 - 它不属于 `product.reference.code` 明细行，因此不占用参考号行的唯一约束，也不参与参考号行的排序。
 - 常规信息页 / Codes 组里的原生 Reference 已隐藏，避免与标题区重复。
 
-### 母型号 Base Reference（`19.0.2.6.0` 新增，`19.0.2.7.0` 定写入策略）
+### 产品级编号 Base Reference（`19.0.2.6.0` 新增字段，`19.0.3.0.0` 定最终形态）
 
-多变体产品（`G001-WT` / `G001-BK`）的**产品型号**（`G001`）无处可存：原生 `default_code` 是变体自有字段，
-模板侧在多变体时只是「读出空、写入不落任何变体」的桥接。本模块因此新增
-`product.template.base_reference`（存储字段 + trigram 索引 + 复制时带走），把母型号与变体数量解耦。
+多变体产品（`G001-WT` / `G001-BK`）的**产品编号**（`G001`）无处可存：原生 `default_code` 是变体自有字段，
+模板侧在多变体时只是「读出空、写入不落任何变体」的桥接。本模块新增
+`product.template.base_reference`（存储 + trigram 索引 + 复制时带走）存它，并把它**叠加进原生
+`default_code` 的 compute** —— 于是编号在所有原生口径里都可见，其它模块只要读原生字段就行。
 
 | 产品形态 | 界面 | 编号写在哪 | 说明 |
 |----------|------|------------|------|
-| 单变体 | 产品表单显示 `Ref.` | **只写变体的 `default_code`** | 产品侧 `base_reference` 保持为空 |
-| 多变体 | 产品表单显示 `Base Ref.` | 产品侧 `base_reference` | 各变体各填自己的 `default_code` |
+| 单变体 | 产品表单显示 `Ref.` | **两处同值**：`base_reference` + 那条变体的 `default_code` | 改产品表单 / 变体表单 / 导入，两处都会跟上 |
+| 多变体 | 产品表单显示 `Ref.`（值 = 产品编号） | 只写 `base_reference` | 各变体各填自己的 `default_code`，两层互不影响 |
 
-**唯一真值、没有镜像**（`19.0.2.7.0` 起）：单变体产品的型号只落在那条变体上，产品侧不写任何副本 ——
-同一份数据写两处，任何一条写入路径（产品表单 / 变体表单 / 导入 / 集成 / SQL）漏掉就会不一致，
-所以干脆只写一处。
-
-- **母型号的写入时机只有两个**：
-  1. **多变体产品**：在产品表单的 `Base Ref.` 里直接维护（这里没有「+」弹窗：母型号是单个值，
-     不是多条参考号）；
-  2. **单变体 → 多变体**：由 [`product_variant_conversion`](../product_variant_conversion/README.md)
-     把原变体的编号**上移**到 `base_reference`（覆盖式写入）并清空变体上的编号，
-     好让每条变体各填自己的编号（`G001` → `G001-WT` / `G001-BK`，见该模块 `19.0.5.2.0`）。
-     变体没有编号时不动母型号（「多变体退回单变体」的残留值不该被清掉）。
-- **可被搜索**：Products 列表搜索框、独立「Reference」搜索项、Many2one 下拉（含销售订单行等选产品）
-  都并入 `base_reference`；多变体产品的模板级 `default_code` 是空的，不并入就等于「搜 G001 找不到产品」。
-- **列表列**：产品列表新增 `Base Reference` 列，默认隐藏在列选择器里可打开。
-- **存量数据**：`19.0.2.7.0` 的 `migrations/19.0.2.7.0/post-migration.py` 只做收尾 ——
-  把更早的镜像写法留在**单变体产品**上的 `base_reference`（值恰好等于该变体 `default_code`）置空；
-  多变体产品的母型号不受影响。**多变体产品的母型号没有可自动回填的来源**（模板级 `default_code` 一直是空），
-  需要人工在产品表单补录一次。
-- **卡片视图**：`product_card_view` 只在**多变体产品**上读母型号（单变体产品的编号真身在变体上），
-  该模块按字段存在性软适配，不硬依赖本模块。
+- **模板级 `default_code` 的 compute 被叠加**：`base_reference` **优先**，其次才是原生单变体桥接。
+  因此产品表单 `Ref.` 框、产品列表、`[编号] 名称` 前缀、Many2one 下拉、列表搜索都带上产品编号
+  —— 其它模块（如 [`product_card_view`](../product_card_view/README.md)）直接读原生 `default_code` 即可，
+  **不需要知道本模块存在**。
+- **写入路径**：产品表单的 `Ref.` 走 `default_code` 的 inverse（按变体数分流写，见上表）；
+  从**变体**表单 / 列表改编号时，单变体产品会反向同步产品级编号（多变体产品不动）。
+- **两层参考号都可见**（`19.0.3.0.0` 起）：产品表单始终显示 `Ref.` 与额外参考号入口，
+  变体表单维护变体自己那组；产品级与变体级各自独立、互不隐藏。
+- **可被搜索**：模板层靠原生 `default_code` 即可命中产品编号；变体层（销售订单行选产品等）
+  由本模块扩展 `_search_display_name` 命中（变体编号里没有 `G001`，不并入就搜不到）。
+- **存量数据**（`migrations/19.0.3.0.0/post-migration.py`）：单变体产品按变体 `default_code` 回填
+  `base_reference`（两处同值），并把存储列 `default_code` 对齐 `base_reference`
+  （升级前那列是原生桥接算出来的，多变体时为空；列表搜索走存储列）。
+  **多变体产品的产品编号没有可自动推断的来源**，需要人工在产品表单的 `Ref.` 里补录一次。
 
 ### 用「+」弹窗管理额外参考号
 
@@ -214,18 +209,19 @@ odoo -d <db> -u product_reference --stop-after-init
 ## 与其它扩展的边界（可选集成）
 
 本模块 `depends` 只有 `product`，**不依赖也不感知**任何自研模块：代码里没有对
-`product_variant_conversion` / `product_card_view` 的任何调用，卸载它们不影响本模块的参考号与母型号字段。
+`product_variant_conversion` / `product_card_view` 的任何调用，卸载它们不影响本模块的参考号与产品编号。
 
-**对外提供的接口**（另外两个模块可选消费，都不在本模块的 `depends` 里）：
+**本模块是「提供方」，且接口就是原生字段**：产品编号被叠加进原生 `product.template.default_code`
+的 compute，因此消费方**不需要认识本模块**：
 
 | 消费方 | 用途 | 本模块要配合什么 | 消费方缺席时 |
 |--------|------|------------------|--------------|
-| [`product_variant_conversion`](../product_variant_conversion/README.md) | 「单变体 → 多变体」时把原变体编号**上移**进 `base_reference`（母型号的唯一数据来源） | 不需要代码配合：`base_reference` 是普通存储字段，写它就是写它 | **母型号不会自动产生**：多变体产品的母型号需在产品表单人工补录；单变体产品的编号仍只落在变体上 |
-| [`product_card_view`](../product_card_view/README.md) | 多变体产品的卡片上显示母型号 | 不需要代码配合：对方按字段存在性软探测 | 无影响（卡片编号回退 `default_code`） |
+| [`product_card_view`](../product_card_view/README.md) | 卡片编号栏显示产品编号 | 不需要：卡片只读原生 `default_code` | 无影响（卡片显示原生编号） |
+| [`product_variant_conversion`](../product_variant_conversion/README.md) | 与本模块**零耦合**：转换只做「按归属复用既有变体」，不碰编号与参考号行（`19.0.5.3.0` 起） | 不需要 | 无影响：单变体产品的编号两处同值、转换后产品编号不变、变体编号也原样保留 |
+| 任何第三方模块 | 显示 / 搜索产品编号 | 不需要：读原生 `default_code`（产品表单 `Ref.`、列表、`display_name`、搜索都能命中） | 无影响 |
 
-> 母型号是**被写方**：本模块定义字段与契约（单变体不写、多变体独立存储，见 L1.3），
-> 具体「什么时候写」由 `product_variant_conversion` 负责。因此在本模块的测试里只钉住字段契约
-> （`tests/test_base_reference.py`），转换行为由那个模块自己钉。
+> 设计取向：**接口落在原生字段上**（而不是让对方探测本模块的自有字段）——
+> 消费方零耦合，本模块也只在 `tests/test_base_reference.py` 里钉住自己的字段契约。
 
 ---
 
@@ -236,9 +232,10 @@ odoo -d <db> -u product_reference --stop-after-init
 > `19.0.2.2.0` 完成参考号页顶部原生 `Reference` 统一编辑，T-008）。
 > 完整验收记录见 `CHANGELOG.md` →「验收记录（T-011）」/「交付记录（T-011）」。
 > `19.0.2.5.1`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 + 分类「产品」），目标环境已验收通过；记录见 `CHANGELOG.md` →「验收记录（T-013）」。
-> `19.0.2.6.0` / `19.0.2.7.0`（2026-09-22，T-033）新增母型号 `base_reference` 并定下写入策略
-> （单变体只写变体、转多变体时上移；`19.0.2.7.0` 清理旧镜像值）：**本地已验证**
-> （开发库升级实测、旧镜像值清理 22 条、中文标签落库），**待目标环境验证**。
+> `19.0.2.6.0` ~ `19.0.3.0.0`（2026-09-22 ~ 09-23，T-033 / T-035）产品级编号 `base_reference`：
+> `19.0.3.0.0` 起**叠加进原生 `default_code` 的 compute**（优先级最高）、单变体产品两处同值、
+> 产品级与变体级参考号都可见：**本地已验证**（开发库实测：单变体回填 23 条、存储列对齐 1 条、
+> 卡片与原生搜索均显示产品编号、契约测试 6 项、跨模块 52 项 0 失败），**待目标环境验证**。
 
 | 验证项 | 期望 | 结果 |
 |--------|------|------|
@@ -250,7 +247,7 @@ odoo -d <db> -u product_reference --stop-after-init
 | 新建未保存产品 | 先加参考号再保存产品，保存后参考号落库且索引已同步 | 通过 |
 | 徽标 tooltip | 悬停「+N」徽标显示参考号清单（中英双语各验一遍） | 通过 |
 | 只读态 | 只显示 Reference 文本与徽标 tooltip，无输入框与「+」 | 通过 |
-| 多变体不共用 | 多变体产品的产品表单隐藏 `Ref.` 与额外参考号入口（改显示母型号）；变体 A 加的参考号不出现在变体 B | 通过 |
+| 两层参考号各自独立 | 产品表单与变体表单各显示自己那一层（`19.0.3.0.0` 起多变体产品也显示产品级）；变体 A 加的参考号不出现在变体 B | 通过（`19.0.3.0.0` 起按新规则，待目标环境复验） |
 | 变体新增行 | 变体表单新增参考号行不报「不能同时归属产品与变体」 | 通过 |
 | 变体搜索 | 订单行选产品输入变体参考号 / 产品共享参考号都能命中；变体列表命中时 name 附加提示 | 通过 |
 | 变体参考号在产品列表可搜 | 在变体里加的参考号，Products 搜索框 / 独立「参考号」搜索项 / Many2one 都能命中并附加提示 | 通过 |
@@ -260,17 +257,17 @@ odoo -d <db> -u product_reference --stop-after-init
 | 索引与约束 | `product_template__reference_code_index_index`、`product_product__variant_reference_code_index_index`（trigram）与两条 `UNIQUE` 存在 | 通过 |
 | 应用列表中文名（19.0.2.5.1） | 中文环境「应用」搜 `product_reference`，卡片标题显示「产品参考号」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 | 通过 |
 
-### 母型号 `base_reference`（`19.0.2.6.0` / `19.0.2.7.0`，T-033）
+### 产品级编号 `base_reference`（`19.0.2.6.0` ~ `19.0.3.0.0`，T-033 / T-035）
 
 | 验证项 | 期望 | 结果 |
 |--------|------|------|
-| 升级与清理 | `odoo -d <db> -u product_reference --stop-after-init` 不报错；`19.0.2.7.0` 日志出现 `cleared the mirrored base_reference of N single-variant product(s)`，升级后单变体产品的 `base_reference` 一律为空（编号只在变体上） | **本地通过**（开发库实测：22 条旧镜像值全部清空、0 条残留）；目标环境待验证 |
-| 单变体产品表单 | 只显示 `Ref.` 输入框；填入 `G001` 保存后，**只有变体** `default_code` 为 `G001`，产品 `base_reference` 保持为空 | **本地通过**（自动化用例 `test_single_variant_reference_moves_to_the_product_base_reference`）；目标环境待验证 |
-| 多变体产品表单 | 只显示 `Base Ref.` 输入框（无 `Ref.`、无「+」）；填入 `G001` 保存后产品母型号为 `G001`，各变体编号不受影响 | 目标环境待验证 |
-| 多变体产品录入搜索 | Products 搜索框 / 独立「Reference」搜索项 / 销售订单行选产品输入 `G001` 均能命中该产品及其各变体 | 目标环境待验证 |
-| 转多变体时上移 | 单变体产品（编号 `G001`）加属性保存后：产品母型号 = `G001`，原变体与新建变体的编号都为空（由用户按变体填 `G001-WT` / `G001-BK`） | **本地通过**（自动化用例同上）；目标环境待验证 |
-| 中文标签 | 中文界面字段标签显示「母型号」（`Base Ref.` / `Base Reference` 均已译），help 文案为「单变体产品不写这个字段……」 | **本地通过**（`ir_model_fields.field_description` / `help` 的 `zh_CN`）；目标环境待验证 |
-| 列表列 | 产品列表列选择器里出现 `Base Reference`（默认隐藏） | 目标环境待验证 |
+| 升级与回填 | `odoo -d <db> -u product_reference --stop-after-init` 不报错；日志出现 `backfilled base_reference for N single-variant product(s)` 与 `aligned the stored default_code of M product(s)` | **本地通过**（开发库实测：回填 23 条、对齐 1 条）✓ |
+| 单变体产品表单 | 只显示 `Ref.`；填入 `G001` 保存后，`base_reference` 与那条变体的 `default_code` **都是 `G001`** | **本地通过**（契约测试 `test_single_variant_main_reference_updates_both_places`）✓ |
+| 多变体产品表单 | 只显示 `Ref.`（值 = 产品编号）+「+」；填入 `G001` 保存后只有 `base_reference` 变，各变体编号不受影响 | **本地通过**（契约测试）；界面待目标环境验证 |
+| 编号在所有原生口径可见 | 产品列表 `Reference` 列 / `[编号] 名称` / 列表搜索 / Many2one 都显示多变体产品的产品编号 | **本地通过**（开发库实测 `default_code = 'AM-235'` 可被原生搜索命中）；界面待目标环境验证 |
+| 卡片视图 | 多变体产品的卡片编号栏显示产品编号（`product_card_view` 只读原生 `default_code`） | **本地通过**（payload 实测 `reference = 'AM-235'`）；界面待目标环境验证 |
+| 变体侧改编号 | 单变体产品在变体表单改 `Ref.`，产品级编号跟着变；多变体产品改变体编号时产品编号不动 | **本地通过**（契约测试）；目标环境待验证 |
+| 中文标签 | 中文界面字段标签显示「产品编号」，help 为「模板自身的产品编号……」 | **本地通过**（`ir_model_fields.field_description` / `help` 的 `zh_CN`）✓ |
 
 ### 历史验收项（`19.0.2.2.0` 及更早，页签时代，仅供参考）
 
@@ -325,8 +322,9 @@ odoo -d <db> -u product_reference --stop-after-init
 - 改参考号归属 / 新增一类主人（如按公司维度）：先改 `product.reference.code` 的
   `_check_single_owner` 与两条 `UNIQUE`，再补对应主人的冗余索引字段与 `_search_display_name`
 - 标签 `Ref.` 中英一致：不要给 `i18n/zh_CN.po` 里的 `Ref.` 换成中文译文
-- 验收回归点（改完必跑）：多变体场景（产品表单整块隐藏 + 变体各自一份）、
-  搜索覆盖（产品能搜到变体参考号、变体能搜到产品共享参考号）、
+- 验收回归点（改完必跑）：**模板级 `default_code` 的 compute / inverse 行为**
+  （单变体两处同值、多变体只写产品编号，见 L1.3）、两层参考号都可见、
+  搜索覆盖（产品能搜到变体参考号、变体能搜到产品共享参考号与产品编号）、
   删除产品 / 变体后参考号行级联清理与索引重算
 
 ---

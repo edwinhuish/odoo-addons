@@ -100,14 +100,22 @@ export class ProductCardRecord extends KanbanRecord {
         );
     }
 
-    /** 当前展示口径：有选中变体用变体，否则用模板 */
+    /**
+     * 产品编号：**始终取产品级编号**（payload 的模板层 `reference`），不随选中变体切换。
+     *
+     * 该值就是原生 `product.template.default_code`：单变体产品是那条变体的编号，
+     * 多变体产品是产品编号（由 `product_reference` 叠加进 `default_code` 的 compute，
+     * 本模块不需要知道它存在）；两者都没有时才显示 `—`。
+     *
+     * 卡片代表「产品」，编号栏因此是**产品编号**；变体自己的编号属于变体，
+     * 选中变体时显示在下面的已选组合文本里（见 `selectionText`）。
+     */
     get referenceText() {
         const data = this.payload;
         if (!data) {
             return "";
         }
-        const variant = this.currentVariant;
-        return (variant?.reference || data.reference || "") || "—";
+        return data.reference || "—";
     }
 
     /** 在手数量文本（模板层=全部变体和；变体层=该变体在手；不可追踪显示 —） */
@@ -124,7 +132,12 @@ export class ProductCardRecord extends KanbanRecord {
         return formatQuantity(value);
     }
 
-    /** 已选组合的展示文本（如 "Blue / Large"），仅选中变体时显示 */
+    /**
+     * 已选组合的展示文本（如 "Blue / Large · FURN_6666"），仅选中变体时显示。
+     *
+     * 选中变体时追加上**该变体自己的编号**（与产品编号相同才不追加，避免重复显示）：
+     * 编号栏固定为产品编号，变体编号在这里出现，两者互不顶替、信息都不丢。
+     */
     get selectionText() {
         const variant = this.currentVariant;
         if (!variant) {
@@ -139,7 +152,14 @@ export class ProductCardRecord extends KanbanRecord {
                 names.push(value.name);
             }
         }
-        return names.length ? names.join(" / ") : "";
+        if (!names.length) {
+            return "";
+        }
+        const label = names.join(" / ");
+        const variantReference = variant.reference || "";
+        return variantReference && variantReference !== data.reference
+            ? `${label} · ${variantReference}`
+            : label;
     }
 
     /**

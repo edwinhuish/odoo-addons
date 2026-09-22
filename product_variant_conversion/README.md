@@ -496,9 +496,9 @@ task test -- product_variant_conversion,stock,sale_management --test-tags=/produ
 | `-i` / `-u` 安装与升级 | 无报错，模型、安全规则、视图与前端资源加载成功 | 通过（dev 库） |
 | 自动化测试（43 项，只装 `product`） | 全部通过 | 通过（0 failed / 0 error） |
 | 自动化测试（43 项，加装 `stock` + `sale_management`） | 全部通过 | 通过（0 failed / 0 error） |
-| 自动化测试（43 项，加装 `product_dimension`） | 全部通过（含「新变体继承尺寸」与「加取值时尺寸落到对应变体」两个集成用例） | 通过（0 failed / 0 error） |
-| 自动化测试（43 项，加装 `product_reference` + `sale_management`） | 全部通过（含「共享参考号交接给被保留变体」2 项） | 通过（0 failed / 0 error） |
-| 未装 `product_reference` 时转换仍可用 | 转换成功，不因缺少可选模块而报错 | 通过（自动化测试 43 项 0 error；修复前同一跑法 33 error） |
+| 自动化测试（42 项，加装 `product_dimension`） | 全部通过（含「新变体继承尺寸」与「加取值时尺寸落到对应变体」两个集成用例） | 通过（0 failed / 0 error） |
+| 自动化测试（42 项，加装 `product_reference` + `sale_management`） | 全部通过（含「参考号行一行都不搬」1 项） | 通过（0 failed / 0 error） |
+| 未装 `product_reference` 时转换仍可用 | 转换成功，不因缺少可选模块而报错 | 通过（自动化测试 42 项 0 error；修复前同一跑法 33 error） |
 | 加取值时来源映射准确 | 2 条原变体 + 给已有属性加取值 → 新变体各自挂到对应原变体（`variant_origin_id` 与台账谱系一致） | 通过（自动化测试 `test_adding_a_value_maps_new_variants_to_the_right_origin`） |
 | 加属性但未确认归属 | 写入被拒绝，产品与变体均不变 | 通过（自动化测试） |
 | 预览接口 | 给出是否正确需要确认、改动后的组合、既有变体的默认归属；自己不改库 | 通过（自动化测试） |

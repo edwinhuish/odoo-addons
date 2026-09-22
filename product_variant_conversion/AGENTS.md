@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.5.2.1`（19.0.5.2.1：对可选模块 `product_reference` 的了解收敛进「可选集成适配层」三个方法 + 取模型改 `env.get()` + `getattr` 探测对方方法 + 新增降级用例；19.0.5.2.0：编号上移改为**覆盖式、唯一来源**，不再与产品侧已有值比对；19.0.5.1.0：单变体产品转多变体时，把原变体的内部参考号上移成产品母型号、并清空变体编号；19.0.5.0.0：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；19.0.4.1.1 起含参考号交接，`19.0.4.1.0` 起含尺寸继承）
+- 当前版本：`19.0.5.3.0`（19.0.5.3.0：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -402,16 +402,12 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
     重量 / 内部参考号显示空 / 0 是**原生语义，不是数据丢失**（真值在承载它的那条变体上）；
   - 因此**变体级字段不需要任何数据迁移**：值本来就在那条唯一的 `product.product` 记录上，而本模块保留该记录。
     由测试 `test_field_storage_layers_match_the_audit()` / `test_variant_level_values_stay_on_the_kept_variant()` 钉住；
-  - **唯一的例外：内部参考号上移为产品母型号**（`19.0.5.1.0` 起，装了 `product_reference` 时）。
-    单变体产品的 `default_code` 就是产品型号（该模块**不在产品侧写镜像**，见其 AGENTS.md L1.3），
-    转成多变体后由 `product.template.base_reference` 承载，原变体上的编号被**清空**
-    （`_move_single_variant_reference_to_base_reference()`），好让每条变体各填自己的编号
-    （`G001` → `G001-WT` / `G001-BK`）。三条边界：
-    ① **只在转换前恰好一条变体时**处理（本来就是多变体产品，变体编号各自独立，转换一个都不动）；
-    ② 上移是**覆盖式**的（`19.0.5.2.0`）：变体编号就是产品型号，产品侧残留值以它为准，被覆盖时记日志；
-    ③ **变体没有编号时什么都不做** —— 产品侧若有残留母型号（「多变体退回单变体」的遗留），
-    保留比误删安全。测试：`test_single_variant_reference_moves_to_the_product_base_reference()` /
-    `test_variant_reference_wins_over_a_leftover_base_reference()`（未装该模块时自动跳过）；
+  - **变体上的值一律原样保留（`19.0.5.3.0` 起）**：`default_code` / `barcode` / 成本 / 体积 / 重量
+    这些字段的真身在变体上，转换只做「按归属复用既有变体」，**不读也不改写**它们；
+    产品级编号（`product.template.base_reference` / 模板级 `default_code`）同样不碰 ——
+    那是 `product_reference` 自己的两层约定（单变体产品两处同值、多变体产品只写产品级），
+    与本模块无关（见该模块 AGENTS.md L1.3）。历史：`19.0.5.1.0`～`19.0.5.2.1` 曾把原变体编号
+    「上移」成产品编号并清空变体编号，`19.0.5.3.0` 按「模块间彻底解耦」的要求移除；
   - **新变体的继承策略**（`19.0.3.2.0` 起默认开启，系统参数 `product_variant_conversion.inherit_variant_data`）：
     按谱系来源（`variant_origin_id`）复制 `standard_price` / `volume` / `weight`；**`default_code` 与 `barcode` 刻意不复制**
     （参考号受 `product_reference` 的 L1 约束「多变体不共用」约束、条码有 `_check_barcode_uniqueness()` 唯一性约束）；
@@ -423,15 +419,16 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
     与哪条原变体一致就跟哪条，多个候选取「最具体」的，仍并列才判为不唯一。**关键点**：本次新加的取值不参与比对，
     否则「给已有属性加取值」时新变体永远匹配不上任何原变体（旧算法即如此，多条原变体时新变体一律无来源，
     尺寸 / 体积 / 成本随之丢失）；因此也不再需要「改动前的属性行快照」这个参数。
-  - **可选模块不得让主流程崩**：`_transfer_shared_references_to_original()` 在未装 `product_reference` 时
-    只按字段判断跳过，**不要**在那个分支里 `self.env["product.reference.code"]`（模型不存在 → `KeyError`，
-    每次转换都会失败，实测 HEAD 上 33/43 条用例 error）。返回硬依赖模型（`product.product`）的空记录集即可。
-  - **可选模块的了解必须收在「可选集成适配层」**（`19.0.5.2.1` 起，`models/product_template.py` 里那段注释）：
-    字段名 / 模型名只准出现在 `_has_base_reference_field()` / `_has_shared_reference_lines()` /
-    `_get_reference_code_model()` 三个方法里，取模型一律用 `env.get()`（模型缺失返回 `None`）、
-    调对方的方法（如 `_sync_reference_index()`）一律 `getattr` 探测 —— 别依赖「字段在 ⟺ 方法在」这种
-    隐含前提。任何模块组合下转换都必须成功，降级分支由
-    `test_reference_handling_degrades_gracefully_without_product_reference()` 在两种配置下分别断言。
+  - **禁止与 `product_reference` 耦合**（`19.0.5.3.0` 起）：本模块**不读不写**该模块的任何字段
+    （`base_reference` / `reference_code_line_ids` / `variant_reference_code_line_ids`）、也不调用它的
+    方法 —— 转换只做「按归属复用既有变体」，参考号与原变体编号原样留在原主人身上
+    （产品级留产品、变体级留变体，两层在各自表单上都可见）。新增功能时若发现「需要对方的字段」，
+    先问「这件事是否属于对方」：属于对方就由对方做（例如产品级编号的 compute 由它叠加进
+    `default_code`），本模块只读归属即可。
+  - **可选模块不得让主流程崩**（适用于 `product_dimension` / `stock` / `sale` 等）：读字段前判
+    `_fields`、取模型用 `env.get()`（未注册返回 `None`）、调对方方法用 `getattr` 探测，
+    任何模块组合下转换都必须成功。历史教训：早期版本在未装 `product_reference` 时于跳过分支里
+    `env["product.reference.code"]` → `KeyError` → 每次转换都失败（HEAD 上 33/43 条用例 error）。
   - ⚠ **本模块会拦截改属性的 `write()`**（功能本身）：其它模块的代码 / 测试若需要程序化产生多变体产品，
     请把属性行放进 `create()`（`create` 不拦截）—— `product_reference` / `product_card_view` 的测试
     就是这么写的，别改回「先建单变体、再 `write` 属性行」。
@@ -442,13 +439,13 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   否则会触发该模块「尺寸不齐 → Volume 归 0」的规则，把继承来的体积冲掉
   （由 `test_new_variants_inherit_variant_dimensions_when_installed()` 钉住）。
   `T-021`（原 `product_packing` 的尺寸同步在多变体下失效）已由该模块的 `19.0.2.0.0` 重写解决。
-- **跨模块协同：产品级共享参考号（`product_reference`）的交接**（`19.0.4.1.1` 起）：该模块的参考号有
-  两层归属（产品级共享 `product_tmpl_id` / 变体级 `product_id`，二选一），且「多变体不共用」——
-  产品表单在 `product_variant_count > 1` 时整块隐藏参考号区域。单变体产品上录入的正是在产品级那一层，
-  转换后两处都看不到它，等于失联。故步骤 ⑦.5 调 `_transfer_shared_references_to_original()` 把这些行
-  改挂到**被保留的原变体**上，并显式重算源产品的 `reference_code_index`（行侧 `write` 只同步新主人）。
-  保守分支：原来就有多条变体时不猜（保持原样 + 日志）；变体上已有同码时产品级那条留原地（避免撞
-  `UNIQUE(product_id, reference_code)`）。未安装该模块时按字段判断跳过。
+- **与 `product_reference` 的关系：零耦合**（`19.0.5.3.0` 起）：历史上曾做过两件事 —— 把产品级共享
+  参考号「交接」给被保留的变体（`19.0.4.1.1`）、把原变体编号「上移」成产品编号（`19.0.5.1.0`）——
+  两者都要求本模块知道对方的字段与归属规则，且各自都能被对方的模块内改动打断。
+  `19.0.5.3.0` 全部移除：对方已把产品级那一层改成**永远可见**（两层各自独立），
+  产品级编号也改由**对方叠加进原生 `default_code` 的 compute**，因此本模块只需要
+  「保留既有变体记录」这一件事，其余一概不碰。测试 `test_references_are_left_untouched_by_the_conversion()`
+  钉住「转换一行参考号都不搬」（未装对方模块时自动跳过）。
 - ⚠ **共享供应商价格会抹平变体级价差**：同一供应商对不同变体给不同价时，共享后全是模板级同级记录，
   采购取价按 `price_discounted → sequence → id`（`product.product._select_seller`）只取一条，另一条静默失效。
 

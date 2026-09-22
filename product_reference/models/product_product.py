@@ -12,9 +12,10 @@
 ``product_tmpl_id``，随后又被 One2many inverse 回填 ``product_id``，触发「参考号不能同时
 归属产品与变体」的约束报错。故对变体参考号行的 create 命令无条件置空产品归属。
 
-本模块**不**在变体上改 ``default_code`` 时顺手写产品母型号（``base_reference``）：
-单变体产品的型号真身就是这条变体，产品侧不需要镜像；单变体 → 多变体时由
-``product_variant_conversion`` 负责把编号上移成母型号（见模块 AGENTS.md L1.3）。
+另：在**单变体产品**的这条变体上改 ``default_code`` 时，要同步产品级编号
+``product.template.base_reference``（见 ``_sync_single_variant_base_reference``）——
+模板级 ``default_code`` 的 compute 里 ``base_reference`` 优先，不同步就会显示旧值。
+多变体产品的变体编号与产品编号无关，不同步。
 """
 
 from odoo import _, api, fields, models
@@ -71,7 +72,25 @@ class ProductProduct(models.Model):
 
     def write(self, vals):
         self._strip_variant_reference_template_default([vals])
-        return super().write(vals)
+        res = super().write(vals)
+        if "default_code" in vals:
+            self._sync_single_variant_base_reference()
+        return res
+
+    def _sync_single_variant_base_reference(self):
+        """单变体产品上改这条变体的编号时，同步产品级编号 ``base_reference``。
+
+        单变体产品的「主编号」在产品表单（`product.template._set_default_code()` 同时写两处）；
+        从**变体**这边改编号（变体表单 / 变体列表 / 变体导入 / API）时，产品级编号必须跟着走，
+        否则模板级 ``default_code``（compute 里 ``base_reference`` 优先）会读到旧值。
+        多变体产品的变体编号与产品编号无关，**不同步**。
+        """
+        if "base_reference" not in self._fields:      # product_reference 未安装
+            return
+        for tmpl in self.product_tmpl_id:
+            variants = tmpl.product_variant_ids
+            if len(variants) == 1 and tmpl.base_reference != variants.default_code:
+                tmpl.base_reference = variants.default_code
 
     def _strip_variant_reference_template_default(self, vals_list):
         """把 ``variant_reference_code_line_ids`` 的 create 命令子行产品归属强制置空。"""

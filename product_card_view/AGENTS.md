@@ -19,8 +19,8 @@
 - 新增 HTTP 控制器：`/product_card/payload`（`auth="user"`，内部 JSON 接口，`sudo` 读数据）
 - 自定义前端：`views` 注册表 **`card`**（新 view type，`kanbanView` 派生）
 - 主依赖：`stock`（`product` 经其传递依赖）
-- 可选集成（**不在 `depends`**）：`product_image`（多图图库）、`product_reference`（卡片编号取产品母型号）、`sale` / `purchase`（注入 Card 入口）
-- 当前版本：`19.0.2.1.2`（19.0.2.1.2 可选依赖探测收敛进 `_get_optional_base_reference()` 并补 payload 降级用例 `tests/test_product_card_payload.py`；19.0.2.1.1：母型号只对**多变体**产品生效 —— 单变体产品的编号真身在变体上，残留母型号不得盖掉它；19.0.2.1.0 卡片编号优先读产品母型号 `base_reference` —— `product_reference` 可选，按字段存在性软适配；19.0.2.0.7 修复切换 filter / group by 后卡片空白、过宽、无间隙 —— 分组取数 + payload 填充时机 + 分组布局，见 L2 P6；19.0.2.0.6 注入改为读取时计算 —— 覆盖 `_compute_views()`，解决「全新安装时 sale / purchase 未装导致漏注入」；19.0.2.0.5 完成 T-025 Card 按钮名国际化、19.0.2.0.4 产品列表默认 Card）
+- 可选集成（**不在 `depends`**）：`product_image`（多图图库）、`sale` / `purchase`（注入 Card 入口）
+- 当前版本：`19.0.2.1.3`（19.0.2.1.3 与 `product_reference` 彻底解耦 —— 编号只读原生 `default_code`、删除可选字段探测；并修复编号栏被选中的变体编号顶替：编号栏固定为产品编号、变体编号改显示在已选组合行；19.0.2.1.2 可选依赖探测收敛进适配层并补 payload 用例；19.0.2.1.1 母型号只对多变体产品生效；19.0.2.0.7 修复切换 filter / group by 后卡片空白、过宽、无间隙 —— 见 L2 P6；19.0.2.0.6 注入改为读取时计算 —— 覆盖 `_compute_views()`；19.0.2.0.5 完成 T-025 Card 按钮名国际化、19.0.2.0.4 产品列表默认 Card）
 
 ---
 
@@ -50,19 +50,22 @@
 
 5. **默认口径：模板层；点选切变体**
    - 默认显示模板名 / 模板编号 / 全部变体在手总量；选择变体后切为对应变体信息
-   - 编号的取值链固定为「**变体 `default_code` → 产品母型号 `base_reference` → 模板 `default_code`**」，
-     产品台账在 `_get_product_card_view_payload()` 里解析好再下发；前端只做 `variant?.reference || data.reference`
-   - **母型号只在模板有多个 active 变体时才参与**：单变体产品的编号真身在那条变体上
-     （`product_reference` 不在产品侧写镜像），产品上的残留值（旧镜像 / 退回单变体的遗留 / 外部写入）
-     **禁止**盖掉变体编号
-   - `base_reference` 来自可选模块 `product_reference`，**必须按字段存在性判断**（`"base_reference" in
-     env["product.template"]._fields`，与 `product_image` 的 `env.get` 同一套路），禁止写进 `depends`
-   - **可选模块的接入点必须收在一处**：`base_reference` 只准出现在 `_get_optional_base_reference()`
-     里（可选集成适配层），别处不许直接读写该字段 —— 对方改名 / 改字段时只改那一处；
-     `product_image` 同理收在 `env.get("product.image.gallery")` 那一段
-   - 降级行为由 `tests/test_product_card_payload.py` 在「装 / 不装 `product_reference`」两种配置下
-     分别断言（编号取值链、残留母型号被忽略），改编号逻辑必须同步改这些用例
-   - 违反后果：多变体产品（模板 `default_code` 恒为空）在卡片上编号一栏空白；或本模块被迫硬依赖 `product_reference`
+   - **编号栏固定为产品编号，禁止随选中变体切换**（`19.0.2.1.3` 修的就是这个）：
+     模板层 `reference` = 原生 `product.template.default_code`（单变体产品=那条变体编号，
+     多变体产品=产品编号，由 `product_reference` 叠加进该字段的 compute）；
+     变体自己的编号显示在**已选组合行**（`selectionText` → `Blue / Large · FURN_6666`），
+     与产品编号互不顶替 —— 卡片代表「产品」，变体属性与变体编号属于变体
+   - 变体层 `variants[].reference` = 变体 `default_code`（为空则回退模板 `reference`），
+     只供已选组合行使用；取值链在 `_get_product_card_view_payload()` 里解析好再下发
+   - **禁止引用任何自研模块的字段 / 方法**（`base_reference` 等一律不许出现）：本模块只认原生
+     `default_code`，对方怎么算出来的不关它的事；因此**不需要**任何「可选字段存在性判断」，
+     也不许把自研模块写进 `depends`
+   - `product_image` 的图库是唯一例外（`env.get("product.image.gallery")`）：那是**模型**级可选集成，
+     收在 `env.get` 那一段里；模型不存在时只显示主图
+   - 编号行为由 `tests/test_product_card_payload.py` 钉住：只用原生 API 设置编号，
+     「多变体产品能否有产品编号」按 `_multi_variant_product_can_carry_a_reference()` 跳过，
+     装 / 不装 `product_reference` 两种配置都要跑通
+   - 违反后果：编号栏随变体切换而变（用户以为产品编号丢了）；或本模块被迫硬依赖 `product_reference`
 
 6. **每页只发一次数据请求，payload 必须存在非 reactive 容器**
    - 由 `ProductCardRenderer` 的 `onWillStart` / `onWillUpdateProps`（渲染前）+ `useEffect`

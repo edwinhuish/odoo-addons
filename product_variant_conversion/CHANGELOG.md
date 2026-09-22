@@ -3,6 +3,68 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.5.3.0] - 2026-09-23（彻底与 product_reference 解耦：转换不再改变体编号、不再交接参考号）
+
+> 修订日期：2026-09-23 ｜ 类型：行为调整（+y）｜ 影响文件：`models/product_template.py` /
+> `models/product_variant_conversion.py` / `tests/test_product_variant_conversion.py` /
+> `i18n/zh_CN.po` / `__manifest__.py` / `AGENTS.md` / `README.md`
+
+### 优化目标
+
+按要求让本模块**彻底与 `product_reference` 解耦**：不再读写对方的任何字段
+（`base_reference` / `reference_code_line_ids` / `variant_reference_code_line_ids`）、
+不再判断对方是否安装。转换只做它自己的事 —— **按用户确认的归属复用既有变体**，
+`product.product` 上的值（含 `default_code`）**原样保留**。
+
+移除的两处历史耦合：
+
+| 历史行为 | 引入版本 | 为什么要移除 |
+|----------|----------|--------------|
+| 把单变体时期的编号「上移」成产品编号、清空原变体编号 | `19.0.5.1.0`～`19.0.5.2.1` | 需要知道对方的字段与「单变体镜像」约定；对方已改为「单变体两处同值、产品编号由自己叠加进 `default_code` 的 compute」，本模块不该参与编号归属 |
+| 把产品级共享参考号「交接」给被保留的变体 | `19.0.4.1.1`～`19.0.5.2.1` | 前提是「对方在多变体时隐藏产品级参考号」，该前提已被对方 `19.0.3.0.0` 取消（两层各自独立、都可见），交接反而把行搬离了它的归属层 |
+
+### 变更
+
+1. 删除步骤 ⑤.5 `_move_single_variant_reference_to_base_reference()` 与 ⑦.5
+   `_transfer_shared_references_to_original()` 及其调用、以及 `19.0.5.2.1` 引入的
+   「可选集成适配层」三个方法（`_has_base_reference_field()` / `_has_shared_reference_lines()` /
+   `_get_reference_code_model()`）。
+2. `_convert_to_multi_variant()` 的步骤编号顺延（⑤ 之后直接 ⑥ 谱系、⑦ 继承、⑧ 价格）；
+   转换结果里**没有任何一处**会读写 `default_code` 或参考号行。
+3. 谱系字段 `result_default_code` 的 help 文案回到原义（「参考号属于变体，转换不会改动它」），
+   manifest 描述里那条「编号会被上移」的说明改为「变体级数据原样保留」，两者同步 `zh_CN.po`。
+4. 测试：删除两条母型号用例与降级用例；两条参考号交接用例合并为
+   `test_references_are_left_untouched_by_the_conversion()`（转换一行参考号都不搬）；
+   `test_variant_level_values_stay_on_the_kept_variant()` 恢复「编号 / 条码 / 成本 / 体积 / 重量
+   一个都没变」的断言，`test_product_data_stays_on_the_variant_that_keeps_the_product()` 恢复无条件断言。
+
+### 影响
+
+- 单变体 → 多变体后：被保留的那条变体**仍带着原来的编号**（如 `KEEP-001`），新变体没有编号 ——
+  用户按变体自己填；产品级编号由 `product_reference` 负责（单变体产品两处同值，转换后产品编号不变、
+  变体编号也还在，两层互不影响）
+- 产品级参考号行**留在产品上**（不再被搬到某条变体），产品表单与变体表单各自维护自己那一层
+- 未装 `product_reference` 时行为完全不变（本来就不参与）
+- 无数据结构变化、无迁移；测试 46 → **42 项**（删除 4 条、合并 2 条为 1 条）
+
+### 文档
+
+- 模块 `AGENTS.md`（L2：删除编号上移 / 参考号交接两段，改为「与 product_reference 零耦合」+
+  「变体上的值一律原样保留」）、`README.md`（属性归属审计表、可选集成表、「新变体不会自动获得的东西」）、
+  本条目
+- 根 `README.md` 解耦矩阵与版本行、`TODO.md`（`T-035`）同步
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant_conversion`（未装 `product_reference`） | 42 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,product_reference` | 48 项 0 failed / 0 error（含参考号「原样不动」用例）✓ |
+| 三模块同装 + `stock` | 见该组合的回归记录 ✓ |
+| 目标环境 | 弹窗交互与界面复验**待验证** |
+
+---
+
 ## [19.0.5.2.1] - 2026-09-22（对可选模块的了解收敛进适配层 + 降级用例）
 
 > 修订日期：2026-09-22 ｜ 类型：优化（+z）｜ 影响文件：`models/product_template.py` /

@@ -24,9 +24,12 @@ title / reference / on hand、多变体产品在卡片上直接按属性切变�
   - 未选变体：模板主图 + 模板共享图库（`product.image.gallery`）；
   - 选中变体：变体主图（无变体图时由 Odoo 原生回退模板主图）+ 变体专属图库；
   - 模板层与变体层两套图**互不叠加**。
-- **信息区**：卡片下方显示 `title`（产品名）、`reference`（产品编号）与 `on hand`（在手数量）；
-  默认口径为模板层（模板编号 + 全部变体在手总量），点选变体后切为该变体的编号与该变体在手。
-  编号取值链见下文「默认口径」。
+- **信息区**：卡片下方显示 `title`（产品名）、`reference`（**产品编号**）与 `on hand`（在手数量）。
+  **编号栏固定为产品编号，不随选中变体切换**：单变体产品是那条变体的编号，多变体产品是产品编号
+  （原生 `default_code`）。默认口径为模板层（产品编号 + 全部变体在手总量），
+  点选变体后在手切为该变体、编号栏不变。
+- **已选组合行**：选中变体时显示所选属性，并追加上**该变体自己的编号**
+  （如 `Blue / Large · FURN_6666`）—— 产品编号与变体编号各占其位，互不顶替。
 - **变体按钮行**：多变体产品在卡片底部按属性分行（一属性一行）渲染按钮；点击即切到对应变体，
   图片 / 参考号 / 在手同步刷新。再次点击同一值可取消，回到模板层。
   不能与当前已选属性组合出变体的按钮自动禁用，避免点出“不存在的组合”。
@@ -45,13 +48,17 @@ title / reference / on hand、多变体产品在卡片上直接按属性切变�
 
 | 可选模块 | 接入点 | 提供什么 | 缺席时的降级行为 |
 |----------|--------|----------|------------------|
-| [`product_reference`](../product_reference/README.md) | `_get_optional_base_reference()`（读 `product.template.base_reference`，运行期判字段存在） | 多变体产品的**产品母型号**作为模板层编号 | 模板层编号回退原生 `default_code`（多变体产品的模板级 `default_code` 恒为空 → 卡片显示 `—`）；标题 / 图片 / 在手 / 变体按钮全部照常 |
 | [`product_image`](../product_image/README.md) | `env.get("product.image.gallery")` | 模板 / 变体图库的补充图 | 只显示主图（模板主图 / 变体主图） |
 | `sale` / `purchase` | `ir.actions.act_window._compute_views()` 按 `res_model` 注入 | 销售 / 采购 / 发票入口的 Card 视图 | Card 只出现在库存 / 产品入口，其它动作的 `views` 保持原样 |
 
+**编号不在这里的清单里**：卡片只读原生 `product.template.default_code`，
+多变体产品的产品编号由 [`product_reference`](../product_reference/README.md) 叠加进该字段的 compute
+（见下节「编号取值链」）—— 本模块**不读**它的任何字段，也就不存在「缺它怎么办」的问题。
+
 **本模块不对外提供接口**：`card` view type、`/product_card/payload` 路由都只被自己使用，
 没有其它模块引用（`AGENTS.md` → L1 第 1 条也禁止新增模型 / 字段 / 权限）。
-因此**装它或不装它，都不影响 `product_reference` 与 `product_variant_conversion`**。
+因此**装它或不装它，都不影响 `product_reference` 与 `product_variant_conversion`**；
+编号口径上它与 `product_reference` **零耦合**（`19.0.2.1.3` 起）。
 
 ---
 
@@ -134,12 +141,14 @@ title / reference / on hand、多变体产品在卡片上直接按属性切变�
 - **变体切换**：点击某属性值即选中；再点同一值取消该行选择（回到模板层）；
   切换后卡片高度可能变化，通过 `model.bus` 的 `pcv-resize` 事件通知渲染器下一帧重算瀑布流。
 - **打开产品**：点击卡片空白处打开该产品表单；图片箭头、变体按钮区（`.o_product_card__stop`）不触发打开。
-- **默认口径**：未选变体时显示模板名 / 模板编号 / 全部变体在手总和；
-  非库存追踪产品（服务等）在手显示 `—`。
-- **编号取值链**：变体 `default_code`（选中变体时）→ 产品母型号 `base_reference`（装了
-  [`product_reference`](../product_reference/README.md) **且模板有多个变体**时：多变体产品的模板
-  `default_code` 恒为空，母型号是唯一有值的那层）→ 模板 `default_code`。取值链在后端解析好再下发，
-  前端不做判断。**单变体产品不读母型号**：它的编号真身在那条变体上，产品上的残留值不该盖掉它。
+- **默认口径**：未选变体时显示模板名 / 产品编号 / 全部变体在手总和；
+  非库存追踪产品（服务等）在手显示 `—`。选中变体后在手切为该变体（编号栏不变）。
+- **编号取值链**（后端解析好再下发，前端只读字段）：
+  - **模板层 `reference`（编号栏显示的就是它，且不随选中变体变化）**：
+    原生 `product.template.default_code` —— 单变体产品=那条变体编号；多变体产品=产品编号
+    （由 [`product_reference`](../product_reference/README.md) 算进该字段；未装它时为空 → 显示 `—`）；
+  - **变体层 `variants[].reference`（供已选组合行显示）**：变体 `default_code`，
+    为空则回退模板 `reference`。
 
 ---
 
@@ -206,7 +215,7 @@ title / reference / on hand、多变体产品在卡片上直接按属性切变�
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `name` | `str` | 模板名称（卡片 title） |
-| `reference` | `str` | 模板层编号：产品母型号 `base_reference`（装了 `product_reference` **且模板有多个变体**时）优先，否则模板 `default_code`；变体未单独填编号时回退此值 |
+| `reference` | `str` | 模板层编号，**编号栏显示的就是它**（不随选中变体变化）：原生 `product.template.default_code` |
 | `tracked` | `bool` | 是否库存追踪（`is_storable`）。`false` 时在手显示 `—` |
 | `has_stock` | `bool` | `qty_available` 字段是否可用（依赖 `stock`），不可用时在手显示 `—` |
 | `on_hand_total` | `float \| null` | 全部 active 变体在手总量（模板层口径） |
@@ -220,7 +229,7 @@ title / reference / on hand、多变体产品在卡片上直接按属性切变�
 | `rows[].values[].html_color` | `str` | 颜色类属性的色值（无则空串） |
 | `variants` | `obj[]` | 本模板全部 active 变体 |
 | `variants[].id` | `int` | `product.product` id |
-| `variants[].reference` | `str` | 变体 `default_code`，为空则回退产品母型号 `base_reference`，再回退模板 `reference` |
+| `variants[].reference` | `str` | 该变体的编号（供**已选组合行**显示）：变体 `default_code`，为空则回退模板 `reference` |
 | `variants[].on_hand` | `float \| null` | 该变体在手数量 |
 | `variants[].values` | `obj` | 该变体的属性映射 `{attr_id: value_id}`，用于与按钮选择比对 |
 | `template_images` | `int[]` | 模板共享图库的 `product.image.gallery` id 列表（按 sequence 排）。**未装 `product_image` 时为空数组** |

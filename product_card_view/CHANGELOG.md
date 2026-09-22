@@ -8,6 +8,68 @@
 
 ---
 
+## [19.0.2.1.3] - 2026-09-23（与 product_reference 彻底解耦 + 修复编号栏被变体编号顶替）
+
+> 修订日期：2026-09-23 ｜ 类型：优化 / 修复（+z）｜ 影响文件：`static/src/js/product_card_record.js` /
+> `models/product_card.py` / `tests/test_product_card_payload.py` / `AGENTS.md` / `README.md` / `__manifest__.py`
+
+### 优化目标
+
+两件事一起做：
+
+1. **解耦**：本模块此前为了显示「多变体产品的产品编号」，运行期探测 `product_reference` 的
+   `base_reference` 字段（`_get_optional_base_reference()`）。按要求改为**只读原生字段**
+   —— 该模块已把产品编号叠加进 `product.template.default_code` 的 compute，卡片读原生
+   `default_code` 就能拿到，不需要知道任何自研模块存在；
+2. **修复**：`referenceText` 写成「先变体、后模板」（`variant?.reference || data.reference`），
+   在卡片上点选某个变体后，编号栏就从产品编号 `AM-235` 变成该变体编号 `FURN_6666` ——
+   看起来像「产品编号丢了」（用户实测反馈）。
+
+### 变更
+
+1. `_get_product_card_view_payload()` 删除 `_get_optional_base_reference()` 与 `base_reference`
+   探测，编号只读原生字段：模板层 = `template.default_code`；变体层 = `variant.default_code`
+   （为空回退模板值）。
+2. `referenceText` 改为**始终取产品级编号**（`data.reference`），不随选中变体切换；
+   `selectionText` 末尾追加上该变体自己的编号（与产品编号相同才不追加）。
+3. 测试 `tests/test_product_card_payload.py` 改写为**只用原生 API**（`product.default_code` /
+   `variant.default_code`），不再出现任何自研模块字段；「多变体产品能否有产品编号」按
+   `_multi_variant_product_can_carry_a_reference()` 跳过（未装 `product_reference` 时该场景不存在）。
+
+### 优化前后对比
+
+| 场景（多变体产品 `AM-235`，变体编号 `FURN_6666`） | 优化前 | 优化后 |
+|------|--------|--------|
+| 点选一个变体 | 编号栏变成 `FURN_6666`（产品编号「消失」） | 编号栏仍是 `AM-235`；已选组合行显示 `Blue / Large · FURN_6666` |
+| 未装 `product_reference` | 卡片探测字段不存在 → 回退 `default_code`（结果相同，但代码里有一处跨模块字段判断） | 代码里**没有任何**跨模块字段判断；多变体产品编号为空 → 显示 `—`（原生语义） |
+| 装了 `product_reference` | 卡片直接读 `base_reference` | 卡片读原生 `default_code`（对方把产品编号算进了它）—— 依赖方向从「本模块读对方」变成「对方算进原生字段」 |
+
+### 影响
+
+- 编号栏从此只表示**产品编号**，与「卡片代表产品、变体按钮代表变体」的布局语义一致；
+  变体编号仍可见（已选组合行），不丢信息
+- 本模块与 `product_reference` 之间**零代码耦合**（不读字段、不判存在性、不写 `depends`）；
+  多变体产品的产品编号由对方负责算进 `default_code`
+- **前端改动 → 升级后必须强刷浏览器**（Ctrl+F5）；后端 payload 只做减法
+- 多变体产品没有产品编号时仍显示 `—`：那是**数据**未填，在产品表单的 `Ref.` 里补录
+
+### 文档
+
+- 模块 `README.md`（信息区 / 默认口径 / 编号取值链 / payload 字段表 / 可选集成表）、`AGENTS.md`
+  （L1 第 5 条改为「只读原生字段 + 编号栏固定」）、本条目
+- 根 `README.md` 解耦矩阵与版本行、`TODO.md`（`T-035`）同步
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_card_view`（未装 `product_reference`） | 4 项 0 failed / 0 error，2 项按预期 skip ✓ |
+| `task test -- product_card_view,product_reference` | 10 项 0 failed / 0 error（编号栏与已选组合行的取值链均断言）✓ |
+| 三模块同装（`product_variant_conversion,product_reference,product_card_view`） | 见该组合的回归记录 ✓ |
+| 卡片显示（未选 / 选中变体两态、中英双语、强刷） | **目标环境待验证**（无头环境无法断言前端渲染） |
+
+---
+
 ## [19.0.2.1.2] - 2026-09-22（可选依赖探测收敛进适配层 + payload 降级用例）
 
 > 修订日期：2026-09-22 ｜ 类型：优化（+z）｜ 影响文件：`models/product_card.py` /

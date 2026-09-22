@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
-"""卡片 payload 的「可选集成」接口测试（编号这一层）。
+"""卡片 payload 的编号契约测试。
 
-`product_card_view` 不依赖任何自研模块（`depends` 只有 `stock`），卡片编号与图库都由可选模块
-补强。本文件钉住编号层的**接口契约与降级行为** —— 装了 / 没装 `product_reference` 两种组合下
-都必须成立：
+本模块**不依赖任何自研模块**（`depends` 只有 `stock`），编号只读两个原生字段：
 
-1. 单变体产品：模板层与变体层都显示那条变体的 `default_code`；
-2. 多变体产品：模板级 `default_code` 恒为空，**没有母型号时编号为空字符串**（前端显示 `—`）；
-3. 多变体产品装了 `product_reference` 且填了母型号时：模板层显示母型号，变体层优先自己的
-   `default_code`、为空则回退母型号；
-4. **单变体产品上的残留母型号必须被忽略**：单变体产品的编号真身在那条变体上
-   （`product_reference` 不在产品侧写镜像），卡片不得读到残留值。
+- 模板层 `product.template.default_code` —— 卡片编号栏显示的就是它；
+- 变体层 `product.product.default_code` —— 已选组合行显示变体自己的编号。
+
+因此这里只用**原生 API** 写编号（`product.default_code` / `variant.default_code`）：
+多变体产品的产品编号由 `product_reference` 叠加进 `default_code` 的 compute，
+装了它卡片自然就有值、没装就是空 —— 两种情况都要能跑（后一种的用例自动跳过）。
 
 跑法（两种组合都要跑）：
   task test -- product_card_view
@@ -64,27 +62,32 @@ class TestProductCardPayloadReference(TransactionCase):
     def _references_by_variant(self, data):
         return {row["id"]: row["reference"] for row in data["variants"]}
 
-    def _has_base_reference(self):
-        """`product_reference` 是否安装（无法在本模块 `depends` 里声明，只能运行期判断）。"""
+    def _multi_variant_product_can_carry_a_reference(self):
+        """多变体产品能否有产品编号 —— 装了 `product_reference` 才行。
+
+        卡片自身**不读**该模块的任何字段（只读原生 `default_code`）；这里判断它只是为了
+        决定「多变体产品带产品编号」这个场景能不能测：没装那个模块时，原生 compute 对
+        多变体产品的模板级 `default_code` 恒为空，没有可测的值。
+        """
         return "base_reference" in self.env["product.template"]._fields
 
     # ------------------------------------------------------------------
-    # 降级：不依赖 product_reference 也必须正确
+    # 模板层编号（卡片编号栏）
     # ------------------------------------------------------------------
 
     def test_single_variant_product_shows_the_variant_reference(self):
-        """单变体产品：模板层与变体层都显示那条变体的编号。"""
+        """单变体产品：编号栏显示那条变体的编号（原生单变体桥接）。"""
         product = self._create_product(default_code="S-001")
         data = self._payload(product)
         self.assertEqual(data["reference"], "S-001")
         self.assertEqual(
             self._references_by_variant(data), {product.product_variant_id.id: "S-001"})
 
-    def test_multi_variant_product_without_a_model_shows_no_reference(self):
-        """多变体产品没有母型号时（未装 `product_reference` / 没填）编号为空 —— 前端显示 `—`。
+    def test_multi_variant_product_without_a_product_reference_shows_nothing(self):
+        """多变体产品没有产品编号时编号为空（前端显示 `—`），其余信息照常。
 
-        这正是「缺可选模块」时允许的降级：卡片的其他信息（标题 / 图片 / 在手 / 变体按钮）
-        一个都不少，只是编号那一栏没有值。
+        未装 `product_reference` 时**永远**是这种情况 —— 这正是「缺可选模块」的降级：
+        标题 / 图片 / 在手 / 变体按钮一个都不少，只有编号那一栏没有值。
         """
         product = self._create_product(attribute=True)
         self.assertFalse(product.default_code)      # 多变体产品的模板级编号本来就是空的
@@ -94,32 +97,29 @@ class TestProductCardPayloadReference(TransactionCase):
         self.assertEqual(len(data["rows"]), 1)      # 变体按钮行照常
         self.assertEqual(len(data["variants"]), 2)
 
-    def test_single_variant_product_ignores_a_leftover_base_reference(self):
-        """残留母型号不得盖掉单变体产品的编号（该字段在单变体产品上不代表编号）。"""
-        if not self._has_base_reference():
-            self.skipTest("product_reference is not installed")
-        product = self._create_product(default_code="S-002")
-        product.base_reference = "STALE-001"
-        data = self._payload(product)
-        self.assertEqual(data["reference"], "S-002")
-        self.assertEqual(
-            self._references_by_variant(data), {product.product_variant_id.id: "S-002"})
-
-    # ------------------------------------------------------------------
-    # 可选集成：装了 product_reference 时的编号取值链
-    # ------------------------------------------------------------------
-
-    def test_multi_variant_product_shows_the_base_reference(self):
-        """多变体产品：模板层显示母型号；变体层优先自己的编号、为空则回退母型号。"""
-        if not self._has_base_reference():
-            self.skipTest("product_reference is not installed")
+    def test_multi_variant_product_shows_its_product_reference_when_installed(self):
+        """多变体产品有产品编号时（装了 `product_reference`），编号栏显示它。"""
+        if not self._multi_variant_product_can_carry_a_reference():
+            self.skipTest("a multi-variant product cannot carry a product reference here")
         product = self._create_product(attribute=True)
-        product.base_reference = "G001"
+        product.default_code = "G001"
+
+        self.assertEqual(self._payload(product)["reference"], "G001")
+
+    # ------------------------------------------------------------------
+    # 变体层编号（已选组合行）
+    # ------------------------------------------------------------------
+
+    def test_variant_reference_falls_back_to_the_product_reference(self):
+        """变体自己的编号优先；没填则回退产品编号。"""
+        if not self._multi_variant_product_can_carry_a_reference():
+            self.skipTest("a multi-variant product cannot carry a product reference here")
+        product = self._create_product(attribute=True)
+        product.default_code = "G001"
         red, blue = product.product_variant_ids
         red.default_code = "G001-WT"
 
         data = self._payload(product)
-        self.assertEqual(data["reference"], "G001")
         self.assertEqual(
             self._references_by_variant(data),
             {red.id: "G001-WT", blue.id: "G001"},

@@ -13,20 +13,20 @@
         <field name="inherit_id" ref="product.product_template_form_view"/>
         <field name="arch" type="xml">
 
-            <!-- 产品名称下方：Reference 编辑器（原生 default_code + 额外参考号入口）
-                 + 母型号（base_reference）。
-                 单变体产品：两者同值（型号同时落在两处），只显示 Ref. 输入框；
-                 多变体产品：参考号不共用（各变体维护自己的），此时只显示母型号。 -->
+            <!-- 产品名称下方：Ref. 编辑器（原生 default_code + 额外参考号入口）。
+                 单变体产品：这就是那条变体的编号，同时写产品级编号 base_reference；
+                 多变体产品：这是**产品级编号**（写入 product.template.base_reference），
+                 各变体自己的编号在变体表单维护；额外参考号也始终挂在这一层。
+                 两种形态都显示（不再按变体数隐藏）：`default_code` 的 compute 里
+                 base_reference 优先，所以这里显示的就是产品编号。 -->
             <xpath expr="//div[hasclass('oe_title')]/h1" position="after">
                 <div name="product_reference" class="o_product_reference_area mt-1">
                     <!-- 标签固定为 Ref.（中文界面同样显示 Ref.，不做本地化翻译） -->
-                    <label for="default_code" string="Ref."
-                           invisible="product_variant_count &gt; 1"/>
+                    <label for="default_code" string="Ref."/>
                     <field name="default_code"
                            widget="product_reference_editor"
                            nolabel="1"
-                           placeholder="e.g. REF-A, SKU-1234"
-                           invisible="product_variant_count &gt; 1"/>
+                           placeholder="e.g. REF-A, SKU-1234"/>
                     <!-- 额外参考号 One2many（不可见）：为 widget 提供子字段元数据，
                          新建参考号行时 activeFields 才含 reference_code 等字段 -->
                     <field name="reference_code_line_ids" invisible="1">
@@ -38,12 +38,6 @@
                             <field name="note"/>
                         </list>
                     </field>
-                    <!-- 母型号：多变体产品的产品型号（各变体型号的前缀，如 G001）。
-                         单变体产品上与 Ref. 同值，故只在多变体时显示，避免重复输入 -->
-                    <label for="base_reference" string="Base Ref."
-                           invisible="product_variant_count &lt;= 1"/>
-                    <field name="base_reference" nolabel="1" placeholder="e.g. G001"
-                           invisible="product_variant_count &lt;= 1"/>
                 </div>
             </xpath>
 
@@ -83,9 +77,6 @@
                        optional="show"
                        widget="text"
                        readonly="1"/>
-                <!-- 母型号：多变体产品的 default_code 列为空，这里给出型号列
-                     （默认隐藏，列选择器里可打开；单变体产品与 Reference 列同值） -->
-                <field name="base_reference" optional="hide"/>
             </xpath>
 
         </field>
@@ -100,32 +91,30 @@
         <field name="inherit_id" ref="product.product_template_search_view"/>
         <field name="arch" type="xml">
 
-            <!-- 顶部搜索框：在原生 default_code/变体/barcode 之外并入参考号与母型号。
-                 变体参考号不写回 reference_code_index（多变体不共用），
+            <!-- 顶部搜索框：在原生 default_code/变体/barcode 之外并入参考号。
+                 产品编号（多变体产品的 base_reference）已被 default_code 的 compute 覆盖，
+                 原生那一支就能命中；变体参考号不写回 reference_code_index（两层各自独立），
                  因此额外并入 product_variant_ids.variant_reference_code_index，
-                 保证在变体里加的参考号也能在产品列表搜到；
-                 母型号（base_reference）是多变体产品唯一有值的那一层，必须单独并入 -->
+                 保证在变体里加的参考号也能在产品列表搜到 -->
             <xpath expr="//field[@name='name']" position="attributes">
                 <attribute name="filter_domain">[
-                    '|', '|', '|', '|', '|', '|',
+                    '|', '|', '|', '|', '|',
                     ('default_code', 'ilike', self),
                     ('product_variant_ids.default_code', 'ilike', self),
                     ('name', 'ilike', self),
                     ('barcode', 'ilike', self),
                     ('reference_code_index', 'ilike', self),
-                    ('product_variant_ids.variant_reference_code_index', 'ilike', self),
-                    ('base_reference', 'ilike', self)
+                    ('product_variant_ids.variant_reference_code_index', 'ilike', self)
                 ]</attribute>
             </xpath>
 
-            <!-- 独立的「参考号」搜索项，便于精确过滤（同样含变体参考号与母型号） -->
+            <!-- 独立的「参考号」搜索项，便于精确过滤（同样含变体参考号） -->
             <xpath expr="//field[@name='name']" position="after">
                 <field name="reference_code_index" string="Reference"
                        filter_domain="[
-                           '|', '|',
+                           '|',
                            ('reference_code_index', 'ilike', self),
-                           ('product_variant_ids.variant_reference_code_index', 'ilike', self),
-                           ('base_reference', 'ilike', self)
+                           ('product_variant_ids.variant_reference_code_index', 'ilike', self)
                        ]"/>
             </xpath>
 

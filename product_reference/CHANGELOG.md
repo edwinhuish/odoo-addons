@@ -1,5 +1,159 @@
 # 变更日志
 
+## [19.0.4.0.0] - 2026-09-23（**评估记录，当日回退，未发布**：曾试「产品编号直接用原生 default_code 那一列」）
+
+> ⚠ **本版未发布、已全部回退**：实现完成后按要求回到 `base_reference` 方案（`19.0.3.0.0`）。
+> 保留此条是因为「为什么不直接用原生 `default_code` 存产品编号」会被反复问到 —— 下面记录了
+> 当时的实现、代价与回退原因（证据均为开发库实测 + Odoo 19 源码核对）。
+> 类型：架构变更（未发布）｜ 涉及文件：`models/product_template.py` / `models/product_product.py` /
+> `views/product_template_views.xml` / `hooks.py`（已删除）/ `__manifest__.py`（`uninstall_hook` 已撤）/
+> `i18n/zh_CN.po` / `tests/test_base_reference.py`（已还原）
+
+### 优化目标
+
+`19.0.3.0.0` 用自有字段 `base_reference` 存产品编号，再把它「叠加」进模板级 `default_code`
+的 compute —— 值是两份（字段 + 计算列），且必须靠一段额外的 compute/inverse 去对齐。
+按要求改为：**产品编号就用 `product.template.default_code` 自己那一列**，不新增字段、
+不改字段声明，并把「卸载后不留痕」做成显式钩子。
+
+### 变更
+
+1. **删除 `base_reference` 字段**及随之而来的全部代码（`_set_default_code()` 覆写、
+   `_sync_single_variant_default_code()`、`create`/`write` 同步、视图里的 `Base Ref.` 输入框、
+   列表列、搜索并入、i18n 条目）。
+2. **`_compute_default_code()` 改为「保全」实现**：先 `flush_all()` 从库里读回模板级已存值，
+   `super()`（原生单变体镜像 / 多变体赋空）之后再把值放回去 —— 单变体产品一行都不干预，
+   多变体产品的**产品编号不会被重算清掉**（原生赋空是这一列唯一的「丢失」时机）。
+3. **inverse 回归原生**：不复写 `_set_default_code()`。单变体产品它写回那条变体（原生行为），
+   多变体产品它不落任何变体 —— 值留在这一列上（实测：写入 + flush 即落库，重算后仍在）。
+4. **搜索**：`product.product._search_display_name()` 的并入项由 `base_reference` 改为
+   `product_tmpl_id.default_code`（原生只查模板 name + 变体编号，多变体产品的产品编号在模板列里）；
+   模板层不必额外并入（原生 `('default_code', …)` 本来就是这一列）。
+5. **卸载清理**（新增 `hooks.py` + manifest `uninstall_hook`）：卸载前把多变体产品的模板级编号
+   清空，回到原生状态（该列为空）。⚠ **卸载会丢掉这些产品编号** —— 「不遗留任何数据」的必然代价。
+6. **存量数据**（`migrations/19.0.4.0.0/pre-migration.py`）：把旧字段 `base_reference` 的值搬进
+   `default_code`（只处理多变体产品；单变体产品的模板列由原生镜像自己维护）。
+   **必须 pre-migration**：模块里已无该字段，加载时那一列会被 `_auto_init` 删掉。
+7. 契约测试重写（`tests/test_base_reference.py`）：单变体镜像（两个方向）、多变体编号只落模板列、
+   **重算后仍在**（直接调 `_compute_default_code()` 验证）、产品层与变体层可搜到。
+
+### 优化前后对比
+
+| 场景 | 优化前（`19.0.3.0.0`） | 优化后（`19.0.4.0.0`） |
+|------|------------------------|------------------------|
+| 产品编号存在哪 | 自有字段 `base_reference`（+ 叠加进 `default_code` 的 compute，两份值） | **原生列 `product.template.default_code`**（一份值） |
+| 字段声明 | 新增一个 `Char`（trigram 索引 + `copy=True`） | 不新增字段、不改字段声明 |
+| 单变体写入 | `base_reference` 与变体编号「两处同值」，靠 `_sync_*` 双向兜底 | 完全原生镜像（改哪边都一样），本模块零代码 |
+| 多变体写入 | 写 `base_reference`，再由 compute 叠进 `default_code` | 直接写 `default_code`（原生 inverse 不落变体，值留库里） |
+| 多变体重算 | `default_code` 的 compute 里 `base_reference` 优先，天然有值 | `_compute_default_code()` 把已存值放回去，值不被清空 |
+| 卸载 | 字段随模块删除（列被 drop），`default_code` 里的叠加值是否残留取决于是否被重算 | 字段元数据自动复原 + `uninstall_hook` 清掉写进原生列的产品编号 |
+
+### 影响
+
+- 产品编号从此只在**一处**（原生列），不再有「字段 + 计算列」两份值需要对齐；
+- 产品表单 `Ref.`、产品列表 `[编号] 名称`、列表搜索、卡片视图（读原生字段）全部照旧可见；
+- 单变体产品的行为与未装本模块时**完全一致**（本模块一行都不干预）；
+- 未改写字段声明，因此不触碰原生单变体桥接（`display_name` / `create` 传播 / 单据口径不变）；
+- 升级会搬运旧 `base_reference` 的值（多变体产品），不丢编号；卸载会清掉这些编号（有意为之）。
+
+### 文档
+
+- 模块 `AGENTS.md`（L1.3 重写为新契约 + 版本行）、`README.md`、本条目
+- 根 `README.md` / `AGENTS.md` 版本行、`TODO.md`
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| 多变体产品写入模板级编号 | 开发库实测：写入 + `flush_all()` 后列里就是新值 ✓ |
+| 增删变体 / 改变体编号后仍保留 | 开发库实测：值未被清空（`_compute_default_code` 保全）✓ |
+| 单变体产品 | 原生镜像不受影响（本模块跳过单变体记录）✓ |
+| 自动化测试 / `task check` / 迁移 | 见本轮执行记录（`19.0.4.0.0` 相关） |
+| 目标环境 | 表单 / 列表 / 卡片界面与卸载流程**待验证** |
+
+---
+
+## [19.0.3.0.0] - 2026-09-23（产品级编号叠加进原生 default_code + 两层参考号都可见）
+
+> 修订日期：2026-09-23 ｜ 类型：架构 / 行为变更（+x）｜ 影响文件：`models/product_template.py` /
+> `models/product_product.py` / `views/product_template_views.xml` / `tests/test_base_reference.py` /
+> `i18n/zh_CN.po` / `__manifest__.py` / `migrations/19.0.3.0.0/post-migration.py`（新增）/
+> `migrations/19.0.2.7.0/`（**删除**）
+
+### 优化目标
+
+`19.0.2.7.1` 的方案里，产品级编号 `base_reference` 是**独立于原生字段**的：只有本模块自己
+（以及当时愿意探测它的 `product_card_view`）读得到，其它地方（产品列表、`[编号] 名称`、
+Many2one、列表搜索）看不到多变体产品的产品编号。按新要求改为**把它叠加进原生
+`default_code`**，并让产品级参考号层**在多变体产品上也有入口**：
+
+1. **模板级 `default_code` 的 compute 优先取 `base_reference`** —— 产品编号从此在所有原生口径里可见，
+   消费方（卡片视图等）只要读原生字段就行，不需要知道本模块存在；
+2. **inverse 按变体数分流写** —— 单变体产品同时写 `base_reference` 与那条变体的 `default_code`（两处同值）；
+   多变体产品只写 `base_reference`（各变体编号各归各的）；
+3. **产品级参考号不再按变体数隐藏** —— 产品表单两种形态都显示 `Ref.` 与额外参考号入口，
+   变体表单继续维护变体自己那一层。
+
+### 变更
+
+1. `ProductTemplate._compute_default_code()`：先 `super()`（保留原生单变体桥接），
+   再对 `base_reference` 有值的记录覆盖 —— **产品编号优先级最高**（依赖声明含 `base_reference`）。
+2. `ProductTemplate._set_default_code()`：`super()` 之后写 `base_reference`（多变体产品的唯一落点）。
+   ⚠ 这里**只写一个字段**：实现时顺手写 `default_code` 会再次触发 inverse → `RecursionError`（实测踩到）。
+3. 新增 `ProductTemplate._sync_single_variant_default_code()`（`create` / 写 `base_reference` 时收口：
+   单变体产品两处同值），以及 `ProductProduct._sync_single_variant_base_reference()`（从变体侧改编号时
+   反向同步产品级编号，**仅单变体产品**）。
+4. 视图：删除按变体数隐藏的逻辑与独立的 `Base Ref.` 输入框（它就是 `Ref.` 里那个值），
+   删除冗余的列表列与搜索分支（产品编号已被原生 `default_code` 覆盖）。
+5. 迁移：删除 `migrations/19.0.2.7.0/`（它清掉单变体镜像值，与现在的「两处同值」相反），
+   新增 `migrations/19.0.3.0.0/post-migration.py`：单变体产品按变体 `default_code` 回填 `base_reference`，
+   并把存储列 `default_code` 对齐 `base_reference`（升级前那列是原生桥接算出来的，多变体时为空；
+   列表搜索走存储列，不对齐就搜不到）。
+6. 契约测试 `tests/test_base_reference.py` 重写为 6 项：单变体两处同值（两个方向）、
+   多变体只写产品编号、两层互不驱动、compute 优先级、产品层 / 变体层都可搜到。
+7. i18n：字段标签改「产品编号」、help 重写、删除 `Base Ref.` / `e.g. G001` 两条孤儿条目；
+   manifest 摘要与描述同步（「两层各自独立且都可见」+「产品编号算进原生 Reference」）。
+
+### 优化前后对比
+
+| 场景 | 优化前（`19.0.2.7.1`） | 优化后（`19.0.3.0.0`） |
+|------|------------------------|------------------------|
+| 多变体产品的产品编号在哪 | 只在本模块的 `base_reference` 字段里 | `base_reference` **且**计算进原生 `default_code` |
+| 产品列表 / `[编号] 名称` / Many2one / 列表搜索 | 多变体产品编号为空（要搜得靠本模块的搜索扩展） | 直接显示 / 命中产品编号（原生口径） |
+| 第三方模块要显示产品编号 | 得探测 `base_reference` 字段 | 读原生 `default_code` 即可（零耦合） |
+| 单变体产品改主编号 | 只改变体编号，产品侧为空 | **两处同值**（`base_reference` + 变体编号） |
+| 多变体产品改主编号 | 只能改 `base_reference`（表单上是一个单独的 `Base Ref.` 框） | 改 `Ref.`（写 `base_reference`，表单只有一个编号框） |
+| 产品级参考号（额外参考号）多变体时 | 整块隐藏（只能去变体表单维护变体那一层） | **两层都可见**（产品表单维护产品级，变体表单维护变体级） |
+
+### 影响
+
+- 产品编号在**所有原生口径**里可见：产品表单 `Ref.`、列表、`display_name` 前缀、Many2one 下拉、
+  列表搜索、卡片视图（对方读 `default_code` 即可）—— 这是本次改动最大的可见变化
+- 单变体产品两处编号保持同步（表单 / 变体侧 / 导入 / API 四条路径都有收口），
+  多变体产品两层互不影响
+- 升级会回填单变体产品的 `base_reference` 并对齐存储列；**多变体产品的产品编号仍需人工补录**
+  （没有可自动推断的来源，缺它只影响编号那一栏）
+- ⚠ 维护者注意：模板级 `default_code` 的 compute / inverse 已被本模块叠加，
+  改这两个方法必须同步读 `AGENTS.md` → L1.3（含递归陷阱与写入收口的位置）
+
+### 文档
+
+- 模块 `AGENTS.md`（L1.1 两层都可见 / L1.3 重写 / 版本行 / 搜索约束说明）、`README.md`
+  （功能概述、核心设计、模型字段、产品级编号一节、验证清单）、本条目
+- 根 `README.md` 解耦矩阵与版本行、根 `AGENTS.md` 模块行、`TODO.md`（`T-035`）同步
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_reference`（只装本模块 + `product`） | 6 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,product_reference` | 48 项 0 failed / 0 error ✓ |
+| `task test -- product_card_view,product_reference` | 10 项 0 failed / 0 error（卡片读原生字段就能拿到产品编号）✓ |
+| 开发库升级 + 迁移回填 | 见本轮实测记录（单变体回填、存储列对齐）✓ |
+| 目标环境 | 表单 / 列表 / 搜索 / 卡片界面**待验证** |
+
+---
+
 ## [19.0.2.7.1] - 2026-09-22（补母型号契约测试 + 明确「只做提供方」的解耦边界）
 
 > 修订日期：2026-09-22 ｜ 类型：文档 / 测试（+z）｜ 影响文件：`tests/`（**新增**）/
