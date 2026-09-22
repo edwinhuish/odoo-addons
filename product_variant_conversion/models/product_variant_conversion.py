@@ -150,7 +150,9 @@ class ProductVariantLineage(models.Model):
         string="Reference (After)",
         related="result_variant_id.default_code",
         readonly=True,
-        help="Internal reference of the resulting variant. It belongs to the variant: the conversion never changes it.",
+        help="Internal reference of the resulting variant, after the conversion. It belongs to "
+             "the variant; when a single-variant product is converted, the code it carried is "
+             "kept on the product as its base reference and is cleared here.",
     )
     result_barcode = fields.Char(
         string="Barcode (After)",

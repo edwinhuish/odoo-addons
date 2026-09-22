@@ -1,6 +1,6 @@
 {
     "name": "Product Card View",
-    "version": "19.0.2.0.7",
+    "version": "19.0.2.1.2",
     "summary": "Masonry product card view with image carousel and variant switcher",
     "description": """
         Modern product list card view (masonry) for foreign trade SOHO scenarios.
@@ -8,6 +8,7 @@
         Source language: English (en_US); Simplified Chinese translation in i18n/zh_CN.po.
 
         Features:
+
         - Adds a "Card" entry to the official Products view switcher (Inventory / Sales / Purchase)
         - Card with main image carousel (arrows + swipe), title, reference, on hand
         - Multi-image sources follow product_image (template + per-variant, never mixed)
@@ -15,7 +16,10 @@
         - Masonry (waterfall) responsive multi-column layout
 
         Optional integrations:
+
         - product_image: enables the multi-image gallery; without it only the main image shows
+        - product_reference: the card shows the base reference (model) of a product
+          with several variants; without it the standard reference is used
         - sale / purchase: Card is injected into their Products actions only when installed
     """,
     "category": "Inventory/Product",

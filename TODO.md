@@ -65,6 +65,24 @@
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
 
+- **T-034 三个关联模块的解耦审计与接口边界固化** ｜ `product_reference` + `product_variant_conversion` + `product_card_view` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_reference` `19.0.2.7.1`、`product_variant_conversion` `19.0.5.2.1`、`product_card_view` `19.0.2.1.2`
+  - 起因：三个模块在业务上相互关联（母型号 / 转换 / 卡片），需要确保**任意一个未安装时其余仍能独立正常运行**，并把依赖关系与接口边界写死
+  - 审计结论（只读盘点，逐行核对）：三者**互相没有任何 `depends`**，`data` / `assets` / XML `inherit_id` / `env.ref` 也没有任何跨模块引用；交叉点全部是运行期软探测（`_fields` / `env.get` / `in env`）。发现两处「间接假设」隐患：① `_transfer_shared_references_to_original()` 里 `env["product.reference.code"]`（模型缺失即 `KeyError`）只靠上一行的字段判断间接保证；② 交接后调 `self._sync_reference_index()` 只靠「字段在 ⟺ 方法在」的隐含前提
+  - 做法：① `product_variant_conversion` 新增「可选集成适配层」（`_has_base_reference_field()` / `_has_shared_reference_lines()` / `_get_reference_code_model()`），字段名与模型名只出现在那里；取模型改 `env.get()`、调对方方法改 `getattr` 探测；② `product_card_view` 把可选依赖探测收敛进 `_get_optional_base_reference()`（未装 / 单变体两种情形合并为一个降级判断）；③ `product_reference` 明确「只做提供方、不感知消费方」，补字段契约测试；④ 三模块 README 各加「可选集成与解耦边界」表，根 `README.md` 新增「扩展解耦矩阵」（含四种安装组合下的行为）、根 `AGENTS.md` 第 3 节新增「模块间可选集成必须解耦」约定
+  - 验收记录：模块 [`product_reference/CHANGELOG.md`](product_reference/CHANGELOG.md) → `[19.0.2.7.1]`、[`product_variant_conversion/CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.5.2.1]`、[`product_card_view/CHANGELOG.md`](product_card_view/CHANGELOG.md) → `[19.0.2.1.2]`；**四组环境实测**：`product_reference` 单装 4 项、`product_card_view`（+`stock`）单装 4 项（2 项按预期 skip）、`product_variant_conversion` 单装 46 项、三者同装 54 项，全部 **0 failed / 0 error**；新用例：`tests/test_base_reference.py`（4 项）、`tests/test_product_card_payload.py`（4 项）、`test_reference_handling_degrades_gracefully_without_product_reference()`（两种配置分别断言）；`task check` 通过
+  - 遗留：目标环境验证界面（卡片编号显示、加属性弹窗、中英双语各一遍、强刷浏览器）；`product_card_view` 卡片其余项本就待复验（见 `T-012` 相关记录）
+
+- **T-033 产品母型号 base_reference（多变体产品的产品型号无处可存）** ｜ `product_reference` + `product_variant_conversion` + `product_card_view` ｜ P1
+  - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_reference` `19.0.2.7.0`（母型号字段 `19.0.2.6.0` 引入、写入策略 `19.0.2.7.0` 定稿）、`product_variant_conversion` `19.0.5.2.0`、`product_card_view` `19.0.2.1.1`
+  - 起因：多变体产品（`G001-WT` / `G001-BK`）的母型号 `G001` **无处可存** —— 原生 `default_code` 是 `product.product` 的自有字段，模板侧在多变体时只是「读出空、写入不落任何变体」的桥接；产品表单的 Ref. 区又整块隐藏，于是多变体产品在产品层没有任何型号字段，卡片视图也显示不出编号
+  - 选型：**新增模板级 `base_reference`**，不改写原生 `default_code` 的桥接语义。曾评估「把模板级 `default_code` 改成可写、多变体时保留」，会破坏 `product_variant_conversion` 用测试钉住的桥接契约（`test_variant_level_values_stay_on_the_kept_variant`）、且订单行 Many2one 仍搜不到母型号，故放弃；理由与反面方案对比见 `product_reference/AGENTS.md` → L1.3 与本条
+  - 做法：① `product_reference` 新增 `product.template.base_reference`（存储 + trigram 索引 + `copy=True`）；**写入策略取「单一真值、不做镜像」**（`19.0.2.7.0` 定稿）：单变体产品的编号**只写**变体的 `default_code`，产品侧不写副本 —— 同一份数据写两处，任何一条写入路径（产品表单 / 变体表单 / 导入 / 集成 / SQL）漏掉就会长期不一致，且不会报错；② 母型号只有两个写入时机：多变体产品在产品表单 `Base Ref.` 维护、单变体转多变体时由 `product_variant_conversion` 上移；产品表单按变体数分流显示 `Ref.` / `Base Ref.`（原先「整块隐藏」改为元素级隐藏），模板与变体 `_search_display_name`、搜索视图 `filter_domain`、列表列一并接入；③ 迁移：删除 `19.0.2.6.0` 的回填（不再是期望行为），改由 `migrations/19.0.2.7.0/post-migration.py` 清理旧镜像值（单变体产品上「母型号 = 变体编号」的行置空；多变体产品不动）；④ `product_variant_conversion` 转多变体时把原变体编号**覆盖式上移**成产品母型号并清空变体编号（仅单变体转多变体；变体没有编号时什么都不做，残留母型号保留）；⑤ `product_card_view` 编号取值链改为「变体 `default_code` → 母型号 `base_reference`（**仅多变体产品**）→ 模板 `default_code`」（可选依赖，按字段存在性软适配，前端零改动）
+  - 验收记录：模块 [`product_reference/CHANGELOG.md`](product_reference/CHANGELOG.md) → `[19.0.2.6.0]` / `[19.0.2.7.0]`、[`product_variant_conversion/CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.5.1.0]` / `[19.0.5.2.0]`、[`product_card_view/CHANGELOG.md`](product_card_view/CHANGELOG.md) → `[19.0.2.1.0]` / `[19.0.2.1.1]`；`task test -- product_variant_conversion,product_reference` **45 项 0 failed / 0 error**（含两条母型号用例），`task test -- product_variant_conversion`（未装该模块）同样 0 failed / 0 error、两条用例按预期 skip；开发库升级实测：清理旧镜像值 **22** 条且升级后单变体产品残留 **0** 条、6 条多变体模板的母型号计数不受影响、`ir_model_fields.field_description->>'zh_CN'` = `母型号`（help 已同步）；`task check` 未新增告警，`i18n/zh_CN.po` 应用列表元数据与 manifest 逐字符一致
+  - 遗留：目标环境验证「单 / 多变体表单可见性、单变体填编号后产品侧确实为空、搜 `G001` 命中产品与订单行、加属性后母型号被上移、卡片显示母型号、中英双语各一遍、强刷浏览器」；存量**多变体**产品的母型号需人工补录一次（无法从变体编号可靠推断）；`product_card_view` 卡片其余项本就待复验（见 `T-012` 相关记录）
+
 - **T-032 修「cm 尺寸的小体积被显示 / 保存成 0」** ｜ `product_dimension` ｜ P1
   - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境界面复验**
   - 落地版本：`product_dimension` `19.0.4.1.0`

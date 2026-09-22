@@ -13,11 +13,14 @@
 - 自定义组件（前端）：字段 widget `product_reference_editor`、额外参考号管理弹窗
   （顶层 `main_components` overlay）、徽标 tooltip 模板
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.2.5.2`（19.0.2.5.2 修主变体表单的参考号归属：补 `lines_field` 指向变体专属行；19.0.2.5.1 补应用列表（Apps）中文元数据）
+- 当前版本：`19.0.2.7.1`（19.0.2.7.1 补母型号契约测试 `tests/test_base_reference.py` + 明确「只做提供方、不感知消费方」的解耦边界；19.0.2.7.0 母型号写入策略调整：单变体产品不再镜像写 `base_reference`，改为「转多变体时由 `product_variant_conversion` 上移」，并清理旧镜像值；19.0.2.6.0 新增母型号字段；19.0.2.5.2 修主变体表单的参考号归属：补 `lines_field` 指向变体专属行）
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用
 > `reference`，**禁止再出现 `model` 指代参考号**（`model` 在 Odoo 里另有「模型」语义，易混淆）。
+> 产品母型号固定叫 `base_reference`（界面标签 `Base Ref.`）：`base` 表达「母 / 基础」层级，
+> 与 `default_code`（变体参考号）一眼可分；`ref` / `reference` 已被原生与外部编号语义占用，
+> 不得复用（见 L1.3）。
 
 ---
 
@@ -34,8 +37,9 @@
 1.1. **参考号归属二选一，多变体产品不共用**（`19.0.2.4.0`）
    - 每一行要么属于产品（`product_tmpl_id`），要么属于变体（`product_id`），
      `_check_single_owner` 兜底；禁止放宽成「两者都为空 / 两者都有」
-   - 多变体产品的产品表单整块隐藏 Reference 区域（`invisible="product_variant_count > 1"`），
-     参考号只在各变体上维护
+   - 多变体产品的产品表单只显示母型号 `Base Ref.`，`Ref.`（原生 `default_code`）输入框与
+     额外参考号入口按**元素级** `invisible="product_variant_count > 1"` 隐藏，
+     参考号只在各变体上维护（可见性细则见 L1.3）
    - **变体侧任何表单都必须显式指定 `lines_field=\"variant_reference_code_line_ids\"`**：
      widget 默认落在同视图里那个隐藏的 o2m 上，漏写就会去改产品级共享行（`19.0.2.5.2` 修的就是主变体表单）
    - 变体参考号子行创建时必须剥离 context 的 `default_product_tmpl_id`
@@ -54,6 +58,38 @@
    - 历史：`19.0.2.5.3` 删掉了 `sales_team.group_sale_manager` 那行（权限与 `base.group_user` 行等价，
      纯冗余）；同一次排查在 `product_image` 也修了同类问题
    - 校验：`task check` 的「权限 / 视图里引用的用户组」检查会卡住
+
+1.3. **母型号只存 `base_reference`，禁止改写原生 `default_code` 的桥接语义**（`19.0.2.6.0`，
+   写入策略于 `19.0.2.7.0` 调整为「只在转多变体时上移」）
+   - 多变体产品的产品型号（G001）存 `product.template.base_reference`
+     （存储字段 + trigram 索引）；**禁止**把母型号塞进模板级 `default_code`：
+     那是原生桥接字段（`_compute_default_code` / `_set_default_code`），多变体时读出空、
+     写入不落任何变体，覆盖它等于破坏 Odoo 原生语义（且会连带打断
+     `product_variant_conversion` 里被测试钉住的桥接契约）
+   - **单变体产品不写 `base_reference`**：型号只写在那条变体的 `default_code` 上（唯一真身）。
+     本模块**禁止**在 `product.template` / `product.product` 上做「两处同值」的镜像写入 ——
+     同一份数据写两处，任何一条写入路径（表单 / 变体表单 / 导入 / 集成 / SQL）漏掉就会不一致
+   - 母型号的写入时机只有两个：① 多变体产品在产品表单 `Base Ref.` 里维护；
+     ② **单变体 → 多变体时由 `product_variant_conversion` 把原变体的编号上移过来**
+     （`_move_single_variant_reference_to_base_reference()`：覆盖式写入 + 清空变体编号；
+     变体没有编号时不动残留母型号）。**转换是母型号唯一的数据来源，别在别处补**
+   - 视图形状：单变体只显示 `Ref.`（`default_code`），多变体只显示 `Base Ref.`
+     （`base_reference`）。可见性用**元素级** `invisible="product_variant_count > 1"` /
+     `"<= 1"` 控制，**禁止**再整块隐藏 `div[name='product_reference']`
+     （那会把多变体的母型号输入框一起藏掉）
+   - 搜索必须并入 `base_reference`：模板 `_search_display_name`、变体
+     `_search_display_name`（经 `_inherits` 委托）、搜索视图 `filter_domain` 三处；
+     多变体产品的 `default_code` 是空的，不并入就搜不到产品
+   - 存量数据：`19.0.2.7.0` 的 `migrations/19.0.2.7.0/post-migration.py` 只做一件收尾 ——
+     把 `19.0.2.6.0` 旧镜像写法留在**单变体产品**上的 `base_reference`（值恰好等于该变体的
+     `default_code`）置空；多变体产品的母型号**不许动**。多变体产品的母型号没有可自动回填的
+     来源，由人工在产品表单补录
+   - **只做提供方、不感知消费方**：本模块**禁止**调用 / 判断 `product_variant_conversion`、
+     `product_card_view`（它们不在 `depends` 里，也不该被本模块的代码知道）。「母型号什么时候被写」
+     由 `product_variant_conversion` 负责；本模块只用 `tests/test_base_reference.py` 钉住字段契约
+     （单变体不写、两字段互不驱动、母型号可被搜到）。**两者缺席时**：多变体产品的母型号需人工补录
+   - 违反后果：母型号与变体编号长期不同步、多变体产品搜不到、界面上两个同义输入框
+
 2. **搜索在数据库层实现，禁止 Python 侧全表过滤**
    - 冗余可存储字段（均 `Text` + trigram 索引）：产品级 `reference_code_index`、
      变体级 `product.product.variant_reference_code_index`
@@ -62,7 +98,8 @@
        （`('product_variant_ids', 'any', [('variant_reference_code_index', ...)])`）
      - `product.product`：本变体参考号 **+** 所属产品的共享参考号
    - 搜索视图的 `filter_domain` 必须同步并入变体参考号，否则「变体里加的参考号在
-     Products 搜不到」（`19.0.2.5.0` 修的就是这个）
+     Products 搜不到」（`19.0.2.5.0` 修的就是这个）；母型号 `base_reference` 同理
+     必须并入（多变体产品的模板级 `default_code` 是空的，见 L1.3）
    - 禁止 `search([])` 后在 Python 里过滤参考号
 
 3. **冗余搜索索引由参考号行自动同步，勿手工编辑**

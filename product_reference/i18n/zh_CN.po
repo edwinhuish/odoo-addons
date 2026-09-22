@@ -189,6 +189,33 @@ msgid ""
 msgstr "该产品所有参考号拼接后的搜索索引，由参考号行增删改时自动维护，请勿手工编辑。"
 
 #. module: product_reference
+#: model:ir.model.fields,field_description:product_reference.field_product_template__base_reference
+msgid "Base Reference"
+msgstr "母型号"
+
+#. module: product_reference
+#: model:ir.model.fields,help:product_reference.field_product_template__base_reference
+msgid ""
+"Model shared by every variant of this product (e.g. G001 for the variants "
+"G001-WT and G001-BK). It is filled when a single-variant product is turned "
+"into a product with several variants, and is then the only place where the "
+"model is stored, since every variant carries its own reference."
+msgstr ""
+"本产品所有变体共用的型号（如变体 G001-WT、G001-BK 的母型号 G001）。"
+"单变体产品不写这个字段；变成多变体产品时原变体的编号会上移到这里，此后母型号只存在这里，"
+"因为每条变体各持自己的参考号。"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+msgid "Base Ref."
+msgstr "母型号"
+
+#. module: product_reference
+#: model_terms:ir.ui.view,arch_db:product_reference.product_template_form_inherit
+msgid "e.g. G001"
+msgstr "如 G001"
+
+#. module: product_reference
 #: model:ir.model.constraint,message:product_reference.constraint_reference_code_unique_per_template
 msgid "Reference codes must be unique within the same product."
 msgstr "同一产品内参考号不可重复。"
@@ -375,10 +402,11 @@ msgid ""
 "its references; the standard Odoo Reference is edited right under the "
 "product name and the extra references are managed from the + button inside "
 "it (a product with several variants keeps one set of references per "
-"variant)"
+"variant, plus one base reference shared by all of them)"
 msgstr ""
 "一个产品可挂多条参考号，并可用任一参考号搜到产品；标准 Odoo Reference "
-"在产品名称下方直接编辑，额外参考号通过其中的「+」按钮管理（多变体产品每个变体各自维护一组参考号）"
+"在产品名称下方直接编辑，额外参考号通过其中的「+」按钮管理"
+"（多变体产品每个变体各自维护一组参考号，并共用同一个母型号）"
 
 #. module: base
 #: model:ir.module.module,description:base.module_product_reference
@@ -402,6 +430,11 @@ msgid ""
 "  Reference block is hidden on the product form and every variant keeps\n"
 "  its own set of references (variant references are independent from the\n"
 "  shared product references, like the variant image gallery)\n"
+"- Such a product also carries a base reference (its model, e.g. G001 for\n"
+"  the variants G001-WT and G001-BK): it is edited on the product form,\n"
+"  shared by every variant, found by the search and shown on the product\n"
+"  cards; a single-variant product has no base reference yet, its\n"
+"  reference is moved there when it becomes a product with variants\n"
 "- When a product carries extra references, a \"+N\" badge appears next to\n"
 "  the button and hovering it shows the list of references in a tooltip\n"
 "- References live in a dedicated line model exposed as a One2many on\n"
@@ -414,7 +447,8 @@ msgid ""
 "  indexes; searching a product by the reference of one of its variants\n"
 "  also finds the product\n"
 "- Many2one dropdowns, search suggestions, quick search and the list\n"
-"  search box all find a product by any of its references\n"
+"  search box all find a product by any of its references, and by the\n"
+"  base reference of a product with several variants\n"
 "- When a reference is hit, the result shows\n"
 "  \"Product (Matching reference: xxx)\" so products can be told apart\n"
 "- Reference lines are removed with the product, no orphan data\n"
@@ -432,12 +466,16 @@ msgstr ""
 "  （全新产品也能立即录入参考号）\n"
 "- 多变体产品不共用参考号：产品表单隐藏 Reference 区块，每个变体各自维护一组参考号\n"
 "  （与变体图库一致，变体参考号与共享参考号相互独立）\n"
+"- 这类产品另有一个母型号（产品型号，如变体 G001-WT / G001-BK 的母型号 G001）：\n"
+"  在产品表单维护、全部变体共用，可被搜索命中，并显示在产品卡片上；\n"
+"  单变体产品还没有母型号，等它变成多变体产品时原变体的编号会上移到这里\n"
 "- 产品挂有额外参考号时，按钮旁出现「+N」徽标，悬停以 tooltip 显示参考号清单\n"
 "- 参考号存放在独立的明细模型，并以 One2many 挂在 product.template 上，\n"
 "  不塞进逗号分隔的 Char 字段\n"
 "- 同一产品内参考号不可重复；不同产品之间允许重复\n"
 "- 搜索在数据库层完成：冗余存储字段 reference_code_index（产品参考号）与\n"
 "  variant_reference_code_index（变体参考号）配 trigram 索引；用变体的参考号也能搜到产品\n"
-"- Many2one 下拉、搜索建议、快速搜索与列表搜索框都能按任一参考号找到产品\n"
+"- Many2one 下拉、搜索建议、快速搜索与列表搜索框都能按任一参考号找到产品，\n"
+"  也能按多变体产品的母型号找到产品\n"
 "- 命中参考号时结果显示「产品（命中参考号：xxx）」，便于区分产品\n"
 "- 参考号明细随产品删除，不留孤儿数据\n"

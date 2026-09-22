@@ -571,6 +571,13 @@ class ProductTemplate(models.Model):
             # ⑤ 后置断言：任何不符合预期的情况都整单回滚，不留半成品
             self._check_variant_conversion_result(anchors, expected_count)
 
+            # ⑤.5 单变体时期那条变体的编号上移成产品母型号（`product_reference` 的
+            #      `base_reference`）：转换后每条变体各需自己的编号，留着会让被保留的
+            #      那条变体顶着产品型号，卡片与单据上看起来像「整机」，其它变体却没有编号。
+            #      放在 ④ 之后是为了「先按归属复用既有变体、再改它的编号」，
+            #      改动量最小（此时产品已是多变体，不会有任何单变体逻辑回写）
+            self._move_single_variant_reference_to_base_reference(originals)
+
             # ⑥ 显式记录归属：转换台账 + 谱系行 + 变体上的来源字段
             new_variants = self.product_variant_ids - originals
             self._create_variant_conversion_lineage(
@@ -1085,6 +1092,71 @@ class ProductTemplate(models.Model):
                 values.pop(name, None)
         return values
 
+    # ------------------------------------------------------------------
+    # 可选集成适配层：product_reference
+    #
+    # 本模块**不依赖** `product_reference`（`depends` 只有 `product`），任何模块组合下转换都
+    # 必须成功。因此对那个模块的全部了解都收在下面三个适配方法里 —— 字段名 / 模型名只出现在
+    # 这里，对方缺失时一律返回「不支持」，调用方按「不做这件事」降级，主流程绝不因此中断；
+    # 对方改名或改字段时也只需改这一处（约束见模块 AGENTS.md → L2「可选模块不得让主流程崩」）。
+    # ------------------------------------------------------------------
+
+    def _has_base_reference_field(self):
+        """``product.template.base_reference``（产品母型号）是否可用。"""
+        return "base_reference" in self._fields
+
+    def _has_shared_reference_lines(self):
+        """``product.template.reference_code_line_ids``（产品级共享参考号）是否可用。"""
+        return "reference_code_line_ids" in self._fields
+
+    def _get_reference_code_model(self):
+        """``product.reference.code`` 模型；未装 ``product_reference`` 时返回 ``None``。
+
+        不要写成 ``self.env["product.reference.code"]``：模型不在注册表时那是 ``KeyError``，
+        会让**每一次**转换都失败（含纯 ``product`` 环境、含没有参考号的产品）。
+        """
+        return self.env.get("product.reference.code")
+
+    def _move_single_variant_reference_to_base_reference(self, originals):
+        """把单变体时期的编号上移成产品母型号，并清空原变体上的编号。
+
+        单变体产品的型号真身只有一处：那条变体的 ``default_code``（``product_reference``
+        不在产品侧写镜像，见该模块 AGENTS.md L1.3）。转成多变体后，产品型号要由
+        ``base_reference`` 承载，变体层则腾空给每条变体自己的编号
+        （G001 → G001-WT / G001-BK）：
+
+        - 编号留在被保留的变体上的话，它看起来像「整机 / 母型号」，与其它没有编号的变体
+          不对称，卡片与单据上也会把产品型号当成变体型号显示；
+        - 因此这里把编号**上移**到产品（覆盖母型号）再清空变体上的那份 —— 值一处不丢。
+
+        只在**转换前恰好一条变体**时处理：多变体产品的变体编号本来就各自独立，与产品
+        母型号无关，转换不该动它们。变体没有编号时什么都不做（母型号可能是「多变体退回
+        单变体」的残留，不能因为变体编号为空就把它清掉）。未安装 ``product_reference``
+        （没有 ``base_reference`` 字段）时不做任何事。
+
+        :param product.product originals: 转换前的既有变体。
+        :return: 被上移并清空编号的变体；未处理时为空记录集。
+        :rtype: product.product
+        """
+        self.ensure_one()
+        if len(originals) != 1 or not self._has_base_reference_field():
+            return self.env["product.product"].browse()
+        variant = originals
+        code = variant.default_code
+        if not code:
+            return self.env["product.product"].browse()
+        previous = self.base_reference
+        # 单变体产品的变体编号就是产品型号：覆盖式上移，母型号以它为准
+        self.base_reference = code
+        if previous and previous != code:
+            _logger.info(
+                "product_variant_conversion: the base reference %s of %s is replaced by the "
+                "reference %s of its single variant",
+                previous, self.display_name, code,
+            )
+        variant.write({"default_code": False})
+        return variant
+
     def _transfer_shared_references_to_original(self, originals):
         """把产品级共享参考号交接给被保留的那条变体（单变体 → 多变体时）。
 
@@ -1103,10 +1175,10 @@ class ProductTemplate(models.Model):
             （调用方只做真值判断，不会读它的字段）。
         """
         self.ensure_one()
-        if "reference_code_line_ids" not in self._fields:
-            # 注意不能在这里 browse `product.reference.code`：模块没装时它不在注册表里，
-            # `env[模型名]` 会直接抛 KeyError —— 那会让**每一次**转换都失败（含没有参考号的
-            # 纯 `product` 环境）。给 `product.product` 的空集即可，它是本模块的硬依赖。
+        ReferenceCode = self._get_reference_code_model()
+        if not self._has_shared_reference_lines() or ReferenceCode is None:
+            # 未装 `product_reference`：字段与模型都不在注册表里，只能返回本模块硬依赖的
+            # `product.product` 空集（调用方只做真值判断，不会读它的字段）
             return self.env["product.product"].browse()
         rows = self.reference_code_line_ids
         if not rows:
@@ -1117,7 +1189,7 @@ class ProductTemplate(models.Model):
                 "are left on the product",
                 self.display_name, len(originals), rows.mapped("reference_code"),
             )
-            return self.env["product.reference.code"].browse()
+            return ReferenceCode.browse()
 
         kept = originals
         # 变体上已有同码的行：留在产品级，避免撞 UNIQUE(product_id, reference_code)
@@ -1128,8 +1200,12 @@ class ProductTemplate(models.Model):
         kept_rows = rows - movable
         if movable:
             movable.write({"product_id": kept.id, "product_tmpl_id": False})
-            # 参考号行的 write 只同步「新主人」的索引，源产品这一侧要自己重算
-            self._sync_reference_index()
+            # 参考号行的 write 只同步「新主人」的索引，源产品这一侧要自己重算。
+            # 索引方法是 product_reference 定义在 product.template 上的：这里探测方法本身，
+            # 不依赖「字段存在 ⟺ 方法存在」这个隐含前提（见本站适配层说明）
+            sync_index = getattr(self, "_sync_reference_index", None)
+            if sync_index is not None:
+                sync_index()
         if kept_rows:
             _logger.info(
                 "product_variant_conversion: %s reference(s) kept on the product because the "

@@ -1,6 +1,6 @@
 {
     "name": "Product Variant Conversion",
-    "version": "19.0.5.0.0",
+    "version": "19.0.5.2.1",
     "summary": "Add attributes to a product and keep every existing variant: saving the product form asks for the variant ownership, keeps every variant record (with its stock, orders and invoices) and records the origin of each variant",
     "description": """
         Safe attribute addition and variant expansion for foreign trade SOHO
@@ -25,6 +25,10 @@
         - Every existing product.product record is kept, same id: stock quants,
           stock move lines, lots, sales order lines, purchase order lines,
           invoice lines, vendor prices and reordering rules keep pointing to it;
+        - The reference a single-variant product carried is not lost: it is
+          moved to the product as its base reference (when product_reference is
+          installed) and cleared on the variant, so every resulting variant can
+          get its own reference;
         - The ownership is recorded: a conversion log and one lineage row per
           variant (which record was kept, which variant derives from which
           original one, which values were added), plus searchable fields on the

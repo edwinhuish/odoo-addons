@@ -2,7 +2,9 @@
 """产品卡片视图后端数据装配。
 
 为前端瀑布流卡片提供一次 JSON payload（一次性查询，避免逐卡请求）：
-- 模板层：标题 / 编号（default_code）/ 全部变体在手总量；
+- 模板层：标题 / 编号 / 全部变体在手总量；多变体产品的编号优先取产品母型号
+  （base_reference，product_reference 可选模块），没有时回退原生 default_code
+  （单变体产品不读母型号：它的编号真身在变体上）；
   图片 = 模板主图（product.template.image_512）+ 模板共享图库（product.image.gallery，
   product_image 可选：未安装则 env.get 返回 None，图库留空，前端只展示主图）。
 - 变体层：每个 product.product 的编号 / 在手；图片 = 变体主图（无则原生回退模板主图）
@@ -63,6 +65,25 @@ class ProductTemplate(models.Model):
     """扩展 product.template，提供卡片视图数据，不新增字段。"""
 
     _inherit = "product.template"
+
+    def _get_optional_base_reference(self, template, variant_count):
+        """模板层编号可用的「产品母型号」；不可用时返回 ``False``。
+
+        母型号来自**可选模块** `product_reference`（不在本模块 `depends` 里），本模块对它的
+        全部了解就收在这个方法里，三种情况都返回 ``False`` 并让调用方回退原生 `default_code`：
+
+        - **未装该模块**：字段不存在（卡片编号一栏照常有值，只是少了母型号这一层）；
+        - **装了但产品只有一条变体**：单变体产品的编号真身在那条变体上（该模块不在产品侧写
+          镜像），产品上的残留值（旧版本产物 / 退回单变体的遗留 / 外部写入）不得盖掉变体编号；
+        - 只有**多变体**产品才读它：那时模板级 `default_code` 恒为空，母型号是唯一有值的一层。
+
+        对方改名或改字段时只需改这一处（约束见模块 AGENTS.md → L1 第 5 条）。
+        """
+        if variant_count <= 1:
+            return False
+        if "base_reference" not in self.env["product.template"]._fields:
+            return False
+        return template.base_reference
 
     def _get_product_card_view_payload(self):
         """返回本 recordset（product.template）的卡片数据映射 {template_id: {...}}。"""
@@ -147,6 +168,8 @@ class ProductTemplate(models.Model):
             # variants 已按 (product_tmpl_id, id) 排序，此处直接取即 id 升序
             tpl_variants = variants_by_tpl.get(tpl_id, [])
             tpl_default_code = template.default_code
+            # 母型号只在多变体产品上代表「产品编号」（可选模块，见 _get_optional_base_reference）
+            tpl_base_reference = self._get_optional_base_reference(template, len(tpl_variants))
             tracked = template.is_storable if has_storable else False
             on_hand_total = None
             if has_qty:
@@ -181,7 +204,10 @@ class ProductTemplate(models.Model):
                 variants_payload.append(
                     {
                         "id": variant.id,
-                        "reference": variant.default_code or tpl_default_code or "",
+                        # 变体编号 → 产品母型号（多变体产品）→ 产品级 default_code
+                        "reference": (
+                            variant.default_code or tpl_base_reference or tpl_default_code or ""
+                        ),
                         "on_hand": variant_qty.get(variant.id) if has_qty else None,
                         "values": dict(variant_attr_map.get(variant.id, {})),
                     }
@@ -189,7 +215,8 @@ class ProductTemplate(models.Model):
 
             payload[tpl_id] = {
                 "name": template.name,
-                "reference": tpl_default_code or "",
+                # 模板层：单变体产品两处同值，多变体产品只有 base_reference 有值
+                "reference": tpl_base_reference or tpl_default_code or "",
                 "tracked": tracked,
                 "has_stock": has_qty,
                 "on_hand_total": on_hand_total,

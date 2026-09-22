@@ -8,6 +8,146 @@
 
 ---
 
+## [19.0.2.1.2] - 2026-09-22（可选依赖探测收敛进适配层 + payload 降级用例）
+
+> 修订日期：2026-09-22 ｜ 类型：优化（+z）｜ 影响文件：`models/product_card.py` /
+> `tests/test_product_card_payload.py`（**新增**）/ `AGENTS.md` / `README.md` / `__manifest__.py`
+> （无视图、无数据、无 i18n 改动）
+
+### 优化目标
+
+本模块 `depends` 只有 `stock`，`product_image` / `product_reference` / `sale` / `purchase` 都是可选集成。
+审计发现可选模块的探测散在函数里（`base_reference` 的字段判断与取值写在同一段、图库用 `env.get`），
+既不好读、也没有任何自动化用例钉住「缺可选模块时的行为」。本版把探测收敛成**一个适配方法**，
+并补上两种配置都跑的 payload 用例。
+
+### 变更
+
+1. 新增 `_get_optional_base_reference(template, variant_count)`（可选集成适配层）：
+   把「未装 `product_reference`」与「装了但只有一条变体」两种情况合并成一个返回 `False` 判断，
+   `base_reference` 字段从此只出现在这一个方法里；`_get_product_card_view_payload()` 里的
+   `has_base_reference` 标志位删除。
+2. 新增 `tests/test_product_card_payload.py`（本模块此前没有测试）：覆盖编号取值链的四种情形 ——
+   单变体产品、多变体产品无母型号（**降级：编号为空**）、多变体产品有母型号（变体编号优先 / 回退母型号）、
+   单变体产品上的**残留母型号被忽略**。
+3. 文档补齐可选集成矩阵（README →「可选集成与解耦边界」）与硬约束（AGENTS → L1 第 5 条）。
+
+### 优化前后对比
+
+| 场景 | 优化前 | 优化后 |
+|------|--------|--------|
+| 未装 `product_reference` | 行为正确（回退 `default_code`），但无任何用例钉住 | 行为不变，且由 2 条用例在「未装」配置下断言（另 2 条自动 skip） |
+| 可选字段的探测位置 | 散在 payload 装配函数里（标志位 + 三元表达式） | 收在 `_get_optional_base_reference()` 一处，对方改字段只需改它 |
+| 「单变体产品的残留母型号」 | 已在 `19.0.2.1.1` 按设计忽略，但没有用例 | 由 `test_single_variant_product_ignores_a_leftover_base_reference()` 钉住 |
+
+### 影响
+
+- 行为不变（`19.0.2.1.1` 的取值链与降级结果完全一致）；卡片其余功能不受影响
+- 本模块仍**不新增模型 / 字段 / 权限**，仍不把任何自研模块写进 `depends`
+- 无数据结构变化、无迁移；测试 **0 → 4 项**（本模块首次带自动化用例）
+
+### 文档
+
+- 模块 `README.md` → 新增「可选集成与解耦边界」（`product_reference` / `product_image` / `sale` + `purchase`
+  各自的接入点与降级行为）；`AGENTS.md` → L1 第 5 条补「接入点必须收在一处」与用例要求
+- 根 `README.md` 新增「扩展解耦矩阵」；`TODO.md`（`T-034`）
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_card_view`（未装 `product_reference`） | 4 项 0 failed / 0 error，2 项按预期 skip ✓ |
+| `task test -- product_variant_conversion,product_reference,product_card_view`（三模块同装） | 54 项 0 failed / 0 error（本模块 4 项全跑）✓ |
+
+---
+
+## [19.0.2.1.1] - 2026-09-22（母型号只对多变体产品生效）
+
+> 修订日期：2026-09-22 ｜ 类型：修复（+z）｜ 影响文件：`models/product_card.py` / `__manifest__.py`
+
+### 优化目标
+
+`19.0.2.1.0` 无条件把产品母型号 `base_reference` 当作模板层编号的来源。但按
+[`product_reference`](../product_reference/CHANGELOG.md) `19.0.2.7.0` 定下的策略，
+**单变体产品不写这个字段**（编号真身在变体上）；一旦产品上残留了旧值（旧版本的镜像值、
+「多变体退回单变体」的遗留、外部写入），卡片会拿它盖掉变体编号 —— 显示一个不属于当前产品的编号。
+
+### 变更
+
+- payload 装配时**只在模板有多个 active 变体**的情况下读取 `base_reference`；
+  单变体产品一律按模板 `default_code`（即那条变体的编号）走，与 `19.0.2.1.0` 之前完全一致。
+- 取值链其余部分不变：变体 `default_code` → 母型号（多变体）→ 模板 `default_code`。
+
+### 影响
+
+- 单变体产品：卡片编号永远是那条变体的编号，不会被残留母型号顶掉
+- 多变体产品：行为与 `19.0.2.1.0` 相同（读母型号）
+- 未装 `product_reference` 时行为不变（该字段不存在，整条分支为假）
+
+### 文档
+
+- 模块 `README.md`（默认口径 / payload 字段表补「多变体」前提）、`AGENTS.md`（L1 第 5 条同步）、本条目
+- 根 `README.md` / `AGENTS.md` 版本行、仓库 `TODO.md`（`T-033`）同步
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| 开发库升级（`task update -- product_card_view`） | 成功、无告警 ✓ |
+| 单变体产品卡片编号（残留母型号场景） | 代码路径已按「多变体才读」收敛；**目标环境待验证**（无头环境无法断言前端渲染） |
+
+---
+
+## [19.0.2.1.0] - 2026-09-22（卡片编号取产品母型号 base_reference）
+
+> 修订日期：2026-09-22 ｜ 类型：功能新增（+y）｜ 影响文件：`models/product_card.py` /
+> `__manifest__.py` / `i18n/zh_CN.po`（前端 JS / XML 未改：取值链在后端解析）
+>
+> ⚠ 其中「模板层无条件优先读母型号」已被 `19.0.2.1.1` 收紧为「只有多变体产品才读」。
+
+### 变更
+
+1. **payload 新增产品母型号来源**：`_get_product_card_view_payload()` 读取可选模块
+   `product_reference` 的 `template.base_reference`，按**字段存在性**判断
+   （`"base_reference" in env["product.template"]._fields`，与 `product_image` 的 `env.get` 同一套路，
+   不写进 `depends`）。编号取值链固定为：
+
+   | 层级 | 取值顺序 |
+   |------|----------|
+   | 模板层 `reference` | 产品母型号 `base_reference` → 模板 `default_code` |
+   | 变体层 `variants[].reference` | 变体 `default_code` → 产品母型号 `base_reference` → 模板 `default_code` |
+
+2. **前端零改动**：`product_card_record.js` 的 `referenceText`（`variant?.reference || data.reference`）
+   与模板层 / 变体层 fallback 逻辑本来就在，值在后端已解析好。
+3. **描述 RST 修正**：manifest `description` 的 `Features:` / `Optional integrations:` 两个列表前补空行
+   （原先紧贴正文，docutils 解析告警且列表不渲染）；新增一条 `product_reference` 可选集成说明，
+   `i18n/zh_CN.po` 的 `description:` 条目同步。
+
+### 影响
+
+- 多变体产品（模板 `default_code` 恒为空）在卡片上终于有编号可看：未选变体显示产品母型号 `G001`，
+  选中变体显示该变体编号（空则回退母型号）
+- 未装 `product_reference`、或单变体产品：口径与改动前**完全一致**（模板 `default_code`）
+- 应用详情描述的 RST 渲染由「整段文字」变为「正常列表」（原先 `li=0`，现在 8 个列表项）
+- 本模块仍**不新增模型 / 字段 / 权限**（只读一个可选字段）
+
+### 文档
+
+- 模块 `README.md`（信息区 / 默认口径 / payload 字段表两行）、`AGENTS.md`（可选集成行、版本行、
+  L1 第 5 条「默认口径」补充取值链与按字段存在性判断的要求）、本条目
+- 根 `README.md` / `AGENTS.md` 模块版本行同步；仓库 `TODO.md`：`T-033` 落地 → 归档
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| 开发库升级（`task update -- product_card_view`） | 成功，日志无告警 ✓ |
+| 描述 RST 渲染 | 改动后 8 个列表项、0 告警（改动前 `li=0`）✓ |
+| 应用列表元数据一致性（AGENTS 4.6 校验） | 通过（`description` msgid 与 manifest 逐字符一致）✓ |
+| 卡片显示母型号 / 变体编号（中英双语 + 强刷） | **目标环境待验证**（Card 其余项本就待复验，见模块 `AGENTS.md` L2） |
+
+---
+
 ## [19.0.2.0.7] - 2026-09-22（修复：切换 filter / group by 后卡片空白、过宽、无间隙）
 
 > 修订日期：2026-09-22 ｜ 类型：修复（+z）｜ 影响文件：`product_card_model.js` /

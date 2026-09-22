@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""扩展 product.template，挂载参考号明细并支持按参考号搜索。
+"""扩展 product.template，挂载参考号明细、产品母型号，并支持按参考号搜索。
 
 关键约束（详见模块 AGENTS.md L1）：
 1. 参考号用独立模型 + One2many，禁止逗号分隔塞单个 Char
 2. 搜索在数据库层：冗余可存储字段 ``reference_code_index`` + trigram 索引
-3. ``_search_display_name`` 让 Many2one / 下拉 / 快速搜索命中参考号
+3. ``_search_display_name`` 让 Many2one / 下拉 / 快速搜索命中参考号（含母型号）
 4. ``web_search_read`` 在列表请求 name 时附加「命中参考号」提示
+5. 母型号只存 ``base_reference``：**单变体产品不写它**（型号只写变体的
+   ``default_code``），只有「单变体 → 多变体」时由 ``product_variant_conversion``
+   把编号上移过来；禁止改写原生 ``default_code`` 的桥接语义
 """
 
 from odoo import _, api, fields, models
@@ -48,6 +51,29 @@ class ProductTemplate(models.Model):
         for tmpl in self:
             tmpl.reference_code_count = len(tmpl.reference_code_line_ids)
 
+    # ------------------------------------------------------------------
+    # 母型号（base reference）
+    # ------------------------------------------------------------------
+
+    # 多变体产品（G001-WT / G001-BK）的「产品型号」无处可存：原生 `default_code` 是
+    # 变体自有字段，模板侧在多变体时只是空桥接（`_compute_template_field_from_variant_field`
+    # 只在单变体时镜像变体值）。因此母型号用本字段单独存储，与变体数量完全解耦。
+    #
+    # 写入时机只有两个（**不做双向镜像，也不在单变体产品上落值**）：
+    #   - 多变体产品：用户在产品表单的 `Base Ref.` 里直接维护；
+    #   - 单变体 → 多变体：由 `product_variant_conversion` 把原变体的编号上移过来。
+    # 单变体产品的型号只写在那条变体的 `default_code` 上（真身），产品侧不落值，
+    # 因此不存在「两处需要同步」的问题（改编号不必同时改两处、也不会写漏一处）。
+    base_reference = fields.Char(
+        string="Base Reference",
+        index="trigram",
+        copy=True,
+        help="Model shared by every variant of this product (e.g. G001 for the variants G001-WT "
+             "and G001-BK). It is filled when a single-variant product is turned into a product "
+             "with several variants, and is then the only place where the model is stored, since "
+             "every variant carries its own reference.",
+    )
+
     def _sync_reference_index(self):
         """把所有参考号拼接写入 ``reference_code_index``（搜索索引）。
 
@@ -83,10 +109,12 @@ class ProductTemplate(models.Model):
         domain = super()._search_display_name(operator, value)
         if not (isinstance(value, str) and value):
             return domain
-        # 产品级共享参考号 + 各变体的参考号（多变体产品的参考号不共用，
+        # 产品级共享参考号 + 母型号 + 各变体的参考号（多变体产品的参考号不共用，
         # 但在产品列表 / Many2one 里按任一变体的参考号都应能找到这个产品）
         extra = Domain.OR([
             Domain("reference_code_index", operator, value),
+            # 母型号：多变体产品的 default_code 是空的，用 G001 必须能搜到这个产品
+            Domain("base_reference", operator, value),
             Domain("product_variant_ids", "any", [
                 ("variant_reference_code_index", operator, value),
             ]),

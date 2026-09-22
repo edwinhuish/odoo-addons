@@ -3,6 +3,160 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.5.2.1] - 2026-09-22（对可选模块的了解收敛进适配层 + 降级用例）
+
+> 修订日期：2026-09-22 ｜ 类型：优化（+z）｜ 影响文件：`models/product_template.py` /
+> `tests/test_product_variant_conversion.py` / `AGENTS.md` / `README.md` / `__manifest__.py`（无数据、无 i18n 改动）
+
+### 优化目标
+
+本模块 `depends` 只有 `product`，`product_reference` 是**可选**集成 —— 任何模块组合下转换都必须成功。
+但审计发现两处「间接假设」，一旦对方改名 / 被打补丁就会让**每一次转换**崩掉：
+
+1. `_transfer_shared_references_to_original()` 里 `self.env["product.reference.code"]`（模型不在注册表
+   就是 `KeyError`），只靠同一函数上一行的字段判断间接保证；
+2. 交接后调 `self._sync_reference_index()` 是对方定义在 `product.template` 上的方法，只靠「字段在 ⟺
+   方法在」这个隐含前提取用。
+
+同时把「对 `product_reference` 的全部了解」从散落各处收敛到**一个适配层**，让边界可读、可测、可一处修改。
+
+### 变更
+
+1. 新增「可选集成适配层」（`models/product_template.py` 内同名注释段）三个方法：
+   `_has_base_reference_field()` / `_has_shared_reference_lines()` / `_get_reference_code_model()`；
+   两个消费点改成用它们判断，字段名与模型名从此只出现在适配层里。
+2. `_get_reference_code_model()` 用 `env.get("product.reference.code")`（未注册返回 `None`），
+   不再出现任何 `env[对方模型名]`。
+3. `_sync_reference_index()` 改为 `getattr` 探测方法存在后再调用，去掉「字段在 ⟺ 方法在」的隐含前提。
+4. 新增降级用例 `test_reference_handling_degrades_gracefully_without_product_reference()`：
+   在**两种配置**下都跑，分别断言「装了 → 编号上移成母型号」「没装 → 编号原样留在变体上、转换照常成功」。
+5. 文档补齐可选集成矩阵（README →「可选集成与解耦边界」）与硬约束（AGENTS → L2）。
+
+### 优化前后对比
+
+| 场景 | 优化前 | 优化后 |
+|------|--------|--------|
+| 未装 `product_reference` | 靠字段判断跳过；分支内藏 `env[对方模型]`，模型缺失即 `KeyError`（每次转换都失败） | 适配层统一判断，取模型走 `env.get()`，缺席时两步都空转、转换照常完成 |
+| 对方被第三方改名 / 改字段 | 字段名散落 5 处、方法名 1 处，漏改一处即崩 | 只改适配层那 3 个方法 |
+| 降级行为是否有测试 | 无常驻用例（只有「装了」路径的用例） | 新增用例在两种配置下分别断言，`skip` 只覆盖「装了才有意义」的部分 |
+
+### 影响
+
+- 行为不变（装了 / 没装 `product_reference` 的转换结果与 `19.0.5.2.0` 完全一致）
+- 无数据结构变化、无迁移；测试 **45 → 46 项**（`odoo.tests.result` 口径，新增 1 条降级用例）
+
+### 文档
+
+- 模块 `README.md` →「依赖」下新增「可选集成与解耦边界」表（含 `product_dimension` / `stock` 等）
+  与「本模块会拦截改属性的 `write()`，程序化建变体请走 `create()`」提示
+- 模块 `AGENTS.md` → L2 新增适配层约束与 `create()` 提示；根 `README.md` 新增「扩展解耦矩阵」；
+  `TODO.md`（`T-034`）
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant_conversion`（未装 `product_reference`） | 46 项 0 failed / 0 error（新用例走「没装」分支）✓ |
+| `task test -- product_variant_conversion,product_reference,product_card_view`（三模块同装） | 54 项 0 failed / 0 error（含另两个模块的用例）✓ |
+
+---
+
+## [19.0.5.2.0] - 2026-09-22（编号上移改为唯一来源，母型号以变体编号为准）
+
+> 修订日期：2026-09-22 ｜ 类型：行为调整（+y）｜ 影响文件：`models/product_template.py` /
+> `__manifest__.py` / `i18n/zh_CN.po` / `tests/test_product_variant_conversion.py`
+
+### 优化目标
+
+`19.0.5.1.0` 上移编号时要求「产品母型号已经和变体编号同值」才清空变体编号 —— 那是建立在
+`product_reference` 「单变体写两处」的镜像写法上的。该镜像已被 `product_reference` `19.0.2.7.0`
+删除（同一份数据写两处必然出现不一致），因此这一步改为**转换本身就是母型号的数据来源**：
+单变体产品的变体编号就是产品型号，上移时**覆盖式写入**，不再与产品侧已有值比对。
+
+### 变更
+
+1. **`_move_single_variant_reference_to_base_reference()` 简化**：转换前唯一那条变体有编号时，
+   无条件把它写进 `product.template.base_reference`（覆盖产品侧可能残留的值）并清空变体编号；
+   覆盖了不同的旧值时记一条日志便于追溯。
+2. **去掉「编号与母型号不同就保留」的分支**：单变体产品侧不再有任何合法来源，留着只会让
+   「多变体退回单变体」的残留值拦住上移。
+3. **变体没有编号时仍然什么都不做**：此时产品侧若有母型号（残留），保留比误删安全 —— 已加测试钉住。
+4. manifest 描述措辞同步（`stays on` → `is moved to`），`i18n/zh_CN.po` 的 `description:` 条目同步。
+
+### 影响
+
+- 单变体转多变体：产品母型号 = 原变体编号（覆盖式），两条变体的编号都为空（待用户按变体填）；
+  值一处不丢
+- 「多变体退回单变体」后再转多变体：残留母型号不会被清成空；若那条变体有编号，则以编号为准
+- 未装 `product_reference` 时行为完全不变（整个方法直接返回）
+- 无数据结构变化、无迁移；测试 45 项（改写两条母型号用例）
+
+### 文档
+
+- 模块 `AGENTS.md`（L2「唯一的例外」重写、版本行）、`README.md`（属性归属审计表一行 + 说明块）、
+  本条目
+- `19.0.5.1.0` 条目已加注：其第 2 点中的「母型号为空时才上移」被本版替换
+- 根 `README.md` / `AGENTS.md` 版本行、仓库 `TODO.md`（`T-033`）同步
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant_conversion,product_reference` | 45 项 0 failed / 0 error（含 `test_single_variant_reference_moves_to_the_product_base_reference` 与 `test_variant_reference_wins_over_a_leftover_base_reference`）✓ |
+| `task test -- product_variant_conversion`（未装 `product_reference`） | 45 项 0 failed / 0 error，两条用例按预期 skip ✓ |
+| `… -- product_variant_conversion,product_dimension`、`… ,stock,sale_management` | 目标环境待验证（本地未跑该组合） |
+
+---
+
+## [19.0.5.1.0] - 2026-09-22（单变体的内部参考号升级为产品母型号）
+
+> 修订日期：2026-09-22 ｜ 类型：功能新增（+y）｜ 影响文件：`models/product_template.py` /
+> `models/product_variant_conversion.py` / `tests/test_product_variant_conversion.py` /
+> `i18n/zh_CN.po` / `__manifest__.py`
+>
+> ⚠ **本条的第 2 点已被 `19.0.5.2.0` 替换**：上移不再要求「母型号已同值」，
+> 改为**覆盖式写入**（转换本身就是母型号的数据来源），理由见该条目的「优化目标」。
+
+### 变更
+
+1. **新增 ⑤.5 步 `_move_single_variant_reference_to_base_reference(originals)`**：转换前唯一那条变体
+   若顶着产品型号，把型号留在产品上（`product.template.base_reference`，`product_reference` 模块提供）、
+   清空它的 `default_code`。放在 ④ `_create_variant_ids()` **之后**：此时产品已是多变体，
+   `product_reference` 的单变体镜像（只在单变体时把两处写同值）不会再介入。
+2. **三条边界**（都写在方法 docstring 里）：
+   - 只在**转换前恰好一条变体**时处理 —— 本来就是多变体的产品，各变体编号本来就独立，转换一个都不动；
+   - 母型号为空时**先把编号记到产品上再清变体**（升级前建的存量产品、直接写变体导入的编号不丢数据）；
+   - 编号与母型号不同（用户刻意区分）时**保留**，只记日志。
+   - 未安装 `product_reference`（没有 `base_reference` 字段）时整个方法直接返回，不做任何事。
+3. **谱系字段 help 文案同步**：`product.variant.lineage.result_default_code` 原先写着
+   「转换不会改动它」，现在不再成立，改为「单变体产品转换时该编号留在产品上作母型号、并从变体上清空」，
+   `i18n/zh_CN.po` 对应条目同步（msgid + msgstr）。
+4. **manifest 描述新增一条**说明参考号不丢（留在产品母型号上），`i18n/zh_CN.po` 的 `description:` 同步。
+
+### 影响
+
+- 单变体产品（`G001`）转成多变体后：产品上母型号 = `G001`，两条变体的 `default_code` 都是空 ——
+  用户按变体各填 `G001-WT` / `G001-BK`，不再出现「被保留的那条看起来像整机、其它变体没编号」
+- 本来就是多变体的产品：转换**完全不动**变体编号（新增断言钉住）
+- 未装 `product_reference` 的环境：行为与 `19.0.5.0.0` 完全一致（两条新用例自动跳过）
+- 无数据结构变化、无迁移；测试 **43 → 45 项**（`odoo.tests.result` 口径，新增两条用例）
+
+### 文档
+
+- 模块 `README.md`（「新变体不会自动获得的东西」补说明、属性归属审计表两行更新）、`AGENTS.md`
+  （版本行 + L2 字段归属节新增「唯一的例外」）、本条目
+- 根 `README.md` / `AGENTS.md` 模块版本行同步；仓库 `TODO.md`：`T-033` 落地 → 归档
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant_conversion,product_reference` | 45 项 0 failed / **0 error**（含两条新用例：母型号迁移、母型号为空时先存后清）✓ |
+| `task test -- product_variant_conversion`（未装 `product_reference`） | 45 项 0 failed / 0 error，两条新用例按预期 skip ✓ |
+| `task test -- product_variant_conversion,product_reference,stock,sale_management` | 目标环境待验证（本地未跑全套可选模块组合） |
+
+---
+
 ## [19.0.5.0.0] - 2026-09-22（谱系来源判定更准 + 修复「没装 product_reference 时转换必崩」）
 
 ### 变更

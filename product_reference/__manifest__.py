@@ -1,7 +1,7 @@
 {
     "name": "Product References",
-    "version": "19.0.2.5.3",
-    "summary": "Attach several references to one product and find the product from any of its references; the standard Odoo Reference is edited right under the product name and the extra references are managed from the + button inside it (a product with several variants keeps one set of references per variant)",
+    "version": "19.0.2.7.1",
+    "summary": "Attach several references to one product and find the product from any of its references; the standard Odoo Reference is edited right under the product name and the extra references are managed from the + button inside it (a product with several variants keeps one set of references per variant, plus one base reference shared by all of them)",
     "description": """
         Product reference management module for foreign trade SOHO scenarios.
 
@@ -21,6 +21,11 @@
           Reference block is hidden on the product form and every variant keeps
           its own set of references (variant references are independent from the
           shared product references, like the variant image gallery)
+        - Such a product also carries a base reference (its model, e.g. G001 for
+          the variants G001-WT and G001-BK): it is edited on the product form,
+          shared by every variant, found by the search and shown on the product
+          cards; a single-variant product has no base reference yet, its
+          reference is moved there when it becomes a product with variants
         - When a product carries extra references, a "+N" badge appears next to
           the button and hovering it shows the list of references in a tooltip
         - References live in a dedicated line model exposed as a One2many on
@@ -33,7 +38,8 @@
           indexes; searching a product by the reference of one of its variants
           also finds the product
         - Many2one dropdowns, search suggestions, quick search and the list
-          search box all find a product by any of its references
+          search box all find a product by any of its references, and by the
+          base reference of a product with several variants
         - When a reference is hit, the result shows
           "Product (Matching reference: xxx)" so products can be told apart
         - Reference lines are removed with the product, no orphan data

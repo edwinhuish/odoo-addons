@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.5.0.0`（19.0.5.0.0：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；19.0.4.1.1 起含参考号交接，`19.0.4.1.0` 起含尺寸继承）
+- 当前版本：`19.0.5.2.1`（19.0.5.2.1：对可选模块 `product_reference` 的了解收敛进「可选集成适配层」三个方法 + 取模型改 `env.get()` + `getattr` 探测对方方法 + 新增降级用例；19.0.5.2.0：编号上移改为**覆盖式、唯一来源**，不再与产品侧已有值比对；19.0.5.1.0：单变体产品转多变体时，把原变体的内部参考号上移成产品母型号、并清空变体编号；19.0.5.0.0：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；19.0.4.1.1 起含参考号交接，`19.0.4.1.0` 起含尺寸继承）
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -402,6 +402,16 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
     重量 / 内部参考号显示空 / 0 是**原生语义，不是数据丢失**（真值在承载它的那条变体上）；
   - 因此**变体级字段不需要任何数据迁移**：值本来就在那条唯一的 `product.product` 记录上，而本模块保留该记录。
     由测试 `test_field_storage_layers_match_the_audit()` / `test_variant_level_values_stay_on_the_kept_variant()` 钉住；
+  - **唯一的例外：内部参考号上移为产品母型号**（`19.0.5.1.0` 起，装了 `product_reference` 时）。
+    单变体产品的 `default_code` 就是产品型号（该模块**不在产品侧写镜像**，见其 AGENTS.md L1.3），
+    转成多变体后由 `product.template.base_reference` 承载，原变体上的编号被**清空**
+    （`_move_single_variant_reference_to_base_reference()`），好让每条变体各填自己的编号
+    （`G001` → `G001-WT` / `G001-BK`）。三条边界：
+    ① **只在转换前恰好一条变体时**处理（本来就是多变体产品，变体编号各自独立，转换一个都不动）；
+    ② 上移是**覆盖式**的（`19.0.5.2.0`）：变体编号就是产品型号，产品侧残留值以它为准，被覆盖时记日志；
+    ③ **变体没有编号时什么都不做** —— 产品侧若有残留母型号（「多变体退回单变体」的遗留），
+    保留比误删安全。测试：`test_single_variant_reference_moves_to_the_product_base_reference()` /
+    `test_variant_reference_wins_over_a_leftover_base_reference()`（未装该模块时自动跳过）；
   - **新变体的继承策略**（`19.0.3.2.0` 起默认开启，系统参数 `product_variant_conversion.inherit_variant_data`）：
     按谱系来源（`variant_origin_id`）复制 `standard_price` / `volume` / `weight`；**`default_code` 与 `barcode` 刻意不复制**
     （参考号受 `product_reference` 的 L1 约束「多变体不共用」约束、条码有 `_check_barcode_uniqueness()` 唯一性约束）；
@@ -416,6 +426,15 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   - **可选模块不得让主流程崩**：`_transfer_shared_references_to_original()` 在未装 `product_reference` 时
     只按字段判断跳过，**不要**在那个分支里 `self.env["product.reference.code"]`（模型不存在 → `KeyError`，
     每次转换都会失败，实测 HEAD 上 33/43 条用例 error）。返回硬依赖模型（`product.product`）的空记录集即可。
+  - **可选模块的了解必须收在「可选集成适配层」**（`19.0.5.2.1` 起，`models/product_template.py` 里那段注释）：
+    字段名 / 模型名只准出现在 `_has_base_reference_field()` / `_has_shared_reference_lines()` /
+    `_get_reference_code_model()` 三个方法里，取模型一律用 `env.get()`（模型缺失返回 `None`）、
+    调对方的方法（如 `_sync_reference_index()`）一律 `getattr` 探测 —— 别依赖「字段在 ⟺ 方法在」这种
+    隐含前提。任何模块组合下转换都必须成功，降级分支由
+    `test_reference_handling_degrades_gracefully_without_product_reference()` 在两种配置下分别断言。
+  - ⚠ **本模块会拦截改属性的 `write()`**（功能本身）：其它模块的代码 / 测试若需要程序化产生多变体产品，
+    请把属性行放进 `create()`（`create` 不拦截）—— `product_reference` / `product_card_view` 的测试
+    就是这么写的，别改回「先建单变体、再 `write` 属性行」。
 - **跨模块协同：产品尺寸（`product_dimension`）**（`19.0.4.1.0` 起）：该模块把尺寸放在**变体**上
   （`dimension_*`），模板侧只是单变体桥接，所以「尺寸 + 各自的 Volume」天然逐变体独立；
   本模块的按谱系继承清单会在这些字段存在时带上它们（`_get_variant_conversion_inherited_fields()`），

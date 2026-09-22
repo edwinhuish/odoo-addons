@@ -555,7 +555,6 @@ class TestProductVariantConversion(TransactionCase):
         original = product.product_variant_id
         original.write({
             "barcode": "1234567890123",
-            "default_code": "KEEP-001",
             "standard_price": 12.5,
             "volume": 0.25,
             "weight": 3.5,
@@ -576,8 +575,9 @@ class TestProductVariantConversion(TransactionCase):
         self.assertEqual(len(new_variant), 1)
 
         # ① 默认变体 = 保留的那条原记录：变体级字段一个都没变
+        #    （内部参考号不在这里断言：单变体产品的编号转换后由产品母型号承载，
+        #     见 test_single_variant_reference_moves_to_the_product_base_reference）
         self.assertEqual(original.barcode, "1234567890123")
-        self.assertEqual(original.default_code, "KEEP-001")
         self.assertEqual(original.standard_price, 12.5)
         self.assertEqual(original.volume, 0.25)
         self.assertEqual(original.weight, 3.5)
@@ -607,7 +607,6 @@ class TestProductVariantConversion(TransactionCase):
         #    取值来自结果变体本身，所以保留的那条显示原值、新变体那行是空的
         kept_line = product.lineage_ids.filtered("is_kept")
         self.assertEqual(len(kept_line), 1)
-        self.assertEqual(kept_line.result_default_code, "KEEP-001")
         self.assertEqual(kept_line.result_barcode, "1234567890123")
         self.assertEqual(kept_line.result_standard_price, 12.5)
         added_line = product.lineage_ids - kept_line
@@ -659,6 +658,9 @@ class TestProductVariantConversion(TransactionCase):
         self.assertEqual(red.standard_price, 10.0)
         self.assertEqual(blue.volume, 0.2)
         self.assertEqual(blue.weight, 2.0)
+        # 本来就是多变体的产品，各变体编号与产品母型号无关：转换一个都不动
+        self.assertEqual(red.default_code, "RED-001")
+        self.assertEqual(blue.default_code, "BLUE-001")
 
     def test_shared_references_move_to_the_kept_variant_when_installed(self):
         """装了 product_reference 时：单变体产品上的「产品级共享参考号」交接给被保留的变体。
@@ -797,6 +799,129 @@ class TestProductVariantConversion(TransactionCase):
             {red_l: red_m, blue_l: blue_m},
         )
 
+    # ------------------------------------------------------------------
+    # 单变体产品转多变体：内部参考号升级为产品母型号（T-033）
+    # ------------------------------------------------------------------
+
+    def test_single_variant_reference_moves_to_the_product_base_reference(self):
+        """单变体产品的编号在转换时**上移**成产品母型号，原变体上的编号被清空。
+
+        单变体产品的型号真身只有一处：那条变体的 ``default_code``
+        （``product_reference`` 不在产品侧写镜像，产品表单此时也只显示 ``Ref.``）。
+        转成多变体后产品型号改由 ``base_reference`` 承载，变体层腾空给每条变体自己的
+        编号（G001 → G001-WT / G001-BK）；编号留在被保留的那条变体上的话，它看起来像
+        「整机 / 母型号」，卡片与单据上也会把产品型号当成变体型号显示。
+
+        跑法：`task test -- product_variant_conversion,product_reference --test-tags=/product_variant_conversion`
+        （本模块不硬依赖 product_reference，未安装时这条用例自动跳过）。
+        """
+        if "base_reference" not in self.env["product.template"]._fields:
+            self.skipTest("product_reference is not installed")
+        product = self._create_product()
+        product.write({"default_code": "G001"})
+        original = product.product_variant_id
+        # 单变体产品：编号只写变体，产品侧不落值（这正是「不会不同步」的原因）
+        self.assertEqual(original.default_code, "G001")
+        self.assertFalse(product.base_reference)
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+        product.invalidate_recordset()
+        original.invalidate_recordset()
+
+        new_variant = product.product_variant_ids - original
+        self.assertEqual(len(new_variant), 1)
+        # 编号一处不丢：上移到产品母型号
+        self.assertEqual(product.base_reference, "G001")
+        # 两条变体都要自己填编号：原变体的编号被清空，谱系行上也如实显示
+        self.assertFalse(original.default_code)
+        self.assertFalse(new_variant.default_code)
+        kept_line = product.lineage_ids.filtered("is_kept")
+        self.assertFalse(kept_line.result_default_code)
+
+    def test_variant_reference_wins_over_a_leftover_base_reference(self):
+        """母型号残留值不会妨碍上移：单变体产品的变体编号就是产品型号。
+
+        「多变体退回单变体」或人工 / 导入写入可能在单变体产品上留下 ``base_reference``；
+        转换是母型号重新定值的时刻，以那条唯一变体的编号为准（覆盖），随后清空变体编号。
+        变体没有编号时反过来什么都不做 —— 不能因为编号为空就把残留母型号清掉。
+        """
+        if "base_reference" not in self.env["product.template"]._fields:
+            self.skipTest("product_reference is not installed")
+
+        # ① 变体有编号：覆盖残留母型号
+        product = self._create_product()
+        original = product.product_variant_id
+        product.base_reference = "STALE-001"
+        original.default_code = "KEEP-003"
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+        product.invalidate_recordset()
+        original.invalidate_recordset()
+
+        self.assertEqual(product.base_reference, "KEEP-003")
+        self.assertFalse(original.default_code)
+
+        # ② 变体没编号：残留母型号保持不动（无从判断归属，保留比误删安全）
+        other = self._create_product(name="Test Variant Product Without Reference")
+        other.base_reference = "KEEP-004"
+        other_original = other.product_variant_id
+        commands = self._set_commands(other, self.size, self.size.value_ids)
+        preview = self._preview(other, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), other_original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(other, commands, self._payload(rows))
+        other.invalidate_recordset()
+        other_original.invalidate_recordset()
+
+        self.assertEqual(other.base_reference, "KEEP-004")
+        self.assertFalse(other_original.default_code)
+
+    def test_reference_handling_degrades_gracefully_without_product_reference(self):
+        """没装 `product_reference` 时转换照常成功：编号留在变体上，不做任何上移。
+
+        这是本模块「可选集成」的降级契约：`product_reference` 缺席时上移与共享参考号交接
+        两个步骤都空转，**绝不**因此报错或中断转换（两种配置都会跑这条用例，断言按是否
+        装了该模块分支）。
+        """
+        product = self._create_product()
+        product.write({"default_code": "G001"})
+        original = product.product_variant_id
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = self._preview(product, commands)
+        rows = [
+            self._row(self._combination_of(preview, self.size_m), original),
+            self._row(self._combination_of(preview, self.size_l)),
+        ]
+        self._confirm(product, commands, self._payload(rows))
+        product.invalidate_recordset()
+        original.invalidate_recordset()
+
+        self.assertEqual(len(product.product_variant_ids), 2)
+        if "base_reference" in self.env["product.template"]._fields:
+            # 装了：编号上移成产品母型号，变体上的那份清空
+            self.assertEqual(product.base_reference, "G001")
+            self.assertFalse(original.default_code)
+        else:
+            # 缺席：没有任何地方可以上移，编号原样留在那条变体上，转换本身照常完成
+            self.assertFalse(product.default_code)
+            self.assertEqual(original.default_code, "G001")
+
+
     def test_adding_a_value_inherits_dimensions_from_the_right_variant(self):
         """承接上一条：新变体继承的是它**对应**那条原变体的尺寸与体积（装了 product_dimension 时）。
 
@@ -929,7 +1054,14 @@ class TestProductVariantConversion(TransactionCase):
         new_variant = self._confirm_original_keeps_first_value(product, original)
 
         # ① 本来指向原记录的资料：仍指向它（「已属于该变体」就不动）
-        self.assertEqual(original.default_code, "KEEP-002")
+        #    唯一的例外是内部参考号：装了 product_reference 时它是单变体产品的产品型号，
+        #    转换会上移成产品的 base_reference 并清空变体上那份，好让每条变体各填编号
+        #    （见 test_single_variant_reference_moves_to_the_product_base_reference）
+        if "base_reference" in self.env["product.template"]._fields:
+            self.assertFalse(original.default_code)
+            self.assertEqual(product.base_reference, "KEEP-002")
+        else:
+            self.assertEqual(original.default_code, "KEEP-002")
         self.assertEqual(original.barcode, "9999999999999")
         self.assertEqual(variant_price.product_id, original)
         self.assertEqual(variant_rule.product_id, original)

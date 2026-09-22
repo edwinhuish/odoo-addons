@@ -1,5 +1,174 @@
 # 变更日志
 
+## [19.0.2.7.1] - 2026-09-22（补母型号契约测试 + 明确「只做提供方」的解耦边界）
+
+> 修订日期：2026-09-22 ｜ 类型：文档 / 测试（+z）｜ 影响文件：`tests/`（**新增**）/
+> `AGENTS.md` / `README.md` / `__manifest__.py`（**无源码逻辑、无数据、无 i18n 改动**）
+
+### 优化目标
+
+母型号 `base_reference` 是另外两个模块（`product_variant_conversion` / `product_card_view`）**可选消费**的
+接口，但本模块此前**一个自动化用例都没有**，「谁在什么时候写它」的契约只写在文档里；
+同时也没有明确写清「本模块不感知消费方」。本版把这两件事补齐。
+
+### 变更
+
+1. 新增 `tests/test_base_reference.py`（本模块首次带自动化用例），只钉**对外契约**：
+   - 单变体产品写 `default_code` **不会**在产品侧留下副本（没有镜像）；
+   - 两个字段互不驱动（写谁都不会顺手改另一个，单变体 / 多变体各验一遍）；
+   - 母型号可被搜索：产品与变体都能在 `display_name` 搜索里按母型号命中。
+   转换行为（什么时候写入）不在这里测 —— 那是 `product_variant_conversion` 的职责。
+2. 测试建产品的写法固定为「属性行放进 `create()`」并注明原因：`product_variant_conversion` 装了之后会
+   拦截「写 `attribute_line_ids`」的保存（要求确认变体归属），`create` 不受拦截 —— 本模块的测试
+   不该被另一个模块的可选行为绊住（这是审计时真实踩到的坑）。
+3. 文档补「与其它扩展的边界（可选集成）」：本模块**不依赖也不感知**消费方，卸载它们不影响本模块；
+   反过来**缺 `product_variant_conversion` 时母型号不会自动产生**（需人工补录）。
+
+### 影响
+
+- 无行为变化、无数据结构变化、无迁移
+- 测试 **0 → 4 项**（本模块首次带自动化用例），在「单装」「三模块同装」两种环境下均通过
+
+### 文档
+
+- 模块 `README.md` → 新增「与其它扩展的边界（可选集成）」；`AGENTS.md` → L1.3 补「只做提供方、
+  不感知消费方」约束与测试要求
+- 根 `README.md` 新增「扩展解耦矩阵」；`TODO.md`（`T-034`）
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_reference --test-tags=/product_reference`（只装本模块 + `product`） | 4 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,product_reference,product_card_view`（三模块同装） | 54 项 0 failed / 0 error（本模块 4 项在其中）✓ |
+
+---
+
+## [19.0.2.7.0] - 2026-09-22（母型号写入策略：单变体只写变体，转多变体时上移）
+
+> 修订日期：2026-09-22 ｜ 类型：功能新增 / 行为调整（+y）｜ 影响文件：`models/product_template.py` /
+> `models/product_product.py` / `__manifest__.py` / `i18n/zh_CN.po` /
+> `migrations/19.0.2.7.0/post-migration.py`（新增）、`migrations/19.0.2.6.0/`（**删除**）
+
+### 优化目标
+
+`19.0.2.6.0` 让单变体产品的编号**同时**写进变体的 `default_code` 与产品的 `base_reference`
+（两处同值，靠 `_sync_base_reference_vals` + `_sync_single_variant_base_reference` 双向维持）。
+同一份数据写两处意味着**只要有一条写入路径漏掉就会长期不一致**（产品表单 / 变体表单 / 变体列表 /
+导入 / 外部集成 / SQL 改数据），而这类偏差不会报错、只能靠人工比对发现。本版把编号收敛成**单一真值**。
+
+### 变更
+
+1. **删掉单变体镜像写入**：移除 `product_template._sync_base_reference_vals()` 与
+   其 `create` / `write` 挂钩，同时移除 `product_product._sync_single_variant_base_reference()`
+   与变体 `write` 里的调用 —— 单变体产品的编号**只写变体的 `default_code`**，
+   产品侧 `base_reference` 保持为空。
+2. **母型号改为「转换时上移」**：`base_reference` 只有两个写入时机 ——
+   ① 多变体产品在产品表单 `Base Ref.` 里维护；② 单变体 → 多变体时由
+   `product_variant_conversion` 把原变体的编号覆盖式上移（见该模块 `19.0.5.2.0`）。
+3. **收尾清理旧镜像值**（`migrations/19.0.2.7.0/post-migration.py`）：把 `19.0.2.6.0` 留在
+   **单变体产品**上的 `base_reference`（值恰好等于该变体 `default_code`）置空；多变体产品的母型号不动。
+   同时**删除** `migrations/19.0.2.6.0/`（回填已不再是期望行为，留着会在新版上反复写入又清掉）。
+4. **字段 help 与应用列表描述同步**：`base_reference` 的 help 不再写「单变体产品上与内部参考号一致」，
+   改为「单变体产品转为多变体时写入」；manifest `description` 与 `i18n/zh_CN.po` 的
+   `help:` / `description:` 条目同步（`summary` 不变）。
+
+### 影响
+
+- 单变体产品的编号只有一处（变体），任何写入路径都不会再出现「两处不一致」；产品列表 / 卡片上
+  单变体产品的编号仍与以前一致（读的本来就是变体编号）
+- 升级会清掉单变体产品上的镜像值（本模块旧版本的产物），**变体上的编号一个字节不动**；
+  多变体产品的母型号不受影响
+- 行为变化：`product.template.write({"base_reference": ...})` 不再自动改写 `default_code`，
+  反之亦然 —— 两个字段从此各管一层
+- 无数据结构变化（字段已在 `19.0.2.6.0` 建好）；迁移只清冗余镜像列
+
+### 文档
+
+- 模块 `AGENTS.md`（L1.3 重写为「单一真值、不做镜像」+ 版本行）、`README.md`
+  （母型号节重写为「编号写在哪」表 + 新增「单一真值、不做镜像」设计点 + 验证清单更新）、本条目
+- `19.0.2.6.0` 条目已加注：其第 2 点（单变体镜像写入）被本版替换
+- 根 `README.md` / `AGENTS.md` 版本行、仓库 `TODO.md`（`T-033`）同步
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_variant_conversion,product_reference` | 45 项 0 failed / 0 error（含改写后的两条母型号用例）✓ |
+| `task test -- product_variant_conversion`（未装本模块） | 45 项 0 failed / 0 error，两条用例按预期 skip ✓ |
+| 开发库升级 | 日志 `cleared the mirrored base_reference of 22 single-variant product(s)`，升级后单变体产品 `base_reference` 残留 **0** 条 ✓ |
+| 多变体产品母型号未被误清 | 6 条多变体模板母型号计数仍为 0（升级前也是 0，无一条被本次清理误伤）✓ |
+| 中文标签 / help 落库 | 标签 `母型号`，help 已更新为「单变体产品不写这个字段……」✓ |
+| 应用列表元数据一致性（AGENTS 4.6 校验） | 通过 ✓ |
+| 单/多变体表单可见性、搜 `G001`、卡片显示 | **目标环境待验证** |
+
+---
+
+## [19.0.2.6.0] - 2026-09-22（新功能：产品母型号 base_reference）
+
+> 修订日期：2026-09-22 ｜ 类型：功能新增（+y）｜ 影响文件：`models/product_template.py` /
+> `models/product_product.py` / `views/product_template_views.xml` / `i18n/zh_CN.po` /
+> `__manifest__.py` / `migrations/19.0.2.6.0/post-migration.py`
+>
+> ⚠ **本条的第 2、3 点已被 `19.0.2.7.0` 替换**：单变体产品不再镜像写 `base_reference`，
+> 改为「转多变体时上移」；`19.0.2.6.0` 的回填迁移已删除，改由 `19.0.2.7.0` 清理旧镜像值。
+> 字段 / 视图 / 搜索 / 卡片部分不变。
+
+### 变更
+
+1. **新增产品母型号 `product.template.base_reference`**（`Char` + trigram 索引 + `copy=True`）：
+   多变体产品的产品型号（`G001` 对应 `G001-WT` / `G001-BK`）终于有地方存。
+   原生 `default_code` 是 `product.product` 的自有存储字段，模板侧在多变体时只是「读出空、写入不落任何变体」
+   的桥接（`_compute_template_field_from_variant_field()`），因此**不复用也不改写它**。
+2. **单变体产品：型号同时落在两处**（`_sync_base_reference_vals`）。产品 `create` / `write` 里
+   把 `default_code` 与 `base_reference` 写进**同一份 vals**（一次写库、不会二次触发同步、也不会循环）；
+   变体侧直接改编号（变体表单 / 变体列表 / 变体导入）由
+   `product.product._sync_single_variant_base_reference()` 补同步，且**只在单变体时**同步。
+3. **多变体产品：两个字段互不代表对方**，不做镜像 —— 镜像会把产品母型号误改成某条变体的编号。
+4. **视图按变体数分流**（`views/product_template_views.xml`）：单变体只显示 `Ref.`（原生 `default_code`
+   编辑器 + 额外参考号入口），多变体只显示 `Base Ref.`（母型号）。原先**整块**隐藏的
+   `div[name='product_reference']` 改为元素级 `invisible`，否则多变体产品的母型号输入框会被一起藏掉。
+5. **搜索并入母型号**：模板 `_search_display_name`、变体 `_search_display_name`（经 `_inherits` 委托）、
+   搜索视图 `filter_domain`（顶部搜索框 + 独立「Reference」搜索项）三处。
+   多变体产品的模板级 `default_code` 是空的，不并入就等于「搜 `G001` 找不到产品 / 订单行选不到产品」。
+6. **产品列表新增 `Base Reference` 列**（列选择器里默认隐藏）。
+7. **存量数据回填**（`migrations/19.0.2.6.0/post-migration.py`）：单变体产品按变体的 `default_code`
+   回填母型号（这正是新写法的既成结果，不是启发式猜测）；多变体产品没有可回填的值（模板级 `default_code`
+   一直是空），保持空、由人工补录。**必须放 post-migration**：新列要到模型加载（`_auto_init`）之后才存在。
+8. **应用列表元数据同步**：manifest `summary` / `description` 增补母型号说明，`i18n/zh_CN.po` 的
+   `summary:` / `description:` 条目同步（含新增的字段标签、help、`Base Ref.`、`e.g. G001` 四条译文）。
+
+### 影响
+
+- 多变体产品在产品表单上有了可维护的产品型号，并能在 Products 列表 / Many2one 下拉 / 销售订单行等
+  选产品处按母型号搜到；卡片视图（装了 `product_card_view` 时）也能显示它
+- 单变体产品对「只填过 `Ref.`」的用户完全无感：`product.product.default_code` 的口径不变，
+  区别只是产品上多了一份同值镜像（存的是同一个值，没有第二处真值）
+- 升级会新增一列并回填单变体产品，**不需要**手工改数据；多变体产品的母型号需人工补录一次
+- 未改写任何原生字段语义、未改原生桥接行为
+- 新增可选协同：`product_variant_conversion` 转多变体时会把母型号留在产品上、清空原变体编号
+  （见该模块 `19.0.5.1.0`）
+
+### 文档
+
+- 模块 `README.md`（功能概述 / 核心设计表 / 模型字段表 / 新增「母型号 Base Reference」节 / 验证清单）、
+  `AGENTS.md`（命名语义 + 新增 L1.3 + 搜索约束补充）、本条目
+- 根 `README.md` / `AGENTS.md` 模块版本行同步；仓库 `TODO.md`：`T-033` 落地 → 归档
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_variant_conversion,product_reference` | 45 项用例 0 failed / 0 error（本模块无自带用例，跑的是跨模块协同）✓ |
+| 开发库升级（`task update -- product_reference product_variant_conversion product_card_view`） | 升级成功；迁移日志 `backfilled base_reference for 22 single-variant product(s)` ✓ |
+| 回填一致性（SQL 核对） | 22 条单变体产品 **22 条** `base_reference = 该变体 default_code`；6 条多变体模板 `base_reference` 全为空（待人工补录）✓ |
+| 中文标签落库 | `ir_model_fields.field_description->>'zh_CN'` = `母型号` ✓ |
+| 应用列表元数据一致性（AGENTS 4.6 校验） | 通过（`summary` / `description` / `shortdesc` 与 manifest 逐字符一致）✓ |
+| 描述 RST 渲染 | 与改动前一致（原有告警未增加，新增条目正常渲染为列表项）✓ |
+| 单/多变体表单可见性、搜 `G001`、卡片显示 | **目标环境待验证**（清单见 README「验证清单」） |
+
+---
+
 ## [19.0.2.5.3] - 2026-09-22（修复：权限硬编码了可选模块 sale 的用户组）
 
 ### 变更

@@ -11,6 +11,10 @@
 ``default_product_tmpl_id``；变体参考号行经 ``(0, 0, ...)`` 创建时会被填进
 ``product_tmpl_id``，随后又被 One2many inverse 回填 ``product_id``，触发「参考号不能同时
 归属产品与变体」的约束报错。故对变体参考号行的 create 命令无条件置空产品归属。
+
+本模块**不**在变体上改 ``default_code`` 时顺手写产品母型号（``base_reference``）：
+单变体产品的型号真身就是这条变体，产品侧不需要镜像；单变体 → 多变体时由
+``product_variant_conversion`` 负责把编号上移成母型号（见模块 AGENTS.md L1.3）。
 """
 
 from odoo import _, api, fields, models
@@ -95,7 +99,8 @@ class ProductProduct(models.Model):
 
         原生只按模板 name / 变体 default_code / barcode 等搜索；这里并入
         ``variant_reference_code_index``（变体级）与继承的 ``reference_code_index``
-        （产品级共享）。否定操作符必须取交集，否则会查出所有非该参考号的变体。
+        （产品级共享）、``base_reference``（产品母型号）。否定操作符必须取交集，
+        否则会查出所有非该参考号的变体。
         """
         domain = super()._search_display_name(operator, value)
         if not (isinstance(value, str) and value):
@@ -103,6 +108,9 @@ class ProductProduct(models.Model):
         extra = Domain.OR([
             Domain("variant_reference_code_index", operator, value),
             Domain("reference_code_index", operator, value),
+            # 母型号经 `_inherits` 委托到 product.template；订单行等 Many2one 里
+            # 输入多变体产品的母型号（G001）也要能命中它的各条变体
+            Domain("base_reference", operator, value),
         ])
         if operator in Domain.NEGATIVE_OPERATORS:
             return Domain.AND([domain, extra])
