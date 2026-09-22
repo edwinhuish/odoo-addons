@@ -1,6 +1,6 @@
 # Product Card View
 
-> 模块技术目录：`product_card_view`（版本 `19.0.2.0.4`，T-012 已交付；**库存 / 销售 / 采购 / 发票入口均已注入 Card 且默认为 Card（开发库核对 `action.views`），卡片内容待目标环境复验**）。
+> 模块技术目录：`product_card_view`（版本 `19.0.2.0.7`，T-012 已交付；**库存 / 销售 / 采购 / 发票入口均已注入 Card 且默认为 Card（开发库核对 `action.views`），卡片内容待目标环境复验**；`19.0.2.0.7` 修复切换筛选 / 分组后卡片空白、过宽、无间隙）。
 
 面向外贸 SOHO 的现代产品列表卡片视图：为 Odoo 官方产品列表（库存 / 销售 / 采购入口）的
 **视图切换器新增「Card」按钮**，以瀑布流卡片展示产品——卡片顶部多图轮播、主体
@@ -26,8 +26,10 @@ title / reference / on hand、多变体产品在卡片上直接按属性切变�
 - **变体按钮行**：多变体产品在卡片底部按属性分行（一属性一行）渲染按钮；点击即切到对应变体，
   图片 / 参考号 / 在手同步刷新。再次点击同一值可取消，回到模板层。
   不能与当前已选属性组合出变体的按钮自动禁用，避免点出“不存在的组合”。
-- **瀑布流布局**：卡片按内容高度放入最矮列（JS 计算 absolute 定位），按屏幕宽度自适应列数；
-  窗口 resize、图片加载完成、变体切换后自动重算。
+- **瀑布流布局（未分组）**：卡片按内容高度放入最矮列（JS 计算 absolute 定位），按屏幕宽度自适应列数；
+  窗口 resize、容器宽度变化、图片加载完成、变体切换后自动重算。
+- **分组（Group By）也能正常看**：分组时卡片按列内正常流堆叠（宽度上限 22.5rem、间距 0.75rem），
+  图片与产品信息同样由 `/product_card/payload` 装配；切换筛选 / 分组 / 翻页后卡片都会重新取数并刷新。
 
 ---
 
@@ -40,6 +42,7 @@ title / reference / on hand、多变体产品在卡片上直接按属性切变�
 | 复用 kanban 的 Controller / 数据链路 | `productCardView = {...kanbanView, type:"card", ArchParser, Model, Renderer}`：分组、搜索、翻页、空态全部沿用 kanban，只换卡片渲染与数据装配，改动面最小 |
 | 后端一次性装配 payload | 每页产品只请求一次 `/product_card/payload`，一次返回模板信息 + 全部变体（属性组合 / 参考号 / 在手）+ 两套图库引用，避免每张卡片单独发请求 |
 | payload 存非 reactive 全局 Map | 由 Renderer 生命周期钩子填充 `module-level Map`（按 resId 索引）。**不能**存到 reactive 的 model / record 上——会触发 Owl DataModel 的 onUpdate → reload 循环，导致前端卡死（见 `AGENTS.md` L2 P1） |
+| 取数范围覆盖分组 + 兜底重渲染 | 取数统一走 `collectCardRecords()`：未分组 `list.records`、分组 `list.groups[].list.records`。切换筛选 / 分组 / 翻页常只改 list 内部数据（渲染器由 Reactive 直接重渲染、不走 `updateProps`），故另有一条 `useEffect` 监听本页 id，取到数据后**显式 `render(true)`**；payload 也是「成功后整体替换」而非「先清空再请求」，避免请求飞行期间的渲染读到空 Map（见 `AGENTS.md` L2 P6） |
 | 可选依赖用运行时判断 | `product_image` 用 `env.get("product.image.gallery")` 判断；Card 视图**在读取动作时计算注入** —— 覆盖 `ir.actions.act_window._compute_views()`，凡 `res_model = 'product.template'` 的动作都把 card 放到 `views` 最前（**不写任何数据、不依赖安装顺序**，可选模块装没装都不影响） |
 
 ---
@@ -286,6 +289,9 @@ odoo -d <db> -u product_card_view --stop-after-init    # 升级（前端资源�
 | 卡片空白 / 页面卡死 | 不要重写 model 的 `load` / `_loadData`，也不要把 payload 挂到 reactive 的 model / record；只能由 Renderer 钩子填充非 reactive 全局 Map（见 `AGENTS.md` L2 P1） |
 | 切换器没有 Card 按钮 | 看该动作的 `action.views` 里有没有 card（客户端只认它）：它由 `ir.actions.act_window._compute_views()` 的覆盖注入，与安装顺序无关；若确实没有，先确认模块已加载（`-u product_card_view`）与浏览器已刷新（`session.view_info` 的 patch 在前端） |
 | 图片 404 | 主图用 `record.resId`（不是 datapoint 内部 `record.id`）；图库图用 `product.image.gallery` 的 id |
+| 切换筛选 / Group By 后卡片空白（无图、无产品信息） | 见 `AGENTS.md` L2 P6：取数必须覆盖分组（`list.groups[].list.records`）、payload 成功后整体替换、渲染后靠 `useEffect` + `render(true)` 兜底 |
+| 分组后卡片过宽 / 无间隙 | 瀑布流只在未分组生效；分组样式由 `.o_product_card_view.o_kanban_grouped .o_kanban_group .o_kanban_record.o_product_card` 给（宽度上限 + 间距） |
+| 卡片叠在一起 | `position: absolute` 只由 JS 写 inline；若被写进 SCSS，JS 未跑的首帧所有卡片会叠在一起 |
 
 ---
 

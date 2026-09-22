@@ -43,6 +43,70 @@
 
 ---
 
+## [19.0.2.0.7] - 2026-09-22（修复：切换 filter / group by 后卡片空白、过宽、无间隙）
+
+### 变更
+
+四个现象同源，分三条修复（`product_card_model.js` / `product_card_renderer.js` / `product_card.scss`）：
+
+1. **分组（Group By）后无图 / 无信息**：`fillProductCardPayload` 只吃 `props.list.records`，
+   而分组时 `props.list` 是 `DynamicGroupList`，记录在各 `group.list.records` 里、
+   `list.records` 为空 → 取数列表为空 → 全局 Map 被清空 → 所有卡片空 payload。
+   - 改为 `collectCardRecords(list)` 统一收集：未分组取 `list.records`、分组取
+     `list.groups[].list.records`（多级分组继续下钻）。
+2. **切换筛选 / 分组后无图 / 无信息（时机问题）**：
+   - 根因一：原实现 `clear()` 之后才 `await rpc` —— 请求飞行期间若发生一次渲染，
+     卡片读到的是**已清空**的 Map，而 Map 非 reactive，响应回来后**不会再触发渲染**，
+     空白就固定住了。
+   - 根因二：筛选 / 分组 / 翻页 / reload 常常只改 `list` 内部数据，本渲染器由
+     Reactive 直接重渲染、**不走 `updateProps`**，`onWillUpdateProps` 不触发 →
+     根本没有补拉的机会（`onWillUpdateProps` 那条 await 还可能因 fiber 被取代而在
+     `if (fiber !== this.fiber) return` 处放弃渲染）。
+   - 改法：① `fillProductCardPayload` 改为「请求前不清空、成功后整体替换」，
+     并用 requestSeq 丢弃过期响应；② 新增 `useEffect` 比对本页 id 列表
+     （Owl 19 的 `useEffect` 是 `onMounted` + `onPatched` 逐次比对，patch 路径全覆盖），
+     数据到位后**显式 `this.render(true)`** —— payload 在非 reactive Map 里，
+     这是唯一能让卡片取到新数据的方式（effect 回调不能返回 promise，Owl 会把返回值
+     当 cleanup 调用）。
+3. **卡片过宽 / 卡片之间无间隙**：
+   - 分组时官方 CSS 是 `.o_kanban_grouped .o_kanban_record { width: 100% }` +
+     `.o_kanban_record { margin: 0 0 -1px }`（卡片撑满列宽、上下零间距），
+     而瀑布流只在未分组生效 → 分组列里就是「过宽 + 无间隙」。新增分组样式：
+     卡片 `width: 100%; max-width: 22.5rem; margin: 0 auto 0.75rem`。
+   - 未分组：`position: absolute` 从 SCSS 移到 JS inline —— JS 还没跑的首帧
+     （或切筛选后 DOM 刚 patch）若已被 CSS 设为 absolute，所有卡片会叠在一起；
+     留正常流布局作兜底。同时 `margin: 0`，避免官方 kanban 的 margin 叠加到
+     瀑布流算的 GAP 上。
+   - 布局触发点从「`onWillUpdateProps` 里的 rAF」改为 **`onPatched`**（每次 DOM patch
+     后重算，offsetHeight 才准）+ `onMounted`，并新增容器 `ResizeObserver`
+     （侧栏收放 / 分组列数变化）；分组时 `_clearCardLayout()` 清掉残留的 inline 定位，
+     避免从未分组切到分组后卡片错位。
+   - 兜底：`innerWidth <= 0`（容器还没布局完）时不算列数。
+
+### 影响
+
+- 切换筛选（filter）、分组（group by）、翻页、reload 后卡片都正常显示图片与产品信息；
+  分组视图同样有图有信息
+- 未分组保持 JS 瀑布流（列高均衡、响应式列数）；分组视图卡片宽度上限 22.5rem、
+  卡片间距 0.75rem，不再撑满列宽、不再零间距
+- 无数据结构变化、无迁移；接口 `/product_card/payload` 不变（分组时一次性提交全部分组的记录 id）
+
+### 文档
+
+- 模块 `AGENTS.md`：新增 L2 P6（payload 填充时机 + 分组取数 + 瀑布流只在未分组生效三个坑），
+  修订「文件职责」里 renderer / model 的职责描述，当前版本改为 `19.0.2.0.7`
+- 模块 `README.md`：功能概述 / 核心设计补充「分组视图」与「取数时机」说明；
+  「异常情况与处理」新增「切换筛选 / 分组后卡片空白」一条
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| JS 语法（`node --check`） | 4 个 js 文件全部通过 ✓ |
+| 待目标环境验证 | 非分组 / 分组分别切换 filter 与 group by，确认卡片有图有信息、宽度与间隙正常（需 `-u` 升级 + 强刷浏览器） |
+
+---
+
 ## [19.0.2.0.5] - 2026-09-22（T-025：切换器 Card 按钮名国际化）
 
 ### 变更

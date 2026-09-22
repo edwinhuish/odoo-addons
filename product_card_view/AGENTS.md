@@ -18,7 +18,7 @@
 - 自定义前端：`views` 注册表 **`card`**（新 view type，`kanbanView` 派生）
 - 主依赖：`stock`（`product` 经其传递依赖）
 - 可选集成（**不在 `depends`**）：`product_image`（多图图库）、`sale` / `purchase`（注入 Card 入口）
-- 当前版本：`19.0.2.0.6`（19.0.2.0.6 注入改为读取时计算 —— 覆盖 `_compute_views()`，解决「全新安装时 sale / purchase 未装导致漏注入」；19.0.2.0.5 完成 T-025 Card 按钮名国际化、19.0.2.0.4 产品列表默认 Card）
+- 当前版本：`19.0.2.0.7`（19.0.2.0.7 修复切换 filter / group by 后卡片空白、过宽、无间隙 —— 分组取数 + payload 填充时机 + 分组布局，见 L2 P6；19.0.2.0.6 注入改为读取时计算 —— 覆盖 `_compute_views()`，解决「全新安装时 sale / purchase 未装导致漏注入」；19.0.2.0.5 完成 T-025 Card 按钮名国际化、19.0.2.0.4 产品列表默认 Card）
 
 ---
 
@@ -52,12 +52,15 @@
    - 违反后果：卡片信息口径混乱
 
 6. **每页只发一次数据请求，payload 必须存在非 reactive 容器**
-   - 由 `ProductCardRenderer` 的 `onWillStart` / `onWillUpdateProps` 拉 `/product_card/payload`，
-     填入 **module-level 非 reactive 全局 Map**（key=resId → payload）；卡片用
-     `getProductCardPayload(resId)` 取。`ProductCardModel` 只保留 `withCache = false`
-   - 违反后果：存到 reactive 的 model / record、或重写 model 的 `load` / `_loadData`
-     → 触发 Owl DataModel 的 onUpdate / reload 循环 → 前端卡死。**改 `product_card_model.js`
-     / `product_card_renderer.js` 时必读 P1**
+   - 由 `ProductCardRenderer` 的 `onWillStart` / `onWillUpdateProps`（渲染前）+ `useEffect`
+     监听本页 id（渲染后兜底）拉 `/product_card/payload`，填入 **module-level 非 reactive
+     全局 Map**（key=resId → payload）；卡片用 `getProductCardPayload(resId)` 取。
+     `ProductCardModel` 只保留 `withCache = false`
+   - 取数范围必须覆盖**分组**：未分组 `list.records`、分组 `list.groups[].list.records`
+     （见 `collectCardRecords`）；非 reactive 容器意味着**数据到位后必须显式 `render(true)`**
+   - 违反后果：① 只取 `list.records` → 分组视图整页空白；② 存到 reactive 的 model / record、
+     或重写 model 的 `load` / `_loadData` → 触发 Owl DataModel 的 onUpdate / reload 循环 →
+     前端卡死。**改 `product_card_model.js` / `product_card_renderer.js` 时必读 P1 与 P6**
 
 7. **卡片 getter 必须用非 reactive 的 `_resId`，变体按钮行必须拆 sub-component**
    - 违反后果：与 `KanbanRecord` 的 `useRecordObserver` effect 冲突 / 嵌套 `t-foreach`
@@ -120,7 +123,8 @@
 | 动作注入（硬依赖） | `product.product_template_action` / `product_template_action_all` / `stock.product_template_action_product`：覆盖 `view_mode="kanban,list,card,form"` + 各加一条 `act_window.view` 记录 | `_compute_views` 由 `view_ids` + `view_mode` 派生 `action.views`，缺任一段都可能不出按钮；`_unique_mode_per_action` 要求每个 action 各一条记录 |
 | 动作注入（可选） | 覆盖 `ir.actions.act_window._compute_views()`：凡 `res_model = 'product.template'` 的动作，把 card 放到 `views` 最前 | 客户端切换器的条目与默认视图都只认服务端算出的 `action.views`（`views[0]` 即默认视图）。**读取时计算**与安装顺序无关、不写别的模块的数据，也不必猜 xmlid（`purchase.product_normal_action_puchased` 这种拼写很容易漏）；演进过程与三个反例见 L2 P4 |
 | 可选图库 | `Gallery = env.get("product.image.gallery")`，为 `None` 则跳过查询 | 未装 `product_image` 时模型不存在，直接 `env["..."]` 会 KeyError |
-| 瀑布流 | JS 计算列数，卡片 `position:absolute` 放最矮列；resize / img load / `pcv-resize` 重算 | CSS 多列无法保证「按内容高度填空隙」，JS 才能均衡列高 |
+| 瀑布流（未分组） | JS 计算列数，卡片 `position:absolute`（**只写 inline**）放最矮列；`onPatched` / resize / 容器 `ResizeObserver` / img load / `pcv-resize` 重算 | CSS 多列无法保证「按内容高度填空隙」，JS 才能均衡列高；不写进 SCSS 是为了让 JS 未跑的首帧有正常流布局兜底 |
+| 分组（Group By）布局 | 不跑瀑布流，卡片按列内正常流布局：宽度上限 22.5rem + 间距 0.75rem（SCSS） | 官方分组列是 `width:100%` + `margin:0 0 -1px`（过宽、零间距）；分组列宽度下瀑布流恒为单列，CSS 即可 |
 
 ### 数据结构变更
 
@@ -267,6 +271,56 @@ export async function fillProductCardPayload(records) {
 
 ---
 
+### P6：切换筛选 / 分组后卡片空白、过宽、无间隙（19.0.2.0.7 实测）
+
+**触发条件**：改 `product_card_model.js` / `product_card_renderer.js` / `product_card.scss`
+的取数、payload 时机或布局时必读
+
+**陷阱 1：分组时 `list.records` 是空的**
+- 现象：Group By 之后所有卡片无图、无产品信息（只剩占位）
+- 根因：`props.list` 未分组是 `DynamicRecordList`（记录在 `list.records`），分组是
+  `DynamicGroupList`（记录在 `list.groups[].list.records`，`list.records` 为空）。
+  只按 `list.records` 收集 → 取数 id 为空 → 全局 Map 被清空 → 全页空 payload
+- 正确做法：统一走 `collectCardRecords(list)`（未分组取 `records`，分组递归
+  `groups[].list`，支持多级分组）
+
+**陷阱 2：先 `clear()` 再 `await rpc`（非 reactive 容器的致命时序）**
+- 现象：切换筛选后卡片空白，且**一直不恢复**
+- 根因：请求飞行期间 Map 已被清空，此时若发生一次渲染，卡片读到空 Map；
+  而 Map 非 reactive，响应回来后**不会触发任何渲染**，空白被固化
+- 正确做法：请求前**不清空**，响应回来后整体替换；用 requestSeq 丢弃过期响应；
+  并用批次 key 避免同一批 id 重复请求
+
+**陷阱 3：`onWillUpdateProps` 不是「数据变了」的可靠信号**
+- 现象：换 filter / group by / 翻页后没有补拉 payload
+- 根因：这类操作常常只改 `list` 内部数据，渲染器由 **Reactive 直接重渲染**，
+  不经过 `updateProps` → `onWillUpdateProps` 根本不触发；即便触发，Owl 在
+  `await` 后还有 `if (fiber !== this.fiber) return` —— fiber 被别的渲染取代时会
+  **放弃这次渲染**，取到的数据也就没机会显示
+- 正确做法：渲染后补一条 `useEffect`，依赖用「本页 id 列表」的 key。注意 Owl 19 的
+  `useEffect` 就是 `onMounted` + `onPatched` 逐次比对依赖（**不是** reactive 订阅），
+  所以 patch 路径全覆盖；取到数据后**显式 `this.render(true)`** ——
+  非 reactive 容器没有别的通知途径。另：effect 回调**不要返回 promise**
+  （Owl 会把返回值当 cleanup 调用，Promise 会抛 `cleanup is not a function`）
+
+**陷阱 4：瀑布流只在未分组生效，分组要靠 CSS**
+- 现象：Group By 后卡片撑满列宽（过宽）、上下零间距（无间隙）
+- 根因：官方 `.o_kanban_grouped .o_kanban_record { width: 100% }` +
+  `.o_kanban_record { margin: 0 0 -1px }`；JS 瀑布流只在 `o_kanban_ungrouped` 下跑
+- 正确做法：分组样式单独给（卡片 `width:100%; max-width:22.5rem; margin:0 auto 0.75rem`）；
+  `position:absolute` **只由 JS 写 inline**（写进 SCSS 会让 JS 未跑的首帧所有卡片叠在一起）；
+  未分组卡片 `margin: 0`，避免官方 margin 叠加到瀑布流算的 GAP 上；
+  从分组切回 / 空页时用 `_clearCardLayout()` 清掉残留 inline 定位
+
+**陷阱 5：布局时机**
+- 现象：卡片错位、高度不对
+- 正确做法：布局放在 `onPatched`（DOM patch 后 offsetHeight 才准）+ `onMounted`，
+  而不是 `onWillUpdateProps` 里的 rAF（props 更新不代表 DOM 已更新）；容器
+  `ResizeObserver` 覆盖侧栏收放等只改宽度的情况；`innerWidth <= 0` 时直接跳过
+  （容器还没布局完，算出来的列数没有意义）
+
+---
+
 ## 文件职责
 
 | 文件 | 职责 |
@@ -276,8 +330,8 @@ export async function fillProductCardPayload(records) {
 | `controllers/product_card_controller.py` | `/product_card/payload` JSON 接口（`auth="user"` / `sudo`） |
 | `views/product_card_views.xml` | `product.template.card` 视图（type=card）+ 硬依赖 action 的 `view_mode` 覆盖与 `act_window.view` 记录 + 调用同步方法的 `<function>` |
 | `static/src/js/product_card_view.js` | patch `session.view_info.card`；`ProductCardArchParser`（注入虚拟 card 模板）；注册 `views.card` |
-| `static/src/js/product_card_model.js` | `ProductCardModel`（只 `withCache=false`）+ 非 reactive 全局 Map + `fillProductCardPayload` / `getProductCardPayload` |
-| `static/src/js/product_card_renderer.js` | `KanbanRenderer` 子类：替换卡片组件、加根类、生命周期钩子拉 payload、JS 瀑布流布局与重算 |
+| `static/src/js/product_card_model.js` | `ProductCardModel`（只 `withCache=false`）+ 非 reactive 全局 Map + `collectCardRecords` / `collectCardRecordIds`（覆盖分组）/ `fillProductCardPayload`（成功后整体替换 + 请求序号防乱序）/ `getProductCardPayload` |
+| `static/src/js/product_card_renderer.js` | `KanbanRenderer` 子类：替换卡片组件、加根类、`onWillStart` / `onWillUpdateProps` 渲染前拉 payload、`useEffect` 渲染后兜底并 `render(true)`、`onPatched` / `ResizeObserver` 重算瀑布流（分组时清 inline 定位） |
 | `static/src/js/product_card_record.js` | 卡片组件：轮播 / 变体选择 / 信息同步 / 打开产品；`_resId` 缓存；内含 `ProductCardVariantRow` sub-component |
 | `static/src/xml/product_card_templates.xml` | 渲染器 primary 继承模板 + 卡片 QWeb + VariantRow 模板 |
 | `static/src/scss/product_card.scss` | 瀑布流与卡片 / 轮播 / 变体按钮样式（选择器以 `.o_product_card_view` 开头） |

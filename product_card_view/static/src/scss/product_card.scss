@@ -5,22 +5,36 @@
 // ==========================================================================
 
 // ---------------------------------------------------------------------------
-// 瀑布流布局：非分组（默认）时把 kanban 的 flex 换行切换为 CSS 多列，
-// 不同高度的卡片逐列自然堆叠；column-width 保证小屏自适应列数。
-// ---------------------------------------------------------------------------
 // 未分组：JS 瀑布流（renderer 里给每张卡片设 absolute top/left/width）
 // 卡片按内容高度放最矮列，各列高度均衡；同行无变体卡片不会被拉高。
+//
+// 注意：position / top / left / width 只由 JS 写 inline，这里**不写** absolute ——
+// JS 还没跑（首帧、切筛选后 DOM 刚 patch）时若已被 CSS 设为 absolute，
+// 所有卡片会叠在一起；留正常流布局作兜底，卡片仍是官方 kanban 的宽度与边距。
 .o_product_card_view.o_kanban_ungrouped {
     position: relative;
     padding: 0.75rem;
 
     > .o_kanban_record {
-        position: absolute;
+        // 间距由 JS 瀑布流算（GAP），清掉官方 kanban 的 margin 避免叠加上去
+        margin: 0;
         transition: top 0.3s ease, left 0.3s ease, width 0.3s ease;
         // 空位占位块在瀑布流里没有意义，直接隐藏
         &.o_kanban_ghost {
             display: none;
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 分组（Group By）布局：卡片按列内正常流堆叠，宽度上限与卡片间距在这里给，
+// 官方 kanban 的分组列是「卡片 width:100% + margin 0」，会显得过宽且无缝隙。
+// ---------------------------------------------------------------------------
+.o_product_card_view.o_kanban_grouped {
+    .o_kanban_group .o_kanban_record.o_product_card {
+        width: 100%;
+        max-width: 22.5rem;
+        margin: 0 auto 0.75rem;
     }
 }
 
