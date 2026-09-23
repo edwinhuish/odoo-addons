@@ -1,5 +1,67 @@
 # 变更日志
 
+## [19.0.2.6.5] - 2026-09-23（修复：产品列表「Images」列显示产品主图）
+
+### 变更（修复）
+
+- 产品列表的「Images」列原本绑 `image_gallery_count`（`Integer` 计算字段，只统计图库补充图数量），
+  由默认整数控件渲染 → 勾选该列只能看到数字（没有补充图的产品恒为 `0`），**看不到任何图片**。
+- 现改为绑原生 `image_128`（`image.mixin`，`related="image_1920"` + `store=True`，即**产品主图**缩略）
+  并用 `widget="image"` 渲染：列标题仍为 `Images`，仍是可选列（`optional="hide"`，默认隐藏、可由列表
+  右上角「可选列」勾选显示），且只读（避免在列表里误改主图）。
+- **只显示主图**：`image_128` 派生自 `image_1920`，**不含** `product.image.gallery` 的补充图 ——
+  只有补充图、没有主图的产品该列为空（渲染占位图），补充图不会顶上来。
+- 继承的仍是基础列表视图 `product.product_template_tree_view`，所以**库存 / 销售 / 采购**三个
+  「产品」入口同时生效（销售 / 采购分别用 `account.product_template_list_view_sellable_inherit` /
+  `account.product_template_list_view_purchasable_inherit`，二者都是该基础视图的后代）。
+- 图片按高 48px 显示（`options="{'size': [0, 48]}"`，宽度按比例自适应），列表行保持紧凑。
+- `image_gallery_count` 字段与 `Image Count` 标签**保留**（仍可用于导出 / 分组 / 其它视图），
+  只是不再作为产品列表的列。
+- **升级路径的译文刷新**：列标题的英文源文本没有变（仍是 `Images`），只是译文要从「图片数」改成「图片」，
+  而 po 导入**只补缺失语种、不覆盖库里已有的译文** —— 单跑 `-u` 旧值会留着（中文界面列标题仍是「图片数」）。
+  因此新增 `migrations/19.0.2.6.5/post-migration.py`，把该视图 `arch_db` 里 `Images` 术语的 zh_CN 译文
+  定向刷成「图片」（幂等；未安装 zh_CN 的库跳过）。等价的手工方式仍是 `task i18n -- zh_CN product_image`。
+
+### 影响
+
+- 纯视图 / 译文改动：无字段、无数据结构、无权限变化。
+- `odoo -d <db> -u product_image --stop-after-init` 升级后视图 arch 与前端资源更新；中文列标题由
+  `migrations/19.0.2.6.5/` 一并刷新（无需额外的 `task i18n`）。后端列标签刷新页面即可。
+- 中文界面列标题为「图片」，英文界面为 `Images`。
+
+### 文档
+
+- 同步 `__manifest__.py`（版本 19.0.2.6.5）、模块 `README.md`（功能概述 / 视图 / 验证清单）、
+  `AGENTS.md`（L1 新增「列表图片列只能是主图」约束、当前版本、文件职责、接口与字段变更）、
+  根 `README.md`（模块一览表版本与状态）、根 `TODO.md`（T-038 归档）。
+
+### 验证记录
+
+| 命令 | 结果 |
+|------|------|
+| `task test -- product_image` | 7 项（3 项页面用例按配置 skip），0 failed / 0 error ✓ |
+| `task test -- product_image,stock,sale_management,purchase --test-tags=/product_image` | 7 项全部执行（**无 skip**），0 failed / 0 error ✓ |
+| `task update -- product_image`（dev 库） | 升级无报错、无视图告警 ✓ |
+| `task update -- product_image`（dev 库，先把已装版本退回 `19.0.2.6.4` 真跑一次升级） | 迁移 `[19.0.2.6.5>] post-migration` 执行；该视图 `arch_db` 的 zh_CN 列标题由「图片数」→「图片」，en_US 仍为 `Images` ✓ |
+| `task check` | 通过（未新增结构性问题）✓ |
+
+- 新增 `tests/test_product_list_image_column.py`（7 项）：基础列表视图有且仅有一个 `image_128` 列，
+  `widget="image"` / `optional="hide"` / 只读 / 位于 `default_code` 之后；该列不再是 `image_gallery_count`；
+  列绑定原生 `image_128`（`related == "image_1920"`）；数据绑定（只有补充图时列为空、设了主图后有值）；
+  库存 / 销售 / 采购三个动作**实际使用的列表视图**各自带该列。
+- 开发库（已装 stock / sale_management / purchase）实测三个动作实际使用的列表视图 arch
+  均为 `('Images', 'image', 'hide', '1')`：`stock.product_template_action_product`（未指定列表视图 →
+  模型默认列表）、`sale.product_template_action`（`account.product_template_list_view_sellable_inherit`）、
+  `purchase.product_normal_action_puchased`（`account.product_template_list_view_purchasable_inherit`）。
+
+### 遗留
+
+- 目标环境界面复验：库存 / 产品、销售 / 产品、采购 / 产品三处勾选「Images」列后应显示主图缩略，
+  取消勾选后隐藏；有主图的产品显示图片，无主图的产品显示占位图（补充图不显示）；中英界面各看一遍
+  （中文列标题「图片」由 `migrations/19.0.2.6.5/` 在 `-u` 时自动刷新，不需要额外跑 `task i18n`）。
+
+---
+
 ## [19.0.2.6.4] - 2026-09-22（修复：权限硬编码了可选模块 sale 的用户组）
 
 ### 变更

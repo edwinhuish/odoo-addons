@@ -65,6 +65,14 @@
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
 
+- **T-038 修复产品列表「Images」列看不到图片（列绑的是图库计数，应显示产品主图）** ｜ `product_image` ｜ P1
+  - 完成日期：2026-09-23 ｜ 状态：**已交付，待目标环境界面复验**
+  - 落地版本：`product_image` `19.0.2.6.5`
+  - 现象：库存 / 销售 / 采购三处「产品」列表勾选「Images」列后**看不到任何图片**——该列绑的是 `image_gallery_count`（`Integer` 计算字段，只统计图库补充图数量），由默认整数控件渲染，因此只显示数字（没有补充图的产品恒为 `0`）；且该计数**不含主图**，语义与列名不符
+  - 做法：列改绑原生 `image_128`（`image.mixin`，`related="image_1920"` + `store=True`，即**产品主图**缩略）+ `widget="image"`；仍为可选列（`optional="hide"`，默认隐藏、可由列表右上角「可选列」勾选）与只读，列高 48px 保持行紧凑。**只显示主图**：只有补充图、没有主图的产品该列为空（占位图）。继续继承基础列表视图 `product.product_template_tree_view`，故库存（默认列表视图）、销售（`account.product_template_list_view_sellable_inherit`）、采购（`account.product_template_list_view_purchasable_inherit`）三处一并生效；`i18n/zh_CN.po` 列标题译文「图片数」→「图片」，并加 `migrations/19.0.2.6.5/post-migration.py` 定向刷新该视图 `arch_db` 的 zh_CN 术语（**po 不覆盖已有译文，只跑 `-u` 旧标题会留着**；等价手工方式是 `task i18n -- zh_CN product_image`）；`image_gallery_count` 字段保留（仅供导出 / 分组 / 自建视图，不再作为列表列）
+  - 验收记录：模块 [`product_image/CHANGELOG.md`](product_image/CHANGELOG.md) → `[19.0.2.6.5]`；新增 `product_image/tests/test_product_list_image_column.py`（7 项：列定义 / 只读可选 / 仅主图数据绑定 + 三个动作实际使用的列表视图）；`task test -- product_image` 7 项（3 项页面用例按配置 skip）0 failed / 0 error；`task test -- product_image,stock,sale_management,purchase --test-tags=/product_image` **7 项全部执行（无 skip）** 0 failed / 0 error；dev 库 `task update -- product_image` 升级无报错；dev 库实测三个动作实际使用的列表视图 arch 均为 `('Images', 'image', 'hide', '1')`；dev 库把已装版本退回 `19.0.2.6.4` 真跑一次升级：迁移 `[19.0.2.6.5>] post-migration` 执行、zh_CN 列标题由「图片数」→「图片」（en_US 仍为 `Images`）；`task check` 通过
+  - 遗留：目标环境界面复验——三处列表勾选 / 取消勾选「Images」列（显示、隐藏与数据绑定），有主图 / 无主图 / 仅有补充图三种产品各看一遍，中英界面各一遍 + 强刷浏览器
+
 - **T-037 产品编号承载方式定稿 + 卡片编号口径（含两次回退的评估记录）** ｜ `product_reference` + `product_card_view` ｜ P1
   - 完成日期：2026-09-23 ｜ 状态：**已交付，待目标环境验证**
   - 落地版本：`product_card_view` `19.0.2.1.4`；`product_reference` `19.0.3.0.0` 与 `product_variant_conversion` `19.0.5.3.0` **不变**（产品编号仍存自有字段 `base_reference`，未改用原生列）

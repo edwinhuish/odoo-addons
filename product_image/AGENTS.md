@@ -14,7 +14,7 @@
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义图片管理弹窗：`ProductImageManageDialog`（点击「+」打开：上半部分大图（仅预览、无删除按钮；选中主图时名称行留空）+ 平铺缩略图（每张缩略图含主图右上角 ×——先确认后删除，删图库图删记录，删主图自动提升图库首张；缩略图可拖动排序、主图固定首位；点击缩略图只切弹窗大图；布局：大图列固定尺寸、缩略图占满剩余宽高并超高滚动），下半部分上传 dropzone（点击/拖放/Ctrl+V，上传中缩略图 + 动画，粘贴不自动关闭，上传不改变页面大图）；header「批量删除」勾选模式 + 批量确认（含缩略图清单）；走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `web_image_paste`）
-- 当前版本：`19.0.2.6.3`（19.0.2.6.3：补应用列表（Apps）中文元数据——`shortdesc` / `summary` / `description` + 分类 `Product` 译文；19.0.2.6.2：修复变体上传补充图报「双归属」Validation Error——变体编辑 action context 的 `default_product_tmpl_id` 经 default_get 落进图库子行、与 O2M inverse 回填的 `product_id` 冲突；`product.product` 的 create / write 对 `variant_image_gallery_ids` 的 `(0,0)` 子命令强制置空 `product_tmpl_id`，详见文末回归小节；19.0.2.6.1：修复 19.0.2.6.0 回归——产品 / 变体表单图库图片显示占位符，恢复 widget `fieldDependencies` 机制并改为按 `image_1920` options `gallery_field` 分流，详见文末回归小节；`19.0.2.6.0` T-010 产品变体多图：`product.image.gallery` 新增 `product_id`，图片归属产品 / 产品变体二选一；`product.product` 新增 `variant_image_gallery_ids` 变体专属补充图；变体「独立编辑」表单（`product_variant_easy_edit_view`）图片区同样启用 `product_image_gallery` widget，各变体图集互相独立、与模板共享补充图互不串扰——改动细节与风险见文末会话修改总结；此前 `19.0.2.5.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；此前的 `19.0.2.4.3` 含管理弹窗拖动排序（含主图，首位即主图）/ 删除确认 / 批量删除；`19.0.2.4.1` 调整确认框按钮顺序（取消置右），`19.0.2.4.2` 关闭按钮贴齐最右侧（去掉 `pe-1`），`19.0.2.4.3` 修复缩略图列「+」占位符被 flex 压成 18px（`flex: 0 0 auto` + 56×56 兜底）；`19.0.2.3.1` 修复拖动跟手与 XML `&nbsp;` 实体崩溃，`19.0.2.3.2` 修复拖拽布局（`position-relative !important` 覆盖），`19.0.2.4.0` 修复勾选模式无操作按钮（`<template t-if>` → `<t t-if>`）；`19.0.2.2.10~2.2.15` 布局与弹窗改动已验证）
+- 当前版本：`19.0.2.6.5`（19.0.2.6.5：修复产品列表「Images」列看不到图片——原列绑图库计数 `image_gallery_count`（只显示数字），现改绑原生 `image_128`（主图缩略）+ `widget="image"`、仍为可选只读列，库存 / 销售 / 采购三处产品列表同时生效，回归用例见 `tests/test_product_list_image_column.py`；19.0.2.6.4：删掉 `security/ir.model.access.csv` 里硬编码的可选模块用户组 `sales_team.group_sale_manager`，模块可单独安装；19.0.2.6.3：补应用列表（Apps）中文元数据——`shortdesc` / `summary` / `description` + 分类 `Product` 译文；19.0.2.6.2：修复变体上传补充图报「双归属」Validation Error——变体编辑 action context 的 `default_product_tmpl_id` 经 default_get 落进图库子行、与 O2M inverse 回填的 `product_id` 冲突；`product.product` 的 create / write 对 `variant_image_gallery_ids` 的 `(0,0)` 子命令强制置空 `product_tmpl_id`，详见文末回归小节；19.0.2.6.1：修复 19.0.2.6.0 回归——产品 / 变体表单图库图片显示占位符，恢复 widget `fieldDependencies` 机制并改为按 `image_1920` options `gallery_field` 分流，详见文末回归小节；`19.0.2.6.0` T-010 产品变体多图：`product.image.gallery` 新增 `product_id`，图片归属产品 / 产品变体二选一；`product.product` 新增 `variant_image_gallery_ids` 变体专属补充图；变体「独立编辑」表单（`product_variant_easy_edit_view`）图片区同样启用 `product_image_gallery` widget，各变体图集互相独立、与模板共享补充图互不串扰——改动细节与风险见文末会话修改总结；此前 `19.0.2.5.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；此前的 `19.0.2.4.3` 含管理弹窗拖动排序（含主图，首位即主图）/ 删除确认 / 批量删除；`19.0.2.4.1` 调整确认框按钮顺序（取消置右），`19.0.2.4.2` 关闭按钮贴齐最右侧（去掉 `pe-1`），`19.0.2.4.3` 修复缩略图列「+」占位符被 flex 压成 18px（`flex: 0 0 auto` + 56×56 兜底）；`19.0.2.3.1` 修复拖动跟手与 XML `&nbsp;` 实体崩溃，`19.0.2.3.2` 修复拖拽布局（`position-relative !important` 覆盖），`19.0.2.4.0` 修复勾选模式无操作按钮（`<template t-if>` → `<t t-if>`）；`19.0.2.2.10~2.2.15` 布局与弹窗改动已验证）
 
 ---
 
@@ -93,6 +93,17 @@
       `product.product` → `variant_image_gallery_ids`
     - 模板表单图片行为必须保持与 19.0.2.5.0 一致（不回归）
 
+12. **产品列表「Images」列只能是主图（19.0.2.6.5 起）**
+    - 该列绑原生 `image_128`（`image.mixin`，`related="image_1920"` + `store=True`）并用
+      `widget="image"` 渲染，`optional="hide"`（默认隐藏、可由列表右上角「可选列」勾选）、`readonly="1"`
+    - **禁止**把它改回 `image_gallery_count`（`Integer` 只显示数字，曾经的真实缺陷）或任何图库字段：
+      需求是「仅主图」——只有补充图、没有主图的产品该列必须为空
+    - 生效范围靠**继承基础列表视图** `product.product_template_tree_view`（库存入口即默认列表视图；
+      销售 / 采购入口是 `account.product_template_list_view_sellable_inherit` /
+      `..._purchasable_inherit`，同为该基础视图的后代）→ 不要改成只继承某一个页面的视图
+    - 回归用例 `tests/test_product_list_image_column.py` 会核对三个动作**实际使用的列表视图**合成 arch，
+      改列定义时先跑它（可选模块未装则按配置 skip）
+
 ---
 
 ## 国际化约束（i18n）
@@ -102,7 +113,7 @@
 1. **源语言是英文（`en_US`）**：Python / XML / JS / QWeb 模板里一律写英文；中文只能出现在 `i18n/zh_CN.po` 的 `msgstr` 里，禁止写回源码。
 2. **可翻译入口正确**：字段 `string` / `help`、selection 标签、约束消息、视图与动作文本走 `.po` 的 `model:` / `model_terms:` 条目；Python 运行期文案用 `_()`，JS 用 `_t()`；模板内联文本与 `title` / `aria-label` 由 OWL 渲染时按术语翻译。
 3. **禁止拼接句子**：占位符统一用 `%(name)s` 命名形式，禁止 `"..." % (a, b)` 或 JS 字符串 `+` 拼接——翻译无法调整语序。模板中夹着子元素的句子（如 `<kbd>Ctrl</kbd>+<kbd>V</kbd>` 提示、含计数的「已选 N 张」）必须拆成完整可译片段，由 JS 侧 `_t()` 提供后 `t-esc` 输出。
-4. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` 的 `msgid` / `msgstr` → 提升模块版本 → `-u` 升级 + 强刷浏览器，在英文与中文两种界面各验一遍。
+4. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` 的 `msgid` / `msgstr` → 提升模块版本 → `-u` 升级 + 强刷浏览器，在英文与中文两种界面各验一遍。**只改已有条目的 `msgstr`（英文源文本不变）时，`-u` 不会覆盖库里的旧译文**（po 只补缺失语种）——要么写一个定向刷新的 `migrations/<version>/`（如 `19.0.2.6.5` 把列标题「图片数」刷成「图片」），要么升级后跑 `task i18n -- zh_CN product_image` 强制刷新。
 5. **代码注释保持中文**：注释不参与翻译（符合仓库约定），不要为 i18n 把注释改成英文。
 6. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description` 后，必须同步 `i18n/zh_CN.po` 的 `model:ir.module.module,shortdesc|summary|description:base.module_product_image` 三条（`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`，逐字符一致），改 `category` 则同步 `model:ir.module.category,name:base.module_category_inventory_product`。这些记录归属 `base` 且 `noupdate=True`，导入只补缺失语种、不覆盖库里已有值；改译文后的强制刷新方式见根 [`AGENTS.md`](../AGENTS.md) 4.8。违反后果：中文环境「应用」列表显示英文，或译文与英文源文本长期不同步。
 
@@ -137,9 +148,9 @@
 |------|------|
 | `__manifest__.py` | 模块元数据、依赖、数据文件声明、前端资源登记 |
 | `models/product_image.py` | 图片明细模型：字段（`product_tmpl_id` / `product_id` 归属二选一）、作用域化名称去重、两级级联（与主图解耦，无同步） |
-| `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口） |
+| `models/product_template.py` | 扩展 `product.template`：One2many、图片数量（无主图同步入口；`image_gallery_count` 不再作为列表列，见 L1 约束 12） |
 | `models/product_product.py` | 扩展 `product.product`（变体）：`variant_image_gallery_ids`（变体专属补充图，反查 `product_id`，与模板共享图库独立） |
-| `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表图片数列 |
+| `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表增「Images」列（主图缩略 `image_128`，可选只读） |
 | `views/product_product_views.xml` | 变体「独立编辑」表单（`product_variant_easy_edit_view`）图片字段 widget 换 `product_image_gallery` + 变体图库不可见 One2many 元数据声明 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
 | `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮局部放大（放大镜跟随鼠标）/ 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（选中切换·滚动·「+」开管理弹窗·选中蓝边框）/ 管理弹窗回调（列表快照 getItems / 删除按 type+key 分派——图库 key 为 `g<id>` 需解析后定位 / 拖动排序 onReorder 按 10 步长写 sequence / 上传写入主图或追加图库且按稳定 key 锚定页面展示不上跳新图） |
@@ -150,6 +161,8 @@
 | `static/src/xml/product_image_manage.xml` | 图片管理弹窗 QWeb 模板 |
 | `static/src/scss/product_image_gallery.scss` | widget 与预览弹窗样式（主图棋盘格背景 / 缩略图选中 / 滚动条隐藏 / 工具条 / 管理弹窗样式） |
 | `security/ir.model.access.csv` | 内部用户（`base.group_user`）读写业务数据；**只引用核心组**，不硬编码 `sale` 等可选模块的用户组（`19.0.2.6.4`） |
+| `tests/test_product_list_image_column.py` | 产品列表「Images」列回归用例（`19.0.2.6.5`）：列定义 / 只读可选 / 仅主图数据绑定 + 库存 / 销售 / 采购三个动作实际使用的列表视图 |
+| `migrations/19.0.2.6.5/post-migration.py` | 定向刷新「Images」列的 zh_CN 译文（「图片数」→「图片」）：po 不覆盖已有译文，靠它让「只跑 `-u`」也得到正确中文列标题（幂等；未装 zh_CN 跳过） |
 
 ---
 
@@ -220,6 +233,13 @@
 - 本 `AGENTS.md` 的相关约束（若涉及行为变更）
 - `README.md` 的功能说明（若涉及用户可见功能）
 
+改完先跑测试（`tests/` 目录的用例；含可选模块的页面用例需要装齐 stock / sale / purchase）：
+
+```bash
+task test -- product_image
+task test -- product_image,stock,sale_management,purchase --test-tags=/product_image
+```
+
 版本号建议：
 - 破坏性变更或架构调整：升第二位，如 `19.0.3.0.0`
 - 功能新增：升第三位，如 `19.0.2.1.0`
@@ -265,9 +285,9 @@
 ### 接口与字段变更
 
 - **新模型 `product.image.gallery`**：继承 `image.mixin`（`image_1920` + related 1024/512/256/128）；字段 `name`、`sequence`、`product_tmpl_id`（`ondelete='cascade'`）；`_order = 'sequence'`；`@api.constrains("name","product_tmpl_id")` 同产品名称去重。**无 `is_main`**（已移除）。
-- **扩展 `product.template`**：`One2many` → `product.image.gallery`、`image_gallery_count` 计数字段。主图 `image_1920` 由原生字段独立管理，无同步入口。
+- **扩展 `product.template`**：`One2many` → `product.image.gallery`、`image_gallery_count` 计数字段。主图 `image_1920` 由原生字段独立管理，无同步入口。（`19.0.2.6.5` 起 `image_gallery_count` 不再作为产品列表列，见 L1 约束 12。）
 - **widget**：`product_image_gallery`（registry `fields`，替换产品表单 `image_1920` 字段 widget，`fieldDependencies` 声明依赖）；`ProductImagePreviewDialog`（全屏预览）、`ProductImageManageDialog` + `useProductImageManage` hook（顶层 overlay，19.0.2.2.12 替代原 `ProductImageUploadDialog`）。
-- **视图**：产品表单头像字段 widget 改 `product_image_gallery`、列表增「图片数」列；图库独立列表/表单/搜索视图与动作。
+- **视图**：产品表单头像字段 widget 改 `product_image_gallery`、列表增「Images」列（主图缩略 `image_128`，可选只读，`19.0.2.6.5`）；图库独立列表/表单/搜索视图与动作。
 - **安全**：`security/ir.model.access.csv`，内部用户读写业务数据；只引用 `base.group_user`，
   不硬编码 `sale` 等可选模块的用户组（本模块 `depends` 只有 `product`，必须能单独安装）。
 - 仅支持全新安装（无迁移脚本）。

@@ -69,7 +69,7 @@ msgstr "停用"
 #. module: product_image
 #: model_terms:ir.ui.view,arch_db:product_image.product_template_list_inherit
 msgid "Images"
-msgstr "图片数"
+msgstr "图片"
 
 #. module: product_image
 #: model:ir.model,name:product_image.model_product_image_gallery

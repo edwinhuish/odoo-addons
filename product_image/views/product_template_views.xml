@@ -39,7 +39,12 @@
     </record>
 
     <!-- ============================================================ -->
-    <!-- 产品列表视图：新增「图片数量」列（可选显示）                   -->
+    <!-- 产品列表视图：新增「Images」列（可选显示），渲染产品主图缩略。  -->
+    <!-- 绑定原生 image_128（image.mixin，related → image_1920）：      -->
+    <!-- 只显示主图，不含 product.image.gallery 的补充图。              -->
+    <!-- 列默认隐藏（optional="hide"），由列表右上角「可选列」开关；     -->
+    <!-- 继承基础视图 product.product_template_tree_view，库存 / 销售 /  -->
+    <!-- 采购三个「产品」入口（含各自 primary 继承视图）一并生效。       -->
     <!-- ============================================================ -->
     <record id="product_template_list_inherit" model="ir.ui.view">
         <field name="name">product.template.list.inherit.image.gallery</field>
@@ -48,7 +53,10 @@
         <field name="arch" type="xml">
 
             <xpath expr="//field[@name='default_code']" position="after">
-                <field name="image_gallery_count" string="Images"
+                <!-- size 的宽度取 0（按比例自适应），高度 48px 保持列表行紧凑 -->
+                <field name="image_128" string="Images"
+                       widget="image"
+                       options="{'size': [0, 48]}"
                        optional="hide"
                        readonly="1"/>
             </xpath>
