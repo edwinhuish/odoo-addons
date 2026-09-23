@@ -5,6 +5,8 @@
 > ⚠ **本版未发布、已全部回退**：实现完成后按要求回到 `base_reference` 方案（`19.0.3.0.0`）。
 > 保留此条是因为「为什么不直接用原生 `default_code` 存产品编号」会被反复问到 —— 下面记录了
 > 当时的实现、代价与回退原因（证据均为开发库实测 + Odoo 19 源码核对）。
+> **技术细节与源码依据见 `AGENTS.md` → L2 P1 / P2 / P3 / P5**（P2 还给出「若确实要摘掉
+> compute 改成纯存储字段」的最小清单）。
 > 类型：架构变更（未发布）｜ 涉及文件：`models/product_template.py` / `models/product_product.py` /
 > `views/product_template_views.xml` / `hooks.py`（已删除）/ `__manifest__.py`（`uninstall_hook` 已撤）/
 > `i18n/zh_CN.po` / `tests/test_base_reference.py`（已还原）
@@ -60,6 +62,8 @@
 
 - 模块 `AGENTS.md`（L1.3 重写为新契约 + 版本行）、`README.md`、本条目
 - 根 `README.md` / `AGENTS.md` 版本行、`TODO.md`
+- **技术细节与源码依据**：`AGENTS.md` → L2 踩坑档案 **P1–P3、P5**（该档案与「开发复盘与关键经验
+  （T-035 / T-037）」由本版一并建立；`TODO.md` → `T-037` 记录了三条要求的逐条结论）
 
 ### 验证记录
 
@@ -141,6 +145,8 @@ Many2one、列表搜索）看不到多变体产品的产品编号。按新要求
 - 模块 `AGENTS.md`（L1.1 两层都可见 / L1.3 重写 / 版本行 / 搜索约束说明）、`README.md`
   （功能概述、核心设计、模型字段、产品级编号一节、验证清单）、本条目
 - 根 `README.md` 解耦矩阵与版本行、根 `AGENTS.md` 模块行、`TODO.md`（`T-035`）同步
+- 后续同日的评估与定稿（`T-037`）：`AGENTS.md` 补 **L2 踩坑档案 P1–P5** 与**开发复盘
+  （T-035 / T-037）**；`README.md` 补「异常情况与处理」「后续维护」两条风险条目
 
 ### 验证记录
 

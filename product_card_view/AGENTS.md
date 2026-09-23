@@ -75,6 +75,7 @@
      **两个 getter（切换 / 拼接文本）没有自动化用例**（无头环境断言不了渲染）→ 改动后
      必须人工验证「未选 / 选中」两态
    - 违反后果：编号栏与已选组合行口径打架（同一编号显示两次 / 变体编号丢失）；或本模块被迫硬依赖 `product_reference`
+   - **改 `static/src/js/product_card_record.js` 的这两个 getter 时必读 P7；改信息区 XML / SCSS 版式时必读 P8**
 
 6. **每页只发一次数据请求，payload 必须存在非 reactive 容器**
    - 由 `ProductCardRenderer` 的 `onWillStart` / `onWillUpdateProps`（渲染前）+ `useEffect`
@@ -344,6 +345,50 @@ export async function fillProductCardPayload(records) {
   `ResizeObserver` 覆盖侧栏收放等只改宽度的情况；`innerWidth <= 0` 时直接跳过
   （容器还没布局完，算出来的列数没有意义）
 
+### P7：卡片编号口径的三次定稿 —— 「产品 → 变体」切换与组合行职责（`19.0.2.1.3` ↔ `19.0.2.1.4`）
+
+**触发条件**：改 `static/src/js/product_card_record.js` 的 `referenceText` / `selectionText`，
+或调整卡片信息区版式时必读。
+
+- **背景（同一条口径改过三次）**：
+  1. 最初 `variant?.reference || data.reference`：编号随变体切换，但已选组合行也带编号
+     （同一编号出现两次）；
+  2. `19.0.2.1.3`：改成「编号栏**固定为产品编号** + 变体编号挪到组合行」
+     （`Blue / Large · FURN_6666`）—— 出发点是「卡片代表产品」；
+  3. `19.0.2.1.4`（现行）：按要求改回「**编号随选择切换** + 组合行**只显示属性组合**」——
+     实际使用时，选中变体的人想在第一眼的位置看到**这个变体的编号**，
+     而不是到组合文本的尾巴上去找。
+- **判据（已写进 L1 第 5 条）**：卡片默认代表产品、点选变体后代表该变体 —— 与图片、在手数量
+  的切换口径保持一致；同一个编号在卡片上只出现一次。
+- **正确做法**：
+  - `referenceText = (variant && variant.reference) || data.reference || "—"`
+    （变体编号 → 产品编号 → `—`）；
+  - `selectionText` 只拼属性值名（`names.join(" / ")`），不再追加任何编号；
+  - 两层值后端都已下发（`variants[].reference` / 模板层 `reference`），**不要**在前端另算
+    或引入第三个来源。
+- **维护提醒**：这两个 getter 没有自动化用例（无头环境断言不了渲染）→ 改动后必须人工验证四态：
+  未选变体 / 选中且变体有编号 / 选中且变体无编号（回退产品编号）/ 两层都空（显示 `—`）。
+  另：前端改动后**强刷浏览器**（Ctrl+F5）才看得到新口径。
+
+### P8：信息区版式的 flex 陷阱（含一次被回退的「编号紧跟产品名」尝试）
+
+**触发条件**：改 `static/src/xml/product_card_templates.xml` 的信息区或
+`static/src/scss/product_card.scss` 时必读。
+
+- **版式现状（不要擅自调整归属）**：产品名一行 → 「编号 + 在手徽标」一行
+  （`o_product_card__meta`）→ 已选组合行 → 变体按钮行。
+- **曾试并回退**：把编号移到产品名同一行、紧跟产品名（新增标题行
+  `o_product_card__heading` + `d-flex align-items-baseline`）—— 同日按要求回退、未发布；
+  回退后 SCSS 里那两条为标题行加的规则一并撤掉，别留死代码。
+- **陷阱（即使这次回退了也值得记住）**：
+  - flex 子项默认 `min-width: auto`：长产品名会**撑破卡片**、`text-truncate` 失效
+    → 参与截断的项必须显式 `min-width: 0`；
+  - 要让编号**不被长名字挤掉**，得给编号 `flex: 0 0 auto` + `max-width: 45%`
+    （编号优先完整显示，自身过长时才截断）；
+  - `.text-truncate` 只是 `overflow:hidden / text-overflow:ellipsis / white-space:nowrap`，
+    在 flex 容器里还依赖上面两条才真正生效；
+  - 信息区任何改动都会影响卡片高度 → 改完要确认瀑布流重算正常（`pcv-resize` 事件链，见 P1 / P6）。
+
 ---
 
 ## 文件职责
@@ -433,6 +478,8 @@ export async function fillProductCardPayload(records) {
 
 | 修订日期 | 版本 | 修订内容 | 涉及章节 |
 |----------|------|----------|----------|
+| 2026-09-23 | `19.0.2.1.4` | 编号口径**定稿为「随选择切换」**（未选=产品编号、选中=该变体编号，变体无编号回退产品编号）；已选组合行只显示属性组合、不再追加变体编号。同日曾试「编号紧跟产品名」版式，按要求回退（未发布） | L1 约束 5；新增 L2 P7、P8 |
+| 2026-09-23 | `19.0.2.1.3` | 与 `product_reference` 彻底解耦：编号只读原生 `default_code`、删除可选字段探测；编号栏固定为产品编号（**该口径已被 `19.0.2.1.4` 推翻**） | L1 约束 5 |
 | 2026-09-22 | `19.0.2.0.7` | 修复「切换 filter / group by 后卡片空白、过宽、无间隙」：取数范围覆盖分组、payload 改为成功后整体替换 + `useEffect` 兜底重渲染、分组布局改由 SCSS 给（含未分组 `absolute` 改由 JS 写 inline、布局触发点改 `onPatched`） | L1 约束 6；技术设计「瀑布流 / 分组布局」；文件职责；新增 L2 P6 |
 | 2026-09-22 | `19.0.2.0.6` | 注入机制改为覆盖 `_compute_views()` 的读取时计算（不再往其它模块写数据） | 技术设计表；L2 P4 |
 | 2026-09-22 | `19.0.2.0.5` | Card 按钮名改 `_t()` getter；补 5 条失效 JS 译文 | i18n 约束 4；新增 L2 P5 |

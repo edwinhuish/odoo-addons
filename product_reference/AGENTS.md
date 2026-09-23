@@ -94,6 +94,7 @@
      （单变体两处同值 / 多变体只写产品编号 / 产品编号可被搜到）
    - 违反后果：产品编号在多变体产品上消失（表单、列表、卡片、搜索一起丢）、
      单变体产品两处编号不同步、或写入路径无限递归
+   - **改 `models/product_template.py` / `models/product_product.py` 时必读 P1、P4；写迁移 / 卸载逻辑时必读 P5；再遇到「不要自有字段、用原生 `default_code` 承载产品编号」的要求，先读 P2、P3 再答复**
 
 2. **搜索在数据库层实现，禁止 Python 侧全表过滤**
    - 冗余可存储字段（均 `Text` + trigram 索引）：产品级 `reference_code_index`、
@@ -208,7 +209,139 @@
 - 改搜索相关代码后回归三件事：产品能搜到变体参考号、变体能搜到产品共享参考号、命中提示正常。
 - 索引与行不一致时，shell 重建：
   `env['product.template'].search([])._sync_reference_index()` 与
-  `env['product.product'].search([])._sync_variant_reference_index()`。
+  `env['product.product'].search([])._sync_variant_reference_index()`
+
+---
+
+## 开发复盘与关键经验（T-035 / T-037）
+
+> **T-035**（2026-09-23，落地 `19.0.3.0.0`）：产品编号**叠加进原生 `default_code` 的 compute**，
+> 消费方（`product_card_view` / `product_variant_conversion`）回到只读原生字段。
+> **T-037**（同日）：评估「干脆不要自有字段、产品编号直接存原生 `default_code` 那一列」并
+> **按要求回退**；`product_card_view` 的编号口径定稿为「随选择切换」。
+> 三次方案取舍的证据与源码依据见 L2 → P1 / P2 / P3，结论：**保留 `base_reference` 自有字段 + compute 叠加**。
+
+### 关键决策链（按时间顺序，便于追溯「为什么最后是这样」）
+
+1. 多变体产品（`G001-WT` / `G001-BK`）的产品编号 `G001` 无处可存 → 新增
+   `product.template.base_reference`（存储字段 + trigram 索引），单变体产品与变体编号两处同值；
+2. 消费方不必知道本模块存在 → 把 `base_reference` **叠加**进模板级 `default_code` 的 compute
+   （`base_reference` 优先，`super()` 保底单变体桥接）→ 产品列表 / `[编号] 名称` / 搜索 / 单据
+   全部原生口径自动带编号；
+3. 「不要自有字段，直接用原生 `default_code` 那一列」→ 实现后**回退**（理由见 P3：原生 compute
+   会在多变体时把该列赋空，保住值必须「先 flush 再从库读回」+ 卸载要钩子清值；少一个字段的收益
+   远小于脆弱性与残留风险）；
+4. `product_card_view` 编号口径定稿：**随选择切换**（未选=产品编号，选中=变体编号），
+   已选组合行只显示属性组合（过程见该模块 `AGENTS.md` → P7）。
+
+### 本模块特有改动点（`19.0.3.0.0`，易漏项）
+
+- 模板级 `default_code` 的 compute **必须 `super()` 之后再覆盖**（先保住原生单变体桥接）；
+- inverse（`_set_default_code`）里**只能写 `base_reference`**，禁止再写 `default_code`（实测 `RecursionError`）；
+- 变体侧反向同步（`_sync_single_variant_base_reference`）**只在「所属产品恰好一条变体」时做**：
+  多变体产品的变体编号与产品编号无关，放开判断会被「转换时清空原变体编号」连带清掉产品编号；
+- 视图按变体数分流，且必须用**元素级** `invisible`（禁止再整块隐藏 `div[name='product_reference']`，
+  那会把多变体产品的编号输入框一起藏掉）；
+- 搜索要**三处**都并入 `base_reference`：模板 `_search_display_name`、变体 `_search_display_name`
+  （经 `_inherits` 委托）、搜索视图 `filter_domain`（顶部搜索框 + 独立「Reference」搜索项）。
+
+### 维护提醒
+
+- 改 `_compute_default_code` / `_set_default_code` / `_sync_single_variant_default_code` 前后各跑
+  `task test -- product_reference`（6 项契约用例：单变体两处同值双向 / 多变体只写产品编号 /
+  变体编号不动产品编号 / 模板编号优先且清空后回落 / 两层可搜索）；
+- **卸载即丢产品编号**（`base_reference` 是自有字段，随模块一起消失）→ 需要留档先导出；
+- 存量**多变体**产品的产品编号仍需人工补录一次（无可自动推断的来源）。
+
+---
+
+## L2：踩坑档案
+
+> 本节记录「产品编号该存哪、怎么写、怎么迁移、怎么卸载」这条链路上的实测结论与源码依据。
+> L1 第 1.3 条标注的触发条件下必读。
+
+### P1：模板级 `default_code` 是「桥接字段」，不能承载产品编号
+
+**触发条件**：想让产品级编号走原生 `default_code` 时必读（改 `models/product_template.py` 的
+compute / inverse 之前）。
+
+- **源码事实**（Odoo 19）：`product.template.default_code = fields.Char(compute='_compute_default_code',
+  inverse='_set_default_code', store=True)`；compute 走 `_compute_template_field_from_variant_field()`：
+  **单变体**镜像那条变体的值、**多变体**赋空、**零变体**写归档变体；`create()` 里另有一段
+  `_get_related_fields_variant_template()`（`['barcode', 'default_code', 'standard_price', 'volume', 'weight']`）
+  的补写。
+- **实测**（开发库）：多变体产品写模板级 `default_code` **确实写进数据库**；但只要 compute 真跑一次，
+  这一列就被赋空 —— 「值在库里」和「值不会被清」是两件事。
+- **陷阱**：覆盖这段 compute 会连带影响导入 / 创建路径的补写行为（上一条）。
+- **正确做法**：产品编号用**自有存储字段** `base_reference`，只把它的值「读时叠加」进 `default_code`；
+  桥接原样保留。
+
+### P2：把 `default_code` 改成纯 stored 字段（去掉 compute）—— 能做，但不能做
+
+**触发条件**：收到「不要计算字段、改成实际存储数据」这类要求时**必读本节**（先读完再动手）。
+
+- **可行性（源码依据）**：Odoo 19 的字段继承是「参数合并」——
+  `Field._get_attrs()` 先 `attrs.update(基础定义._args__)` 再 `attrs.update(本模块._args__)`，
+  所以**显式传 `compute=None` / `inverse=None` 能让合并结果里的 compute 消失**，
+  字段就变成普通存储字段（`store` 继承基础定义的 `True`）。
+- **为什么不能做**：
+  1. **拆掉原生单变体桥接**：单变体产品的模板编号不再跟随变体 → `display_name` 的 `[编号] 名称`、
+     `create()` 的 related 传播、单据 / 报表口径全部漂移（直接违反「不影响 Odoo 原有逻辑」）；
+  2. 表单 `Ref.` 写的是**模板列**、那条变体的 `default_code` 永远为空 → 报价 / 采购 / PDF 里没编号；
+  3. **卸载不干净**：字段声明虽会自动复原，但写进这一列的值仍在（原生语义下多变体产品该列为空）
+     → 必须再加 `uninstall_hook` 主动清值，而清值就等于「卸载即丢编号」；
+  4. 属于**非文档化扩展面**：Odoo 从未承诺「后装的模块可以摘掉前一个模块的 compute」，
+     跨版本回归风险由维护者自担。
+- **若确实要做**（最小清单）：`compute=None, inverse=None, readonly=False, copy=False` 重声明 +
+  自己实现「单变体写入时同时写变体」+ 补 `display_name` / 搜索 / 导入口径 + `uninstall_hook` 清值 +
+  全量回归（含 `product_variant_conversion` 里被测试钉住的桥接契约）。
+
+### P3：「产品编号直接存原生列」为什么被回退（评估记录，`19.0.4.0.0` 未发布）
+
+**触发条件**：再次收到同类需求时必读（可省一次完整试错）。
+
+- **当时的实现要点**：`_compute_default_code()` 先 `self.env.flush_all()` → 用 `cr.execute`
+  从库里读回模板级已存值 → `super()`（原生镜像 / 赋空）→ 把值放回（单变体记录跳过）；
+  `product.product._search_display_name()` 并入 `product_tmpl_id.default_code`；
+  存量值由 `migrations/19.0.4.0.0/pre-migration.py` 从 `base_reference` 搬过来；
+  `uninstall_hook` 负责把写进原生列的值清掉。
+- **为什么脆弱**：
+  - **必须先落库再读**：同一事务里刚写入的新值还在缓存，直接读库会读到旧值再写回 ——
+    等于吞掉用户本次修改；
+  - 在 compute 里调用 `flush_all()` 属于「计算过程中触发 flush」，是 ORM 内部机制的灰区；
+  - 「值会不会被清」取决于 compute 何时被触发（实测用户操作路径不触发、`add_to_compute` 也不触发），
+    但这是**观察到的行为，不是契约** —— 一个版本升级或一次批量写入就可能变；
+  - 用户第 3 条要求「卸载后不遗留任何数据或行为变更」在这条路上要额外靠钩子兜住，
+    而钩子一旦失败 / 被跳过，就留下「原生认为不该存在」的编号。
+- **结论**：收益（少一个字段）远小于代价（脆弱 + 残留 + 跨版本风险）→ **保留 `base_reference` 自有字段**。
+
+### P4：产品编号的写入路径必须单向收敛（`RecursionError` 实测）
+
+**触发条件**：改 `_set_default_code` / `_sync_single_variant_default_code` /
+`product.product._sync_single_variant_base_reference` 时必读。
+
+- **现象**：在 inverse 里再写 `default_code` → 再次触发 inverse → `RecursionError`
+  （`19.0.3.0.0` 实现时实测）。
+- **正确做法**：
+  - `_set_default_code()` **只写 `base_reference`**；要把值同步给变体，走 `_sync_single_variant_default_code()`；
+  - 从变体侧改编号，由 `product.product._sync_single_variant_base_reference()` 反向写 `base_reference`，
+    且**仅当所属产品恰好一条变体**；
+  - 「直接写 `base_reference`」（API / 脚本 / 导入）这条路的收口也在 `_sync_single_variant_default_code()`。
+  三条路径互相不回头，因此必然收敛；任何「顺手再写另一个字段」的改动都要先想清楚会不会成环。
+
+### P5：迁移与钩子的时序（pre vs post / 卸载钩子）
+
+**触发条件**：加字段、删字段、写 `migrations/` 或 `uninstall_hook` 时必读。
+
+- **新增列的回填 → post-migration**：新列要到模型加载（`_auto_init`）之后才存在
+  （`19.0.3.0.0` 的回填就是 post）；
+- **要读「即将被删掉的列」→ pre-migration**：模型里一删字段，加载时列即被 drop，post 阶段读不到
+  （`19.0.4.0.0` 评估版据此选的 pre）；
+- **卸载钩子时机**：`uninstall_hook` 在 `module_uninstall()` **之前**执行、且模块代码仍然加载
+  （`odoo/modules/loading.py` STEP 5）→ 可以放心用 ORM；之后注册表整体重载，本模块的字段与 compute
+  覆盖面随之下线；
+- **模块升级不会自动重算存量计算字段**（`loading.py` 里没有相关逻辑）→ 别指望「升级会把编号算回来」，
+  升级后要抽查一遍真实数据。。
 
 ---
 

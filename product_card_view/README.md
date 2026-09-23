@@ -381,6 +381,7 @@ odoo -d <db> -u product_card_view --stop-after-init    # 升级（前端资源�
 | 切换筛选 / Group By 后卡片空白（无图、无产品信息） | 见 `AGENTS.md` L2 P6：取数必须覆盖分组（`list.groups[].list.records`）、payload 成功后整体替换、渲染后靠 `useEffect` + `render(true)` 兜底 |
 | 分组后卡片过宽 / 无间隙 | 瀑布流只在未分组生效；分组样式由 `.o_product_card_view.o_kanban_grouped .o_kanban_group .o_kanban_record.o_product_card` 给（宽度上限 + 间距） |
 | 卡片叠在一起 | `position: absolute` 只由 JS 写 inline；若被写进 SCSS，JS 未跑的首帧所有卡片会叠在一起 |
+| 编号栏 / 已选组合行显示不对（编号重复、找不到变体编号） | 现行口径是「**未选变体=产品编号、选中变体=该变体编号**（变体无编号回退产品编号），已选组合行只显示属性组合」—— 见 `AGENTS.md` L2 P7；改过前端资源后必须强刷浏览器 |
 
 ---
 
@@ -393,6 +394,11 @@ odoo -d <db> -u product_card_view --stop-after-init    # 升级（前端资源�
   硬依赖模块的三个动作另有 XML 静态声明（`view_mode` + `act_window.view` 记录），保留作为声明式兜底。
 - **变体规则调整**：同步改 `isValueAllowed` / `selectValue` / `currentVariant` 三个方法。
 - **样式**：选择器一律以 `.o_product_card_view`（渲染器根类）开头，避免命中官方 kanban 卡片。
+- **编号口径**：改 `referenceText` / `selectionText` 前必读 `AGENTS.md` → L2 P7。
+  这两个 getter **没有自动化用例**（无头环境断言不了渲染）→ 改动后人工验证四态：未选变体 /
+  选中且变体有编号 / 选中且变体无编号（回退产品编号）/ 两层都空（显示 `—`），并强刷浏览器（Ctrl+F5）。
+- **信息区版式**：改 XML / SCSS 前必读 `AGENTS.md` → L2 P8（flex 子项 `min-width: auto` 会让长产品名
+  撑破卡片、`text-truncate` 失效；改完信息区高度要确认瀑布流重算正常）。
 
 ---
 

@@ -65,6 +65,20 @@
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
 
+- **T-037 产品编号承载方式定稿 + 卡片编号口径（含两次回退的评估记录）** ｜ `product_reference` + `product_card_view` ｜ P1
+  - 完成日期：2026-09-23 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_card_view` `19.0.2.1.4`；`product_reference` `19.0.3.0.0` 与 `product_variant_conversion` `19.0.5.3.0` **不变**（产品编号仍存自有字段 `base_reference`，未改用原生列）
+  - 起因（三条要求，逐条有结论）：
+    1. 「不再单独存储 —— 产品编号直接用 `product.template.default_code`，并把该字段由计算字段改成实际存储字段（stored field），卸载后不遗留任何数据或行为变更」→ **实现后按要求回退**；
+    2. 「卡片上产品编号紧跟产品名」→ 实现后**使用方手改回退**（版式维持原样）；
+    3. 「卡片选中变体时编号显示该变体编号，已选组合行移除变体编号」→ **已定稿落地**（`19.0.2.1.4`）。
+  - 结论与依据：
+    - ① **不做**。字段继承是「参数合并」（`Field._get_attrs()`：先并基础定义、再并本模块定义，显式 `compute=None` 能摘掉 compute），但摘掉即拆毁原生单变体桥接 —— `display_name` 的 `[编号] 名称`、`create()` 的 related 传播、单据 / 报表口径全变；且写进那一列的值卸载后会残留（原生多变体产品该列应为空），必须再加 `uninstall_hook` 清值。若「直接存原生列」还要在 compute 里「先 `flush_all()` 再从库读回」才不被赋空 —— 脆弱、属非文档化扩展面。故**保留 `base_reference` + compute 叠加**。源码与实测证据见 `product_reference/AGENTS.md` → L2 P1 / P2 / P3 / P5，评估记录见其 `CHANGELOG.md` → `[19.0.4.0.0]`（标注未发布 / 已回退）
+    - ② **不做**。flex 子项默认 `min-width: auto`：长产品名会撑破卡片、`text-truncate` 失效；要让编号不被长名字挤掉得 `flex: 0 0 auto` + `max-width: 45%`。陷阱已归档到 `product_card_view/AGENTS.md` → P8（含回退经过）
+    - ③ **定稿**：`referenceText = (variant && variant.reference) || data.reference || "—"`（未选=产品编号；选中=该变体编号，变体无编号回退产品编号；都空显示 `—`）；`selectionText` 只拼属性组合（`Blue / Large`），同一编号只出现一次。判据是「卡片默认代表产品、点选后代表该变体」，与图片 / 在手数量的切换口径一致 —— 见 `product_card_view/AGENTS.md` → P7
+  - 验收记录：模块 [`product_card_view/CHANGELOG.md`](product_card_view/CHANGELOG.md) → `[19.0.2.1.4]`、[`product_reference/CHANGELOG.md`](product_reference/CHANGELOG.md) → `[19.0.4.0.0]`（评估记录）；`task test -- product_card_view` 6 项 0 failed / 0 error（2 项按配置 skip）；`task test -- product_reference,product_card_view,product_variant_conversion --test-tags=/product_reference` 8 项 0 failed / 0 error；`task check` 通过；开发库实测：多变体产品写模板级 `default_code` 确实落库、增删变体与 `add_to_compute` 均未清空（**观察到的行为，非契约** —— 正因如此没采用该路径）
+  - 遗留：① **卡片编号与已选组合行没有自动化用例**（无头环境断言不了渲染）→ 目标环境人工验证四态（未选 / 选中且变体有编号 / 选中且变体无编号 / 两层都空）+ 强刷浏览器 + 中英各一遍；② `product_reference` **卸载即丢产品编号**（自有字段随模块消失）→ 卸载前先导出；③ 存量**多变体**产品的产品编号需人工补录一次；④ 本地工作树残留空目录 `product_reference/migrations/19.0.4.0.0/`（评估版迁移文件已删除，目录待手工删）
+
 - **T-036 修「新建产品时产品表单的 Dimension Unit 是空的」** ｜ `product_dimension` ｜ P1
   - 完成日期：2026-09-23 ｜ 状态：**已交付，待目标环境界面复验**
   - 落地版本：`product_dimension` `19.0.4.1.1`
@@ -91,7 +105,8 @@
   - 起因：多变体产品的产品编号此前只存在本模块自己的 `base_reference` 字段里 —— 产品列表、`[编号] 名称`、Many2one、列表搜索都看不到它；而 `product_card_view` 为了显示它被迫运行期探测该字段（跨模块耦合），`product_variant_conversion` 也为它做了「编号上移」与「参考号交接」（同样耦合）。按要求改为：**让原生字段承载产品编号**，另两个模块回到只读原生字段
   - 做法：① `product_reference` 把 `base_reference` **叠加进模板级 `default_code` 的 compute**（`base_reference` 优先，`super()` 保底单变体桥接）—— 产品编号从此在所有原生口径可见，消费方零耦合；② inverse 按变体数分流（单变体两处同值 / 多变体只写 `base_reference`），并从变体侧改编号时反向同步（仅单变体）—— 写入路径全部收口，实现时踩到「inverse 里再写 `default_code` → `RecursionError`」并修掉；③ 产品级参考号层**不再按变体数隐藏**（两层各自独立、都可见）；④ `migrations/19.0.3.0.0/` 回填单变体产品并按需对齐存储列 `default_code`，删除相反的 `19.0.2.7.0` 清理迁移；⑤ `product_variant_conversion` 删除编号上移与参考号交接两步（含 `19.0.5.2.1` 的适配层）—— 转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；⑥ `product_card_view` 删除 `_get_optional_base_reference()`，编号只读原生 `default_code`，并修复「编号栏被选中的变体编号顶替」（编号栏固定为产品编号，变体编号移到已选组合行）
   - 验收记录：三模块 `CHANGELOG.md` → `[19.0.3.0.0]` / `[19.0.5.3.0]` / `[19.0.2.1.3]`；测试：`product_reference,product_variant_conversion,product_card_view` **52 项 0 failed / 0 error**，单模块三组（`product_reference` 6 项、`product_card_view` 4 项含 2 项 skip、`product_variant_conversion` 42 项）同样 0 failed；开发库升级实测：回填 23 条单变体产品、对齐存储列 1 条，多变体产品 `AM-235` 的 `default_code` 与卡片编号均为 `AM-235`、原生搜索可命中，单变体产品 `base_reference` / `default_code` / 变体编号三者同值；`task check` 通过
-  - 遗留：目标环境验证界面（产品表单 `Ref.`、列表 `Reference` 列、搜索、卡片两态、中英双语 + 强刷）；**存量多变体产品的产品编号需人工补录**（无可自动推断的来源，缺它只影响编号那一栏）
+  - 遗留：目标环境验证界面（产品表单 `Ref.`、列表 `Reference` 列、搜索、卡片两态、中英双语 + 强刷）；**存量多变体产品的产品编号需人工补录**（无可自动推断的来源，缺它只影响编号那一栏）；编号口径的最终定稿见 **`T-037`**（`product_card_view 19.0.2.1.4` 起改为「随选择切换 + 组合行只显示属性」）
+  - ⚠ 本条第 ⑥ 项的原口径（「编号栏固定为产品编号、变体编号移到已选组合行」）已被 **`T-037`** 推翻：卡片代表产品、点选变体后代表该变体 —— 编号随选择切换、组合行只显示属性组合。判据与四态验证清单见 `product_card_view/AGENTS.md` → L2 P7
 
 - **T-033 产品母型号 base_reference（多变体产品的产品型号无处可存）** ｜ `product_reference` + `product_variant_conversion` + `product_card_view` ｜ P1
   - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**

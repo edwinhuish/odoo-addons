@@ -305,9 +305,19 @@ odoo -d <db> -u product_reference --stop-after-init
 - 弹窗里加的参考号保存后不见了：弹窗改动挂在表单 record 上，必须再点一次产品「保存」才入库
 - 升级报「column model_code does not exist」类错误：说明改名 SQL 未生效或迁移未跑到，
   回滚备份后按「从 product_model 升级」重做
+- **卸载本模块会丢掉产品编号**：产品编号存在自有字段 `base_reference` 上，字段随模块一起删除
+  —— 需要留档请先导出（多变体产品没有别的地方能兜住这个值）
+- 存量**多变体**产品没有产品编号：这是数据没填，不是 bug —— 在原产品表单的 `Ref.` 里补录一次
+  （旧数据无从自动推断，迁移脚本只回填单变体产品）
 
 ### 后续维护
 
+- **产品编号的承载方式不要改**：坚持「自有字段 `base_reference` + 叠加进原生 `default_code` 的 compute」。
+  再遇到「不要自有字段、直接用原生 `default_code` 那一列 / 把该字段改成纯存储字段」的要求，
+  先读 `AGENTS.md` → L2 P1–P3（源码依据 + 实测 + 代价清单）再答复
+- 改 `_compute_default_code` / `_set_default_code` / `_sync_single_variant_default_code` 前后各跑一次
+  `task test -- product_reference`（6 项契约用例），并读 `AGENTS.md` → L2 P4（写入路径必须单向收敛，
+  实测过 `RecursionError`）
 - 改拼接分隔符只改 `_sync_reference_index`，改后触发一次同步
 - 新增参考号类型只改 `reference_type` 的 `selection`
 - 其他单据 Many2one 指向 `product.template` 即自动支持参考号搜索，无需额外改动
