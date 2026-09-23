@@ -101,21 +101,24 @@ export class ProductCardRecord extends KanbanRecord {
     }
 
     /**
-     * 产品编号：**始终取产品级编号**（payload 的模板层 `reference`），不随选中变体切换。
+     * 编号：**选中变体时显示该变体的编号**，未选变体时显示产品编号（`19.0.2.1.4` 起）。
      *
-     * 该值就是原生 `product.template.default_code`：单变体产品是那条变体的编号，
-     * 多变体产品是产品编号（由 `product_reference` 叠加进 `default_code` 的 compute，
-     * 本模块不需要知道它存在）；两者都没有时才显示 `—`。
+     * 取值链（两层值后端都已下发，这里只做回退）：
+     * 选中变体 → `variants[].reference`（该变体的 `product.product.default_code`，
+     * 为空则回退产品编号）→ 产品编号（payload 模板层 `reference` = 原生
+     * `product.template.default_code`；多变体产品的产品编号由 `product_reference`
+     * 叠加进该字段的 compute，本模块不需要知道它存在）→ 都没有时显示 `—`。
      *
-     * 卡片代表「产品」，编号栏因此是**产品编号**；变体自己的编号属于变体，
-     * 选中变体时显示在下面的已选组合文本里（见 `selectionText`）。
+     * 编号栏的含义随选择切换：没选变体 = 产品编号，选了变体 = 这个变体的编号；
+     * 属性组合显示在已选组合行（见 `selectionText`，那里**不再**重复显示编号）。
      */
     get referenceText() {
         const data = this.payload;
         if (!data) {
             return "";
         }
-        return data.reference || "—";
+        const variant = this.currentVariant;
+        return (variant && variant.reference) || data.reference || "—";
     }
 
     /** 在手数量文本（模板层=全部变体和；变体层=该变体在手；不可追踪显示 —） */
@@ -133,10 +136,10 @@ export class ProductCardRecord extends KanbanRecord {
     }
 
     /**
-     * 已选组合的展示文本（如 "Blue / Large · FURN_6666"），仅选中变体时显示。
+     * 已选组合的展示文本（如 "Blue / Large"），仅选中变体时显示。
      *
-     * 选中变体时追加上**该变体自己的编号**（与产品编号相同才不追加，避免重复显示）：
-     * 编号栏固定为产品编号，变体编号在这里出现，两者互不顶替、信息都不丢。
+     * 只显示属性组合：**变体编号不在这里**（`19.0.2.1.4` 起）—— 选中变体后编号由编号栏
+     * 显示（见 `referenceText`），同一编号在卡片上出现两次反而是噪声。
      */
     get selectionText() {
         const variant = this.currentVariant;
@@ -155,11 +158,7 @@ export class ProductCardRecord extends KanbanRecord {
         if (!names.length) {
             return "";
         }
-        const label = names.join(" / ");
-        const variantReference = variant.reference || "";
-        return variantReference && variantReference !== data.reference
-            ? `${label} · ${variantReference}`
-            : label;
+        return names.join(" / ");
     }
 
     /**

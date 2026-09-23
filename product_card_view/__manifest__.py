@@ -1,6 +1,6 @@
 {
     "name": "Product Card View",
-    "version": "19.0.2.1.3",
+    "version": "19.0.2.1.4",
     "summary": "Masonry product card view with image carousel and variant switcher",
     "description": """
         Modern product list card view (masonry) for foreign trade SOHO scenarios.

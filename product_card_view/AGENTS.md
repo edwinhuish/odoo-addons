@@ -2,8 +2,8 @@
 
 > 本文档用于指导 AI 助手或新开发者在维护、扩展本 Odoo 模块时的行为规范和关键上下文。
 > L1 约束段每次加载必读；L2 踩坑档案按主题触发条件加载。
-> 最近修订：2026-09-22（`19.0.2.0.7` 修复切换 filter / group by 的取数与布局，新增 L2 P6）——
-> 历史修订见文末「修订记录」。
+> 最近修订：2026-09-23（`19.0.2.1.4` 编号栏随选择切换 + 已选组合行只显示属性组合，
+> 重写 L1 第 5 条）—— 历史修订见文末「修订记录」。
 
 ---
 
@@ -20,7 +20,7 @@
 - 自定义前端：`views` 注册表 **`card`**（新 view type，`kanbanView` 派生）
 - 主依赖：`stock`（`product` 经其传递依赖）
 - 可选集成（**不在 `depends`**）：`product_image`（多图图库）、`sale` / `purchase`（注入 Card 入口）
-- 当前版本：`19.0.2.1.3`（19.0.2.1.3 与 `product_reference` 彻底解耦 —— 编号只读原生 `default_code`、删除可选字段探测；并修复编号栏被选中的变体编号顶替：编号栏固定为产品编号、变体编号改显示在已选组合行；19.0.2.1.2 可选依赖探测收敛进适配层并补 payload 用例；19.0.2.1.1 母型号只对多变体产品生效；19.0.2.0.7 修复切换 filter / group by 后卡片空白、过宽、无间隙 —— 见 L2 P6；19.0.2.0.6 注入改为读取时计算 —— 覆盖 `_compute_views()`；19.0.2.0.5 完成 T-025 Card 按钮名国际化、19.0.2.0.4 产品列表默认 Card）
+- 当前版本：`19.0.2.1.4`（19.0.2.1.4 编号栏随选择切换：未选变体显示产品编号、选中变体显示该变体编号；已选组合行 `selectionText` 只显示属性组合、不再追加变体编号；19.0.2.1.3 与 `product_reference` 彻底解耦 —— 编号只读原生 `default_code`、删除可选字段探测；19.0.2.1.2 可选依赖探测收敛进适配层并补 payload 用例；19.0.2.1.1 母型号只对多变体产品生效；19.0.2.0.7 修复切换 filter / group by 后卡片空白、过宽、无间隙 —— 见 L2 P6；19.0.2.0.6 注入改为读取时计算 —— 覆盖 `_compute_views()`；19.0.2.0.5 完成 T-025 Card 按钮名国际化、19.0.2.0.4 产品列表默认 Card）
 
 ---
 
@@ -49,23 +49,32 @@
    - 违反后果：点选后无对应变体，信息无法切换
 
 5. **默认口径：模板层；点选切变体**
-   - 默认显示模板名 / 模板编号 / 全部变体在手总量；选择变体后切为对应变体信息
-   - **编号栏固定为产品编号，禁止随选中变体切换**（`19.0.2.1.3` 修的就是这个）：
-     模板层 `reference` = 原生 `product.template.default_code`（单变体产品=那条变体编号，
-     多变体产品=产品编号，由 `product_reference` 叠加进该字段的 compute）；
-     变体自己的编号显示在**已选组合行**（`selectionText` → `Blue / Large · FURN_6666`），
-     与产品编号互不顶替 —— 卡片代表「产品」，变体属性与变体编号属于变体
+   - 默认显示模板名 / 产品编号 / 全部变体在手总量；选择变体后切为对应变体信息
+   - **编号栏随选择切换，禁止去掉这个切换**（`19.0.2.1.4` 起）：
+     未选变体 = **产品编号**（payload 模板层 `reference` = 原生
+     `product.template.default_code`；多变体产品的产品编号由 `product_reference`
+     叠加进该字段的 compute，本模块不需要知道它存在）；
+     选中变体 = **该变体的编号**（`variants[].reference`，为空才回退产品编号）；
+     两者都没有显示 `—`。取值链写在 `referenceText` 一处，别在别处另算一遍。
+     （`19.0.2.1.3` 曾把编号栏固定成产品编号、变体编号挪到已选组合行，同日按反馈改回）
+   - **已选组合行只显示属性组合**（`selectionText` → `Blue / Large`），**不再追加变体编号**：
+     编号已由编号栏承担，同一编号出现两次是噪声
+   - 版式（`19.0.2.1.4`）：产品名一行 → 「编号 + 在手徽标」一行（`o_product_card__meta`）→
+     已选组合行（有选中变体时）→ 变体按钮行。改版式别动这几个类的归属
    - 变体层 `variants[].reference` = 变体 `default_code`（为空则回退模板 `reference`），
-     只供已选组合行使用；取值链在 `_get_product_card_view_payload()` 里解析好再下发
+     由编号栏使用；取值链在 `_get_product_card_view_payload()` 里解析好再下发
    - **禁止引用任何自研模块的字段 / 方法**（`base_reference` 等一律不许出现）：本模块只认原生
      `default_code`，对方怎么算出来的不关它的事；因此**不需要**任何「可选字段存在性判断」，
      也不许把自研模块写进 `depends`
    - `product_image` 的图库是唯一例外（`env.get("product.image.gallery")`）：那是**模型**级可选集成，
      收在 `env.get` 那一段里；模型不存在时只显示主图
-   - 编号行为由 `tests/test_product_card_payload.py` 钉住：只用原生 API 设置编号，
+   - payload 的取值链（模板层 + 变体层两个 `reference`、回退关系）由
+     `tests/test_product_card_payload.py` 钉住：只用原生 API 设置编号，
      「多变体产品能否有产品编号」按 `_multi_variant_product_can_carry_a_reference()` 跳过，
-     装 / 不装 `product_reference` 两种配置都要跑通
-   - 违反后果：编号栏随变体切换而变（用户以为产品编号丢了）；或本模块被迫硬依赖 `product_reference`
+     装 / 不装 `product_reference` 两种配置都要跑通。
+     **两个 getter（切换 / 拼接文本）没有自动化用例**（无头环境断言不了渲染）→ 改动后
+     必须人工验证「未选 / 选中」两态
+   - 违反后果：编号栏与已选组合行口径打架（同一编号显示两次 / 变体编号丢失）；或本模块被迫硬依赖 `product_reference`
 
 6. **每页只发一次数据请求，payload 必须存在非 reactive 容器**
    - 由 `ProductCardRenderer` 的 `onWillStart` / `onWillUpdateProps`（渲染前）+ `useEffect`

@@ -70,9 +70,6 @@
                 <div class="o_product_card__title text-truncate" t-att-title="title">
                     <t t-esc="title" />
                 </div>
-                <div t-if="selectionText" class="o_product_card__selection text-truncate">
-                    <t t-esc="selectionText" />
-                </div>
                 <div class="o_product_card__meta d-flex align-items-center justify-content-between">
                     <span class="o_product_card__reference text-truncate"
                         t-att-title="referenceLabel">
@@ -83,6 +80,9 @@
                         t-att-aria-label="onHandLabel">
                         <t t-esc="onHandText" />
                     </span>
+                </div>
+                <div t-if="selectionText" class="o_product_card__selection text-truncate">
+                    <t t-esc="selectionText" />
                 </div>
             </div>
 
