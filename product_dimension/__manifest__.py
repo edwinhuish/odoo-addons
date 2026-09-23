@@ -1,6 +1,6 @@
 {
     "name": "Product Dimensions",
-    "version": "19.0.4.1.0",
+    "version": "19.0.4.1.1",
     "summary": "Add a dimension unit and length / width / height per product variant, and keep the native Volume in sync",
     "description": """
         Product dimension module for foreign trade SOHO scenarios.

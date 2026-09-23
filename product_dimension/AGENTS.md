@@ -14,7 +14,7 @@
 - 继承模型：`product.product`（尺寸真身）、`product.template`（单变体桥接）
 - 自定义组件（前端模块）：无
 - 主依赖：`product`（不依赖 `stock` / `sale` / `purchase`）
-- 当前版本：`19.0.4.0.0`（19.0.4.0.0 前后端职责重划分：界面侧体积改由前端算、后端只兜底且不再返回体积，规则两处一致并由测试守住；19.0.3.1.0 补模板侧预览并收敛换算口径；19.0.3.0.0 补齐「变体快速编辑表单」挂载点、收紧视图锚点、明确与原生 `Volume` 同进同退；19.0.2.0.1 修复 i18n 三类静默失效并打磨中文；19.0.2.0.0 改名 + 尺寸下沉到变体）
+- 当前版本：`19.0.4.1.1`（19.0.4.1.1 修新建产品时产品表单的 `Dimension Unit` 是空的 —— 镜像字段补上自己的 `default`；19.0.4.1.0 修 cm 小体积被舍成 0（前端取整参数 + Volume 精度提到 6 位）；19.0.4.0.0 前后端职责重划分：界面侧体积改由前端算、后端只兜底且不再返回体积，规则两处一致并由测试守住；19.0.3.1.0 补模板侧预览并收敛换算口径；19.0.3.0.0 补齐「变体快速编辑表单」挂载点、收紧视图锚点、明确与原生 `Volume` 同进同退；19.0.2.0.1 修复 i18n 三类静默失效并打磨中文；19.0.2.0.0 改名 + 尺寸下沉到变体）
 
 ---
 
@@ -25,7 +25,11 @@
 1. **尺寸的真身在 `product.product`，模板侧只能是桥接**
    - `dimension_unit` / `dimension_length` / `dimension_width` / `dimension_height` 定义在变体上；
      模板上的同名字段必须是 `compute` + `inverse` 的镜像（`store=True`），不得变成独立存储的第二份真数据
-   - 违反后果：多变体产品里尺寸与 Volume 归属错位，改模板尺寸牵动 / 不动变体都说不清（这正是 `T-021` 修掉的问题）
+   - **默认值也要在镜像字段上给一份**（`dimension_unit` 用真身文件里的 `DEFAULT_DIMENSION_UNIT`）：
+     `default_get()` 只认 context / `ir.default` / `field.default`、**不触发 compute**，而全新产品的表单
+     是「先有表单、后有变体」—— 镜像字段没带 `default` 时它读不出值，新建产品时「尺寸单位」就是空的
+   - 违反后果：多变体产品里尺寸与 Volume 归属错位，改模板尺寸牵动 / 不动变体都说不清（这正是 `T-021` 修掉的问题）；
+     或新建产品时单位默认空、用户必须手选一个才能保存（详见 L2 P9）
 
 2. **模板侧桥接的语义与原生 `volume` / `weight` 完全一致**
    - 单变体：读镜像该变体、写回该变体；多变体：读出空值（`False` / `0.0`）、写入不碰任何变体
@@ -210,6 +214,26 @@
   这是 Odoo 的**全局**设置，不是本模块字段的问题。处置：安装与升级时把它提到 ≥ 6 位（只升不降）。
   - **教训**：前端逻辑不加测试就会这样翻车。把纯规则抽成无依赖文件、用 node 跑断言，是这类模块
   能拿到的最低成本保护。
+
+  ### P9：新建产品时「尺寸单位」默认是空的（实测踩过）
+
+  - **现象**：产品表单点「新建」，`Dimension Unit` 下拉框是空的（该字段还是必填，用户不选就存不了）；
+    但变体快速编辑表单里默认就是厘米 —— 同一个字段名，两边行为不一致。
+  - **根因**：模板侧那个字段是「单变体桥接」的 `compute`（依赖 `product_variant_ids.dimension_unit`），
+    而 **`default_get()` 只认 context / `ir.default` / `field.default`，不会触发任何 compute**
+    （对照 `odoo/orm/models.py::default_get`）。全新产品的表单是「先有表单、后有变体」，
+    compute 那一刻 `product_variant_ids` 是空的 → 读出空值。变体侧不空，因为它自己带了 `default="cm"`。
+    实测：`env['product.template'].default_get(['dimension_unit'])` → `{}`、
+    `Form(env['product.template']).dimension_unit` → `False`。
+  - **处置**：镜像字段也带上同一份 `default`，值取自真身文件的常量 `DEFAULT_DIMENSION_UNIT`（避免两处写死）。
+    这**不**违反 L1.1 —— 归属仍是「真身在变体」，字段仍是 `compute + inverse + store` 镜像，
+    `default` 只影响「新建表单的初始值」。顺序上也没有冲突：表单提交 `cm` → inverse 写回变体 → compute 读回来还是 `cm`。
+  - **注意**：计算字段加 `default` 只在「有 inverse（即非只读）」时才不会触发
+    `Redundant default on ...` 告警（`odoo/orm/fields.py`：`if self.default and self.readonly and not self.inverse`）——
+    本模块的镜像字段有 inverse，所以安全；给纯只读 compute 加 default 会白挨一条启动告警。
+  - **校验**：`test_dimension_unit_defaults_to_centimeters`（`default_get` + `Form` 新建 + 保存后变体）；
+    「多变体模板仍读出空值」由既有的 `test_each_variant_keeps_its_own_dimensions` 继续钉住（加了 `default`
+    没有改镜像语义）。
 
   ---
 

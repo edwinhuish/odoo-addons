@@ -6,6 +6,46 @@
 
 ---
 
+## [19.0.4.1.1] - 2026-09-23（修「新建产品时 Dimension Unit 是空的」）
+
+### 变更
+
+- **修复：产品表单上 `Dimension Unit` 新建时默认是空的**（用户得先手选一个单位才能保存）。
+  根因是模板侧的 `dimension_unit` 是「单变体桥接」的 compute（依赖 `product_variant_ids.dimension_unit`），
+  而 `default_get()` 只认 context / `ir.default` / `field.default`、**不会触发 compute** ——
+  全新产品的表单是「先有表单、后有变体」，compute 那一刻还没有变体可镜像，读出空值；
+  变体侧之所以正常，是因为它自己带了 `default="cm"`（实测：`product.template.default_get(['dimension_unit'])`
+  → `{}`、`Form(product.template).dimension_unit` → `False`）。
+- **修复方式：镜像字段也带上同一个默认值。** 在真身文件里新增常量 `DEFAULT_DIMENSION_UNIT = "cm"`，
+  变体侧与模板侧两个字段共用它，值只有一处出处、不会漂移。模板字段仍是 `compute + inverse + store`
+  的镜像（不改变「真身在变体」的归属约束），只是新建表单的默认值不再依赖 compute。
+- **补测试**：`test_dimension_unit_defaults_to_centimeters` 追加断言 —— `default_get()` 返回 `cm`、
+  `Form(product.template)` 新建时读出 `cm`、保存后变体也是 `cm`（在原有两条断言基础上扩展，用例总数仍 17 项）。
+
+### 影响
+
+- 新建产品：`Dimension Unit` 默认选中 `Centimeters`（变体快速编辑表单本来就默认厘米，现在两处一致）
+- **多变体产品的模板侧不变**：镜像仍是读出空值（`False`）、写入不牵动变体，界面上那一段本来就隐藏
+  （回归用例 `test_each_variant_keeps_its_own_dimensions` 继续通过）
+- 无字段 / 数据结构变化，无迁移脚本；升级后刷新表单即生效
+
+### 文档
+
+- 模块 `README.md`：功能概述、字段表（模板侧 `dimension_unit` 行）、操作要点、验证清单同步
+- 模块 `AGENTS.md`：L1 第 1 条补「镜像字段必须自带 `default`」；L2 新增 P9（`default_get()` 不触发 compute）
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| dev 库（`-u product_dimension`）| `default_get(['dimension_unit'])` → `cm`；`Form(product.template).dimension_unit` → `cm`；多变体模板仍为 `False` ✓ |
+| 镜像字段带的 default 是否触发 ORM 告警 | 升级日志无 `Redundant default on ...`（计算字段有 inverse → 非只读，不触发该告警）✓ |
+| `task test -- product_dimension` | 17 项 0 failed ✓ |
+| `task check` | 通过 ✓ |
+| 目标环境界面 | 待目标环境复验（新建产品打开表单看 `Dimension Unit` 是否为 `Centimeters`） |
+
+---
+
 ## [19.0.4.1.0] - 2026-09-22（修「cm 小体积显示 0」：前端取整参数 + Volume 精度）
 
 ### 变更

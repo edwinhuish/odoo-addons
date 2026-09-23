@@ -15,7 +15,7 @@ import subprocess
 
 from odoo.exceptions import ValidationError
 from odoo.fields import Command
-from odoo.tests import TransactionCase, tagged
+from odoo.tests import Form, TransactionCase, tagged
 
 from odoo.addons.product_dimension.models.product_product import CM3_PER_M3
 
@@ -42,8 +42,25 @@ class TestProductDimension(TransactionCase):
     # ------------------------------------------------------------------
 
     def test_dimension_unit_defaults_to_centimeters(self):
+        """尺寸单位默认厘米 —— 变体侧与**产品表单侧**都要有值，不能是空的。
+
+        模板字段是「单变体桥接」的 compute（依赖 `product_variant_ids.dimension_unit`），
+        而 `default_get()` 只认 context / ir.default / field.default、**不会触发 compute**：
+        全新产品的表单是「先有表单、后有变体」，compute 那一刻还没有变体可镜像，
+        镜像字段若不自己带 default，新建产品时「尺寸单位」下拉框就是空的（实测过）。
+        """
         self.assertEqual(self.variant.dimension_unit, "cm")
         self.assertEqual(self.variant.dimension_length, 0.0)
+
+        # 产品表单（模型是 product.template）新建时的默认值
+        self.assertEqual(
+            self.env["product.template"].default_get(["dimension_unit"])["dimension_unit"],
+            "cm",
+        )
+        form = Form(self.env["product.template"])
+        form.name = "Form Default Probe"
+        self.assertEqual(form.dimension_unit, "cm")
+        self.assertEqual(form.save().product_variant_id.dimension_unit, "cm")
 
     def test_volume_is_synced_from_variant_dimensions(self):
         """尺寸变化即重算 Volume，厘米与米两种单位都要得到同一个立方米值。"""

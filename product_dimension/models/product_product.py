@@ -16,6 +16,8 @@ DIMENSION_FIELDS = (
     "dimension_width",
     "dimension_height",
 )
+# 尺寸单位的默认值。变体侧与模板侧（单变体桥接）共用，界面新建时都默认「厘米」。
+DEFAULT_DIMENSION_UNIT = "cm"
 # 立方厘米 → 立方米
 CM3_PER_M3 = 1_000_000.0
 
@@ -45,7 +47,7 @@ class ProductProduct(models.Model):
             ("cm", "Centimeters"),
             ("m", "Meters"),
         ],
-        default="cm",
+        default=DEFAULT_DIMENSION_UNIT,
         required=True,
         help="Unit used for the length, width and height of this variant. "
              "The native Volume is always expressed in cubic meters.",

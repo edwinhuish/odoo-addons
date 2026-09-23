@@ -65,6 +65,15 @@
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
 
+- **T-036 修「新建产品时产品表单的 Dimension Unit 是空的」** ｜ `product_dimension` ｜ P1
+  - 完成日期：2026-09-23 ｜ 状态：**已交付，待目标环境界面复验**
+  - 落地版本：`product_dimension` `19.0.4.1.1`
+  - 现象：产品表单点「新建」，`Dimension Unit` 下拉框默认是空的（该字段还是必填，不选存不了）；但变体快速编辑表单里默认就是厘米，同一个字段名两边行为不一致
+  - 根因（实测复现）：模板侧那个字段是「单变体桥接」的 compute（依赖 `product_variant_ids.dimension_unit`），而 **`default_get()` 只认 context / `ir.default` / `field.default`、不触发任何 compute**（`odoo/orm/models.py::default_get`）；全新产品的表单是「先有表单、后有变体」，compute 那一刻没有变体可镜像 → 读出空值。变体侧不空是因为它自己带了 `default="cm"`。实测 `product.template.default_get(['dimension_unit'])` → `{}`、`Form(product.template).dimension_unit` → `False`
+  - 做法：真身文件新增常量 `DEFAULT_DIMENSION_UNIT = "cm"`，变体侧与模板侧两个字段共用它；镜像字段仍保持 `compute + inverse + store`（不违反「真身在变体」的归属约束），只是新建表单的默认值不再依赖 compute
+  - 验收记录：模块 [`product_dimension/CHANGELOG.md`](product_dimension/CHANGELOG.md) → `[19.0.4.1.1]`；dev 库实测 `default_get` / `Form` 均得 `cm`、多变体模板仍为 `False`、升级日志无 `Redundant default on ...` 告警；`task test -- product_dimension` 17 项 0 failed；`task check` 通过
+  - 遗留：目标环境界面复验（新建产品打开表单看 `Dimension Unit` 是否为 `Centimeters`）
+
 - **T-034 三个关联模块的解耦审计与接口边界固化** ｜ `product_reference` + `product_variant_conversion` + `product_card_view` ｜ P1
   - 完成日期：2026-09-22 ｜ 状态：**已交付，待目标环境验证**
   - 落地版本：`product_reference` `19.0.2.7.1`、`product_variant_conversion` `19.0.5.2.1`、`product_card_view` `19.0.2.1.2`

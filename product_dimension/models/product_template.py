@@ -12,7 +12,7 @@
 
 from odoo import api, fields, models
 
-from .product_product import DIMENSION_UNIT_FIELD
+from .product_product import DEFAULT_DIMENSION_UNIT, DIMENSION_UNIT_FIELD
 
 # 多变体时读出来的空值：Selection 用 False，Float 用 0.0
 EMPTY_DIMENSION_VALUE = {DIMENSION_UNIT_FIELD: False}
@@ -27,6 +27,11 @@ class ProductTemplate(models.Model):
             ("cm", "Centimeters"),
             ("m", "Meters"),
         ],
+        # 镜像字段也要自带默认值：全新产品的表单是「先有表单、后有变体」，而 `default_get()`
+        # 只认 context / ir.default / field.default，**不会触发 compute** —— 没有这条，
+        # 新建产品时「尺寸单位」下拉框默认是空的（变体侧有 default 所以它不空）。
+        # 值取自真身文件里的同一个常量，两处不会漂移。
+        default=DEFAULT_DIMENSION_UNIT,
         compute="_compute_dimension_unit",
         inverse="_set_dimension_unit",
         store=True,

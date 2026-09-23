@@ -10,6 +10,7 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 ## 功能概述
 
 - 在产品表单原生的 **Logistics** 组里（`Volume` 之前）新增 **Dimension Unit** 与 **Dimensions**（长 × 宽 × 高），不另开标签页
+- **`Dimension Unit` 默认就是 `Centimeters`**（变体侧与产品表单侧同一个默认值），新建产品时不用先手选单位
 - 尺寸变化时按所选单位自动重算该变体的原生 `Volume`：厘米按 `cm³ / 1 000 000`、米按直接相乘，结果恒为立方米
 - **表单里填完尺寸 / 换单位立刻显示 `Volume`**：这一步在浏览器里算（不发服务端请求），随表单一起提交；导入 / API 等非界面路径由后端兜底补算
 - **尺寸与 Volume 都是变体级的**：多变体产品里每条变体各填各的尺寸、各算各的体积，互不影响
@@ -60,7 +61,7 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `dimension_unit` | `Selection`（`cm` / `m`） | 本变体的尺寸单位，默认厘米，必填 |
+| `dimension_unit` | `Selection`（`cm` / `m`） | 本变体的尺寸单位，默认厘米（`DEFAULT_DIMENSION_UNIT`，与模板侧同一个常量），必填 |
 | `dimension_length` | `Float`（10, 2） | 长度（按所选单位） |
 | `dimension_width` | `Float`（10, 2） | 宽度（按所选单位） |
 | `dimension_height` | `Float`（10, 2） | 高度（按所选单位） |
@@ -70,7 +71,7 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `dimension_unit` | `Selection`（compute + inverse, store） | 单变体时镜像该变体的单位；多变体时为空 |
+| `dimension_unit` | `Selection`（compute + inverse, store） | 单变体时镜像该变体的单位；多变体时为空。**自带 `default='cm'`**：新建表单还没有变体可镜像，而 `default_get()` 不触发 compute，默认值得自己带（见 `AGENTS.md` → L2 P9） |
 | `dimension_length` / `dimension_width` / `dimension_height` | `Float`（compute + inverse, store） | 单变体时镜像该变体的值；多变体时为 0 |
 
 ### 方法
@@ -146,6 +147,7 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 
 ### 操作要点
 
+- **单位默认是厘米**：新建产品时 `Dimension Unit` 已经选中 `Centimeters`，只有用米时才需要改
 - 在产品表单或变体表单里填完长宽高，`Volume` **当场就算出来**（浏览器端计算，结果按 2 位小数取整），保存后落库的数值与界面一致
 - 切换「尺寸单位」后，已录入的长宽高数值**保持不变**，`Volume` 按新单位重算
 - 任一边长为 0 时 `Volume` 显示为 0
@@ -163,6 +165,7 @@ Odoo 19 `product` 模块扩展：为产品增加外贸物流用的**尺寸单位
 | 模块安装 | `odoo -d <db> -i product_dimension --stop-after-init` 成功，无报错 | 待验证 |
 | 旧数据搬运 | 开发库实测：旧模板列 `50 / 40 / 30 cm` → 变体侧 `cm / 50 / 40 / 30`，`volume = 0.06`（安装前钩子日志 `recomputed volume for 1 variants`） | 通过 |
 | 单一产品表单显示 | 单变体消费品产品表单 Logistics 组内可见 `Dimension Unit` 与 `Dimensions` | 待验证 |
+| 尺寸单位默认值 | 新建产品打开表单时 `Dimension Unit` 默认 `Centimeters`（不是空的），保存后变体也是 `cm` | 通过（自动化测试 `test_dimension_unit_defaults_to_centimeters`，含 `Form` 实测与 dev 库核对） |
 | Volume 自动更新（cm） | 50×40×30 cm → `Volume = 0.06` | 通过（自动化测试） |
 | 前端即时算体积 | 在表单里改尺寸 / 单位，`Volume` 立刻更新（浏览器端计算，不请求后端） | 待目标环境界面复验（资源已确认进 `web.assets_backend`；逻辑由 JS 规则一致性测试守住） |
 | 后端不再为界面算 | 尺寸字段上不再注册 onchange（RPC 里不会返回由后端算出的体积） | 通过（自动化测试 `test_no_server_side_onchange_for_dimensions`） |
