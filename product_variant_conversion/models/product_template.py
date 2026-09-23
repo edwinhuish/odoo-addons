@@ -21,6 +21,11 @@ Odoo 原生在「属性与变体」页就写着警告：增删属性会删除并
 （在保存点里跑一遍再回滚，见 ``_analyze_variant_conversion_write``），据此判断这次改动会不会
 丢既有变体、会不会新增变体；前端（``FormController.onWillSaveRecord``）拿到结论后弹窗让用户
 确认归属，未确认前不保存。详见 ``write`` 的注释。
+
+**「按需生成变体」的属性（``create_variant == 'dynamic'``）不在本模块的处理范围内**：那种产品的
+变体由 Odoo 按订单创建（``_create_variant_ids`` 遇到这种属性整段跳过，连「建产品」时都不建变体）。
+``create`` 与 ``write`` 两处都拒绝这类改动，报错点名是哪个属性并给出可执行的出路
+（见 ``_get_variant_conversion_dynamic_message``）。
 """
 
 import itertools
@@ -93,6 +98,31 @@ class ProductTemplate(models.Model):
     # 保存拦截：属性变更触发的归属确认
     # ------------------------------------------------------------------
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        """建产品时挡住「按需生成变体」的属性，避免出现「有属性、没变体」的产品。
+
+        原生 ``create()`` 末尾调的 ``_create_variant_ids()`` 一遇到按需生成的属性就**整段跳过**
+        （见该方法里的 ``if not tmpl_id.has_dynamic_attributes()``），于是产品带着属性却一条变体都没有：
+        卖不了，也进不了本模块的转换流程（转换的前提是「至少有一条既有变体可以保留」）。
+        而在建产品的这一刻，这个属性**还没被任何产品使用**，Odoo 还允许改它的变体生成方式
+        （``product.attribute.write()`` 只在属性已被产品使用时才拦），所以这里拒绝并把出路写清楚，
+        用户改完属性设置重存即可 —— 比留一个没变体的产品好收拾。
+
+        ``create_product_product=False`` 时放行：那是「调用方自己管变体」的沙盒模式，
+        典型是产品导入（``product.product._load_records_create()`` 只带必填字段建模板、
+        稍后自己建属性行与变体；它把新建属性设成按需生成是 Odoo 自己的设计，不归本模块管）。
+        """
+        templates = super().create(vals_list)
+        if not self.env.context.get("create_product_product", True):
+            return templates
+        for template in templates:
+            dynamic_attributes = template._get_variant_conversion_dynamic_attributes()
+            if dynamic_attributes:
+                raise UserError(template._get_variant_conversion_dynamic_message(
+                    dynamic_attributes))
+        return templates
+
     def write(self, vals):
         """拦截会动到既有变体的属性变更，改走「归属确认 + 安全转换」。
 
@@ -131,9 +161,8 @@ class ProductTemplate(models.Model):
 
         affected = self._analyze_variant_conversion_write(vals["attribute_line_ids"])
         if affected["dynamic_attributes"]:
-            raise UserError(_(
-                "This product has an attribute that creates its variants on demand, so Odoo itself creates the new variants and there is nothing to confirm here. Set that attribute's variant creation mode to instantly if you want to decide the variant ownership.",
-            ))
+            raise UserError(self._get_variant_conversion_dynamic_message(
+                affected["dynamic_attributes"]))
         if affected["lost_variant_ids"]:
             if affected.get("lost_values_archived"):
                 raise UserError(_(
@@ -202,9 +231,8 @@ class ProductTemplate(models.Model):
         affected = self._analyze_variant_conversion_write(attribute_line_ids)
         if affected["dynamic_attributes"]:
             return {
-                "blocked": _(
-                    "This product has an attribute that creates its variants on demand, so Odoo itself creates the new variants and there is nothing to confirm here. Set that attribute's variant creation mode to instantly if you want to decide the variant ownership.",
-                ),
+                "blocked": self._get_variant_conversion_dynamic_message(
+                    affected["dynamic_attributes"]),
                 "required": False,
                 "variants": [],
                 "combinations": [],
@@ -265,7 +293,8 @@ class ProductTemplate(models.Model):
             ``expected_count`` / ``before_count`` 改动后的组合数与既有变体数；
             ``combinations`` 改动后的组合（取值 id + 标签 + 默认归属），供弹窗使用；
             ``specification`` 改动后的变体生成配置（属性 + 取值），回滚后依然可用
-            （它只引用属性与 product.attribute.value，这些记录是客户端保存前就建好的）。
+            （它只引用属性与 product.attribute.value，这些记录是客户端保存前就建好的）；
+            ``dynamic_attributes`` 产品上「按需生成变体」的属性记录（空记录集 = 没有这类属性）。
         """
         self.ensure_one()
         variants = self.product_variant_ids
@@ -323,7 +352,7 @@ class ProductTemplate(models.Model):
             lost_values_archived = bool(lost_pavs) and all(not value.active for value in lost_pavs)
             lost_value_names = ", ".join(lost_pavs.mapped("name"))
             analysis = {
-                "dynamic_attributes": self.has_dynamic_attributes(),
+                "dynamic_attributes": self._get_variant_conversion_dynamic_attributes(),
                 "lost_variant_ids": lost,
                 "lost_values_archived": lost_values_archived,
                 "lost_value_names": lost_value_names,
@@ -610,11 +639,9 @@ class ProductTemplate(models.Model):
                 "The product %(product)s has no variant to keep.",
                 product=self.display_name,
             ))
-        if self.has_dynamic_attributes():
-            raise UserError(_(
-                "The product %(product)s creates variants on demand (a dynamic attribute is configured), so its variants are handled by Odoo itself.",
-                product=self.display_name,
-            ))
+        dynamic_attributes = self._get_variant_conversion_dynamic_attributes()
+        if dynamic_attributes:
+            raise UserError(self._get_variant_conversion_dynamic_message(dynamic_attributes))
         archived = self.with_context(active_test=False).product_variant_ids - self.product_variant_ids
         if archived:
             raise UserError(_(
@@ -778,6 +805,35 @@ class ProductTemplate(models.Model):
         """返回真正参与变体生成的属性行（有效，且属性不是「不生成变体」）。"""
         self.ensure_one()
         return self.valid_product_template_attribute_line_ids._without_no_variant_attributes()
+
+    def _get_variant_conversion_dynamic_attributes(self):
+        """产品上「按需生成变体」（``create_variant == 'dynamic'``）的属性。
+
+        与 Odoo 自己的 ``has_dynamic_attributes()`` 同源（都看 ``valid_product_template_attribute_line_ids``），
+        区别是返回**属性记录本身**：报错要点名是哪个属性，用户才知道去哪里改。
+        """
+        self.ensure_one()
+        return self.valid_product_template_attribute_line_ids.attribute_id.filtered(
+            lambda attribute: attribute.create_variant == "dynamic")
+
+    def _get_variant_conversion_dynamic_message(self, dynamic_attributes):
+        """「按需生成」属性的报错文案（前端预览与服务端拒绝共用同一份，保证两处一字不差）。
+
+        必须给出**能走通**的出路：Odoo 不允许修改「已被产品使用」的属性的变体生成方式
+        （``product.attribute.write()`` 里那条 ``number_related_products`` 检查），
+        所以「改成「立即」」这一步只能先把属性从产品上摘下来再做 —— 只说「去改属性设置」
+        会让用户撞上 Odoo 自己的报错，等于没有出路。
+        """
+        return _(
+            "The attribute %(attributes)s of %(product)s creates its variants on demand: Odoo itself creates "
+            "those variants (a product saved with such an attribute gets no variant at all, and later ones are "
+            "created from the orders), so there is nothing here for this module to confirm or keep track of. "
+            "Nothing has been changed. To manage the variants of this product from this form, remove that "
+            "attribute from the product first — Odoo only lets you change an attribute's Variant Creation "
+            "while it is used on no product — then set its Variant Creation to Instantly and add it back.",
+            attributes=", ".join(dynamic_attributes.mapped("display_name")),
+            product=self.display_name,
+        )
 
     def _get_variant_conversion_added_attributes(self, specification):
         """本次转换真正新增（产品上原本没有有效属性行）的属性。"""

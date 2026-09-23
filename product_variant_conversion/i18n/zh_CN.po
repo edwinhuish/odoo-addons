@@ -391,14 +391,6 @@ msgstr "原变体 %(first)s 与 %(second)s 都被指定成了 %(values)s；请�
 #. odoo-python
 #: code:addons/product_variant_conversion/models/product_template.py:0
 msgid ""
-"The product %(product)s creates variants on demand (a dynamic attribute is "
-"configured), so its variants are handled by Odoo itself."
-msgstr "产品 %(product)s 配置了按需生成的属性，其变体由 Odoo 按需创建，无需本向导。"
-
-#. module: product_variant_conversion
-#. odoo-python
-#: code:addons/product_variant_conversion/models/product_template.py:0
-msgid ""
 "The product %(product)s has %(count)s archived variants. Restore or delete "
 "them first: the conversion works on the variants that are in use and must "
 "not silently reactivate older ones."
@@ -527,11 +519,20 @@ msgstr ""
 #. odoo-python
 #: code:addons/product_variant_conversion/models/product_template.py:0
 msgid ""
-"This product has an attribute that creates its variants on demand, so Odoo "
-"itself creates the new variants and there is nothing to confirm here. Set "
-"that attribute's variant creation mode to instantly if you want to decide "
-"the variant ownership."
-msgstr "该产品上有「按需生成变体」的属性，新变体由 Odoo 自己创建，没有归属需要确认。想让归属可指定，请先把该属性的变体生成方式改为「立即」。"
+"The attribute %(attributes)s of %(product)s creates its variants on demand: "
+"Odoo itself creates those variants (a product saved with such an attribute "
+"gets no variant at all, and later ones are created from the orders), so "
+"there is nothing here for this module to confirm or keep track of. Nothing "
+"has been changed. To manage the variants of this product from this form, "
+"remove that attribute from the product first — Odoo only lets you change an "
+"attribute's Variant Creation while it is used on no product — then set its "
+"Variant Creation to Instantly and add it back."
+msgstr ""
+"属性 %(attributes)s 的变体生成方式是「按需生成」：这类变体由 Odoo 自己创建"
+"（用这种属性保存产品时一条变体都不会建出来，之后按订单创建），本模块没有可确认、可保留的归属，"
+"本次改动也没有写入任何内容。想让这个产品的变体在本表单里维护，请先把该属性从产品上移除"
+"（Odoo 只允许修改「未被任何产品使用」的属性的变体生成方式），把它的变体生成方式改成「立即」，"
+"再加回产品。"
 
 #. module: product_variant_conversion
 #. odoo-python

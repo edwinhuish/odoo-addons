@@ -3,6 +3,70 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.5.3.1] - 2026-09-23（按需生成属性：报错点名 + 建产品时就拦住，不留「有属性、没变体」的产品）
+
+> 修订日期：2026-09-23 ｜ 类型：修复（+z）｜ 影响文件：`models/product_template.py` /
+> `tests/test_product_variant_conversion.py` / `i18n/zh_CN.po` / `__manifest__.py` /
+> `AGENTS.md` / `README.md`（无数据结构变化、无迁移）
+
+### 问题（用户上报）
+
+产品带「按需生成变体」（`create_variant == 'dynamic'`）的属性时：
+
+1. **建产品直接把这类属性加进「属性与变体」页**：保存**不报错**，但产品**一条变体都没有**
+   —— 原生 `create()` 末尾的 `_create_variant_ids()` 一遇到按需生成的属性就整段跳过
+   （`if not tmpl_id.has_dynamic_attributes()`），于是留下一个「有属性、没变体」的产品：
+   卖不了，也进不了本模块的转换流程（转换前提是「至少有一条既有变体可以保留」）。
+2. **之后任何改属性的保存**都被本模块拒绝，但报错文案是**通稿**（不说是哪个属性），
+   且给的出路**走不通**：Odoo 不允许修改「已被产品使用」的属性的变体生成方式
+   （`product.attribute.write()` 的 `number_related_products` 检查），而「先把属性从产品上摘掉」
+   这一步又因为变体带着它的取值被本模块的属性行守卫拦住 —— 用户卡死。
+   （实践中很容易踩到：**Odoo 的产品导入会把新建属性自动设成「按需生成」**，
+   见 `product.product._load_records_create()`。）
+
+### 变更
+
+1. 新增 `_get_variant_conversion_dynamic_attributes()`：返回产品上按需生成的属性**记录集**
+   （与 Odoo 自己的 `has_dynamic_attributes()` 同源，区别是能点名）。
+2. 新增 `_get_variant_conversion_dynamic_message()`：**前端预览与服务端拒绝共用同一份文案**，
+   点名属性并给出**能走通**的出路 —— 先把该属性从产品上移除、再把它的「变体生成方式」改成
+   「立即」、最后加回产品。原来那条通稿（`The product %(product)s creates variants on demand ...`）
+   删除，`write()` / `get_variant_conversion_preview()` / `_check_variant_conversion_allowed()`
+   三处统一改用它。
+3. 新增 `create()` 拦截：建产品时若带上按需生成的属性，直接拒绝（此时属性**还没被任何产品使用**，
+   Odoo 允许改它的变体生成方式，报错里的出路是当场可执行的）。
+   `create_product_product=False`（产品导入等「调用方自己管变体」的沙盒模式）一律放行。
+4. 测试 42 → **44 项**：`test_dynamic_attribute_is_refused` 补「点名属性 + 出路文案」断言；
+   新增 `test_product_created_with_a_dynamic_attribute_is_refused`（拒绝且不留半成品）、
+   `test_product_creation_in_the_variant_sandbox_is_left_alone`（沙盒模式放行）。
+
+### 影响
+
+- 带按需生成属性的产品：改属性依旧**被拒绝**（设计不变，变体由 Odoo 按订单创建），
+  但报错现在点名属性且出路可执行；**建产品**这一步从「静默留一个没变体的产品」变成「当场拒绝」
+- 产品导入（`base_import`）**不受影响**：它走 `create_product_product=False` 的沙盒路径自己建变体
+- 无条件属性（`always`）的产品：行为一字不变（原有 42 项用例全过）
+- 无数据结构变化、无迁移；只有在产品带按需生成属性时才会命中新逻辑
+
+### 文档
+
+- 模块 `README.md`（「使用前提与限制」、被拒绝改动表、已知边界新增「产品导入建出的按需生成属性」、
+  后续迭代新增第 7 条、验证清单与异常处理）、`AGENTS.md`（L1 新增约束 18、P5 矩阵与缺口）、
+  本条目
+- 根 `README.md` 模块一览表版本、`TODO.md`（新增 `T-039`）
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant_conversion` | 44 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,stock,sale_management` | 44 项 0 failed / 0 error ✓（含依赖模块回归） |
+| `task test -- product_variant_conversion,product_dimension` | 44 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,product_reference,product_card_view,sale_management` | 54 项 0 failed / 0 error ✓（另两个模块用 `create` 带属性行建产品，验证没有误伤） |
+| 目标环境 | 中英文报错文案与「建产品被拦」的界面表现**待验证** |
+
+---
+
 ## [19.0.5.3.0] - 2026-09-23（彻底与 product_reference 解耦：转换不再改变体编号、不再交接参考号）
 
 > 修订日期：2026-09-23 ｜ 类型：行为调整（+y）｜ 影响文件：`models/product_template.py` /

@@ -1165,20 +1165,68 @@ class TestProductVariantConversion(TransactionCase):
         with self.assertRaises(UserError):
             self._confirm(product, commands, self._payload(self._default_rows(preview)))
 
-    def test_dynamic_attribute_is_refused(self):
-        """「按需生成变体」的属性拒绝走本流程（Odoo 自己创建变体，无需归属确认）。"""
-        dynamic = self.Attribute.create({
-            "name": "Test Dynamic",
+    def _dynamic_attribute(self, name="Test Dynamic"):
+        """建一个「按需生成变体」（``create_variant == 'dynamic'``）的属性。"""
+        return self.Attribute.create({
+            "name": name,
             "create_variant": "dynamic",
             "value_ids": [(0, 0, {"name": "Test D1"}), (0, 0, {"name": "Test D2"})],
         })
+
+    def _dynamic_commands(self, dynamic):
+        return [(0, 0, {
+            "attribute_id": dynamic.id,
+            "value_ids": [Command.set(dynamic.value_ids.ids)],
+        })]
+
+    def test_dynamic_attribute_is_refused(self):
+        """「按需生成变体」的属性拒绝走本流程，并**点名属性**、给出能走通的出路。
+
+        只提示「去把属性改成「立即」」是不够的：Odoo 不允许修改已被产品使用的属性的变体生成方式
+        （``product.attribute.write()`` 里的 ``number_related_products`` 检查），
+        所以文案必须带上「先把属性从产品上移除」这一步。
+        """
+        dynamic = self._dynamic_attribute()
         product = self._create_product()
         commands = self._set_commands(product, dynamic, dynamic.value_ids)
         preview = self._preview(product, commands)
         self.assertTrue(preview["blocked"])
-        with self.assertRaises(UserError):
+        self.assertIn(dynamic.display_name, preview["blocked"])
+        self.assertIn("Instantly", preview["blocked"])
+        with self.assertRaises(UserError) as catch:
             product.write({"attribute_line_ids": commands})
+        self.assertIn(dynamic.display_name, str(catch.exception))
         self.assertFalse(product.attribute_line_ids)
+
+    def test_product_created_with_a_dynamic_attribute_is_refused(self):
+        """``create`` 带「按需生成」属性：拒绝，而不是留下一个「有属性、没变体」的产品。
+
+        原生 ``create()`` 末尾的 ``_create_variant_ids()`` 遇到按需生成的属性会整段跳过
+        （``if not tmpl_id.has_dynamic_attributes()``），所以产品会一条变体都没有 —— 既卖不了，
+        也进不了本模块的转换流程（转换要求「至少有一条既有变体可以保留」）。
+        """
+        dynamic = self._dynamic_attribute()
+        vals = {
+            "name": "Test Dynamic Product",
+            "type": "consu",
+            "attribute_line_ids": self._dynamic_commands(dynamic),
+        }
+        with self.assertRaises(UserError) as catch, self.env.cr.savepoint():
+            self.env["product.template"].create(vals)
+        self.assertIn(dynamic.display_name, str(catch.exception))
+        self.assertFalse(self.env["product.template"].search([("name", "=", "Test Dynamic Product")]))
+
+    def test_product_creation_in_the_variant_sandbox_is_left_alone(self):
+        """``create_product_product=False`` 的 ``create`` 不拦截（导入等调用方自己管变体）。"""
+        dynamic = self._dynamic_attribute()
+        product = self.env["product.template"].with_context(
+            create_product_product=False).create({
+                "name": "Test Imported Product",
+                "type": "consu",
+                "attribute_line_ids": self._dynamic_commands(dynamic),
+            })
+        # 沙盒模式下 Odoo 自己不建变体，交给调用方（产品导入会在随后为每一行建变体）
+        self.assertEqual(product.product_variant_count, 0)
 
     # ------------------------------------------------------------------
     # 组合数前置上限（T-018）
