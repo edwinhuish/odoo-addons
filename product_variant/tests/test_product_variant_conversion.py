@@ -1200,7 +1200,10 @@ class TestProductVariantConversion(TransactionCase):
         return product
 
     def test_on_demand_product_expands_only_the_instant_attributes(self):
-        """带「按需生成」属性的产品：只展开「立即」轴，按需轴按既有变体钉住（`T-039` 主场景）。
+        """带「按需生成」属性的产品：预建时只展开「立即」轴，按需轴按既有变体钉住。
+
+        映射表会把按需轴的全部取值组合**列出来**供人分配（用户要求「充分列举所有可能的组合」），
+        但**预建变体**仍按属性的规则来：没被既有变体认领的按需取值等 Odoo 在订单里创建。
 
         产品：`Length`（按需，D1/D2/D3 三个取值，只有 D1 / D2 各有一条变体）。
         加「立即」属性 `Color`（Red / Blue）后：
@@ -1224,7 +1227,7 @@ class TestProductVariantConversion(TransactionCase):
         self.assertTrue(preview["required"])
         self.assertTrue(preview["dynamic"])
         self.assertEqual(len(preview["combinations"]), 4)
-        # 预览里没有 D3 参与的组合
+        # 预建计划里没有 D3 参与的组合（前端会列出来，但那是「等订单创建」）
         self.assertFalse([
             combination for combination in preview["combinations"]
             if value_3.id in combination["values"]
@@ -1256,7 +1259,7 @@ class TestProductVariantConversion(TransactionCase):
 
         原生 ``_create_variant_ids()`` 在按需分支只激活命中组合的变体、不新建，
         所以「变体没有带上新行取值」时它会判定组合不完整而**删掉这条变体**。
-        本模块改为自己把锚点写下去（此时不需要弹窗：没有新变体要确认归属）。
+        本模块改为自己把锚点写下去（此时不需要弹窗：按需轴的其它取值不预建，没有新变体要确认归属）。
         """
         dynamic = self._dynamic_attribute(name="Test On Demand Size")
         product = self._create_product()

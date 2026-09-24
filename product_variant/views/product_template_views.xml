@@ -28,7 +28,13 @@
                  readonly="0" 是必须的：variant_mapping_state 是非存储的 compute 字段，
                  默认只读会让映射表里的下拉全部禁用（用户就没法补映射了） -->
             <xpath expr="//page[@name='variants']/field[@name='attribute_line_ids']" position="after">
-                <field name="variant_mapping_state" widget="variant_mapping_panel" nolabel="1" readonly="0"/>
+                <!-- 必须用一层块级 div 包住：字段外层的 .o_field_widget 是 display:inline-block，
+                     不包的话它会被排到 attribute_line_ids 的**右边**（同一行）并溢出表单宽度，
+                     表现就是「面板跑到右边、看不见」（见模块 AGENTS.md → L2 P4 陷阱 10） -->
+                <div class="d-block w-100">
+                    <field name="variant_mapping_state" widget="variant_mapping_panel" nolabel="1"
+                           readonly="0" class="d-block w-100"/>
+                </div>
             </xpath>
 
             <xpath expr="//button[@name='action_open_documents']" position="before">

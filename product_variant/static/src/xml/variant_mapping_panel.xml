@@ -4,58 +4,57 @@
     <!--
         「属性 ↔ 变体」映射表（产品表单「属性与变体」页、属性行下方）。
 
-        每行是一条既有变体；单取值轴与「按需生成」轴由 Odoo 自己补取值，这里直接显示，
-        其它轴给下拉让用户挑。缺了取值的行标成未映射，保存因此被拦住。
+        每个**属性组合**一行（属性列全部只读：取值由属性行穷举出来，用户不在这里改属性），
+        行里的 **Variant** 下拉指定「这个组合由哪条既有变体继续保留」：
+        留空 = 新建变体；选一条 = 那条变体接着承载这个组合。
+        同一条变体只能承载一个组合，所以已经被别的行选走的变体在那一行的下拉里是**禁用**的：
+        要换位置，先把占着它的那一行改回「(new variant)」把它让出来，再给另一行选。
+        没被任何组合选走的既有变体会在上方点名并拦住保存。
+
         所有说明性文案都在 JS 侧用 _t() 拼好（见模块 AGENTS.md → L2 P2 陷阱 2），
         模板只负责渲染，不写句子。
     -->
     <t t-name="product_variant.VariantMappingPanel">
-        <div class="o_variant_mapping_panel mt-3">
+        <div class="o_variant_mapping_panel mt-3 w-100">
             <div class="text-muted" t-esc="introLabel"/>
-            <div t-if="state.blocked" class="alert alert-danger mt-2" t-esc="state.blocked"/>
-            <div t-if="unmappedCount" class="text-danger mt-2" t-esc="unmappedHint"/>
-            <table t-if="state.rows.length" class="table table-sm align-middle mt-2">
+            <div t-if="unassignedCount" class="alert alert-warning mt-2 mb-1" t-esc="unassignedHint"/>
+            <div t-if="unassignedCount" class="text-muted small" t-esc="unassignedLabel"/>
+
+            <table t-if="store.rows.length" class="table table-sm align-middle mt-2">
                 <thead>
                     <tr>
-                        <th>Variant</th>
                         <th t-foreach="axisLabels" t-as="label" t-key="label_index" t-esc="label"/>
-                        <th>Status</th>
+                        <th>Variant</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr t-foreach="state.rows" t-as="row" t-key="row.variant_id"
-                        t-att-class="row.mapped ? '' : 'table-warning'">
-                        <td t-esc="variantDisplay(row)"/>
-                        <td t-foreach="row.axes" t-as="axis" t-key="axis.attribute_id">
-                            <t t-if="axis.fixed" t-esc="axisDisplay(row, axis)"/>
-                            <select t-else="" class="form-select"
-                                    t-att-disabled="props.readonly"
-                                    t-on-change="(ev) => this.onSelectValue(row, axis, ev)">
-                                <option value="" t-att-selected="!axis.value_id" t-esc="chooseLabel"/>
-                                <option t-foreach="axis.options" t-as="option" t-key="option.id"
-                                        t-att-value="option.id"
-                                        t-att-selected="axis.value_id === option.id"
-                                        t-esc="option.name"/>
-                            </select>
-                        </td>
+                    <tr t-foreach="store.rows" t-as="row" t-key="row.key"
+                        t-att-class="(row.is_new ? 'table-warning ' : '') + (row.will_create ? '' : 'text-muted')">
+                        <td t-foreach="row.cells" t-as="cell" t-key="cell.attribute_id"
+                            t-esc="cell.value_name"/>
                         <td>
-                            <span t-att-class="row.mapped ? 'text-success' : 'text-danger'"
-                                  t-esc="row.mapped ? mappedLabel : unmappedAxisLabel"/>
+                            <select class="form-select"
+                                    t-att-disabled="!isEditable"
+                                    t-on-change="(ev) => this.onSelectVariant(row, ev)">
+                                <option value="" t-att-selected="!row.variant_id" t-esc="newVariantLabel"/>
+                                <option t-foreach="variantOptions" t-as="option" t-key="option.id"
+                                        t-att-value="option.id"
+                                        t-att-selected="row.variant_id === option.id"
+                                        t-att-disabled="isOptionTaken(option, row)"
+                                        t-att-title="isOptionTaken(option, row) ? takenElsewhereLabel : ''"
+                                        t-esc="option.label"/>
+                            </select>
                         </td>
                     </tr>
                 </tbody>
             </table>
-            <div t-if="state.newCombinations.length" class="mt-2">
-                <div class="text-muted" t-esc="newVariantsLabel"/>
-                <ul class="mb-0">
-                    <li t-foreach="state.newCombinations" t-as="label" t-key="label_index" t-esc="label"/>
-                </ul>
-            </div>
-            <p t-if="state.dynamic" class="text-muted mt-2" t-esc="onDemandHint"/>
-            <div t-if="!state.dynamic" class="form-check mt-2">
+
+            <div t-if="store.newCount" class="text-muted mt-2" t-esc="newVariantsLabel"/>
+            <div t-if="pendingCount" class="text-muted mt-2" t-esc="pendingHint"/>
+            <div class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" id="variant_mapping_share_vendor_prices"
-                       t-att-checked="state.shareVendorPrices"
-                       t-att-disabled="props.readonly"
+                       t-att-checked="store.shareVendorPrices"
+                       t-att-disabled="!isEditable"
                        t-on-change="onToggleShareVendorPrices"/>
                 <label class="form-check-label" for="variant_mapping_share_vendor_prices"
                        t-esc="shareVendorPricesLabel"/>

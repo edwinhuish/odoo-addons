@@ -279,6 +279,29 @@ class ProductTemplate(models.Model):
             "combinations": affected["combinations"],
         }
 
+    @api.model
+    def _sanitize_attribute_line_commands(self, commands):
+        """去掉「还没填属性」的新行，剩下的命令原样返回。
+
+        产品表单里点「Add a line」但还没选属性时，前端会带上一条
+        ``[0, 0, {"attribute_id": False}]`` 命令：它既写不进库（``attribute_id`` 必填），
+        也不该参与试写分析 —— 否则用户**一点按钮**就会收到
+        ``Missing required value for the field 'Attribute' (attribute_id)``
+        （见模块 ``AGENTS.md`` → L2 P4 陷阱 11）。这类不完整的行直接跳过，
+        等用户选好属性自然会再算一次。
+        """
+        cleaned = []
+        for command in commands or []:
+            if (
+                isinstance(command, (list, tuple))
+                and len(command) == 3
+                and command[0] == 0
+                and not (command[2] or {}).get("attribute_id")
+            ):
+                continue
+            cleaned.append(command)
+        return cleaned
+
     def _analyze_variant_conversion_write(self, attribute_line_ids):
         """试写一次属性行（只写配置、不碰变体，随即回滚），据此判断这次改动的影响。
 
@@ -299,6 +322,8 @@ class ProductTemplate(models.Model):
             ``dynamic_attributes`` 产品上「按需生成变体」的属性记录（空记录集 = 没有这类属性）。
         """
         self.ensure_one()
+        # 还没选属性的新行（点 Add a line 后的第一态）不能进试写：必填缺失会直接把错误抛给用户
+        attribute_line_ids = self._sanitize_attribute_line_commands(attribute_line_ids)
         variants = self.product_variant_ids
         # 改动前的属性：写入后就读不到「原来是什么」了，而台账要记「本次真正新加了哪些属性」
         # （谱系判定不看属性行，它按各变体携带的取值认来源，见 _find_variant_conversion_origin）
@@ -447,7 +472,7 @@ class ProductTemplate(models.Model):
         组合枚举出来再拒绝（T-018）。只数取值个数，不生成任何组合。算法与
         ``_get_variant_conversion_combinations()`` 一致：
 
-        - 只有「立即」属性：``各属性有效取值数的乘积``（与老版本一致）；
+        - 只有「立即」属性：``各属性有效取值数的乘积``；
         - 还有「按需生成」属性：``既有变体数 × 各「立即」属性有效取值数的乘积`` ——
           按需轴不展开（每条既有变体在自己的按需取值上各展开一份），所以要多乘变体数。
         """
@@ -686,7 +711,8 @@ class ProductTemplate(models.Model):
         Odoo 的 ``_create_variant_ids()`` 一遇到按需生成的属性就整段跳过新建
         （见其 ``if not tmpl_id.has_dynamic_attributes()``），所以「展开『立即』轴」得到的
         组合必须自己建 —— 建法用 Odoo 自己的 ``_create_product_variant()``（订单期同款）。
-        按需轴的其它取值**不在本次计划里**，仍然等订单创建（这正是「按需」的含义）。
+        按需轴的其它取值**不在本次计划里**，仍然等订单创建（这正是「按需」的含义：
+        前端会把全部组合列出来让人分配，但没被任何既有变体认领的按需取值不会被预建）。
 
         :param attribute_lines: 转换后的属性行（``_get_variant_conversion_attribute_lines()``）。
         :return: 本次新建的变体记录集（没有按需属性、或计划里没有缺失组合时为空）。
@@ -767,8 +793,9 @@ class ProductTemplate(models.Model):
                     "Attribute %(attribute)s never creates variants, so it cannot be used to convert the product.",
                     attribute=attribute.display_name,
                 ))
-            # 「按需生成」的属性（create_variant == 'dynamic'）是支持的（T-039）：
-            # 它不参与展开，只把每条既有变体现带的取值钉住 —— 见 _split_variant_conversion_lines()。
+            # 「按需生成」的属性（create_variant == 'dynamic'）是支持的：转换**不预建**它的其它取值
+            # （那些变体由 Odoo 在订单里创建），只把每条既有变体现带的取值钉住；
+            # 映射表会把它的全部取值组合列出来供人分配，但只有被既有变体认领的取值才会现在创建。
             if not values:
                 raise UserError(_(
                     "Attribute %(attribute)s needs at least one value.",
@@ -936,12 +963,13 @@ class ProductTemplate(models.Model):
         return added
 
     def _split_variant_conversion_lines(self, attribute_lines):
-        """把属性行分成「本模块负责展开的」与「固定取值、不展开的」两类。
+        """把属性行分成「展开的」与「固定取值的」两类。
 
-        - 展开的（``create_variant == 'always'``）：转换会对它们的取值做笛卡尔积，
-          这是本模块一直以来的行为；
-        - 固定的（``create_variant == 'dynamic'``，即「按需生成」）：变体由 Odoo 按订单创建，
-          转换**不展开**它们的其它取值，只把每条既有变体现在带的取值「钉住」（见 ``T-039``）。
+        - 展开的（``create_variant == 'always'``）：转换会对它们的取值做笛卡尔积；
+        - 固定的（``create_variant == 'dynamic'``，即「按需生成」）：**不预建**它的其它取值 ——
+          变体由 Odoo 在订单里创建，转换只把每条既有变体占有的取值「钉住」。
+          映射表会把它的全部取值组合都列出来供人分配（用户要求「充分列举所有可能的组合」），
+          但只有**被既有变体认领**的取值才会现在创建。
         """
         self.ensure_one()
         fixed = attribute_lines.filtered(
@@ -953,7 +981,7 @@ class ProductTemplate(models.Model):
 
         规则：变体已经带着该轴的取值就用它（**不动既有数据**）；没有（例如本次刚加上这个
         按需属性）就用该轴第一个有效取值 —— 与 ``_get_variant_conversion_default_mapping()``
-        的默认规则同源，也与 Odoo 自己「按需变体默认取第一个可能组合」的口径一致。
+        的默认规则同源。
         """
         self.ensure_one()
         values = self.env["product.template.attribute.value"]
@@ -965,14 +993,16 @@ class ProductTemplate(models.Model):
     def _get_variant_conversion_combinations(self, attribute_lines):
         """列出这次转换会落到哪些组合（每个组合是一组 ptav）。
 
-        - **只有「立即」属性**（老路径）：所有属性的取值做笛卡尔积，再按 Odoo 的排除规则过滤
-          —— 与 ``_create_variant_ids`` 内的算法一致，因此可以直接当作转换后的变体总数来断言；
-        - **有「按需生成」属性**（`T-039`）：按需轴**不展开**（它的其它取值由 Odoo 在订单里创建），
+        - **只有「立即」属性**：所有属性的取值做笛卡尔积，再按 Odoo 的排除规则过滤 ——
+          与 ``_create_variant_ids`` 内的算法一致，因此可以直接当作转换后的变体总数来断言；
+        - **有「按需生成」属性**：按需轴**不展开**（它的其它取值由 Odoo 在订单里创建），
           只把每条既有变体现在带的按需取值钉住，然后在「立即」各轴上展开一份 ——
           即「每条既有变体 × 各『立即』属性的取值组合」，最后同样过一遍排除规则与去重。
 
         两种情况下这个集合都等于「转换后应当存在的变体集合」，所以既能当预期数量断言，
-        也能拿来生成确认弹窗里的组合清单。
+        也能拿来生成清单。注意它**小于**映射表列出的组合数：前端会把按需轴的全部取值都列出来
+        （用户要求「充分列举所有可能的组合」），没被既有变体认领的那些按需取值属于「等订单创建」，
+        不在这个集合里。
         """
         self.ensure_one()
         managed_lines, fixed_lines = self._split_variant_conversion_lines(attribute_lines)

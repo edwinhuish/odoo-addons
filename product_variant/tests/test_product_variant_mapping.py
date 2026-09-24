@@ -109,12 +109,21 @@ class TestProductVariantMapping(TransactionCase):
             self.assertTrue(row["mapped"])
             self.assertEqual(self._axis(row, self.color)["value_id"] in self.color.value_ids.ids, True)
 
-    def test_mapping_state_field_feeds_the_panel(self):
-        """``variant_mapping_state`` 是面板打开时用的初始状态：可解析的 JSON，内容同上。"""
+    def test_panel_initial_state_comes_from_the_preview(self):
+        """面板挂载时拿到的初始状态就是 ``get_variant_mapping_preview()`` 的结果。
+
+        ``variant_mapping_state`` 只是给 widget 一个挂载点：**不做 compute、不落库** ——
+        做成 compute 会在每次 onchange 里被求值，而那时表单里还没保存的行带 ``NewId``，
+        序列化会直接抛 ``TypeError``（见 AGENTS.md → L2 P4 陷阱 12）。
+        """
         product = self._configure(self._create_product(), self.color, self.color.value_ids)
-        state = json.loads(product.variant_mapping_state)
-        self.assertEqual(len(state["rows"]), 2)
-        self.assertEqual(state["unmapped_count"], 0)
+        preview = product.get_variant_mapping_preview()
+        self.assertEqual(len(preview["rows"]), 2)
+        self.assertEqual(preview["unmapped_count"], 0)
+
+        field = self.env["product.template"]._fields["variant_mapping_state"]
+        self.assertFalse(field.compute, "挂载点字段不能再做 compute")
+        self.assertFalse(field.store, "挂载点字段不落库")
 
     # ------------------------------------------------------------------
     # 加属性：变体失去组合 → 未映射
@@ -179,17 +188,55 @@ class TestProductVariantMapping(TransactionCase):
             self.assertTrue(axis["fixed"])
             self.assertEqual(axis["value_id"], single.value_ids.id)
 
-    def test_on_demand_attribute_is_filled_in(self):
-        """「按需生成」的轴按既有变体现带的取值钉住（没有就取第一个），不要求用户选。"""
+    def test_on_demand_attribute_needs_an_explicit_mapping(self):
+        """「按需生成」的轴同样要求用户显式映射，不替用户决定「保留哪个取值」。
+
+        既有变体没有这个轴（本次新加）→ 未映射；用户挑一个取值后 → 已映射。
+        （按需轴只是**不预建**它的其它取值，``T-039``，不代表可以自动选一个。）
+        """
         product = self._configure(self._create_product(), self.color, self.color.value_ids)
         commands = self._set_commands(product, self.origin, self.origin.value_ids)
         preview = product.get_variant_mapping_preview(commands)
         self.assertTrue(preview["dynamic"])
-        self.assertEqual(preview["unmapped_count"], 0)
+        self.assertEqual(preview["unmapped_count"], 2, "新加的按需轴：既有变体都还没有取值")
         for row in preview["rows"]:
             axis = self._axis(row, self.origin)
-            self.assertTrue(axis["fixed"])
-            self.assertTrue(axis["value_id"])
+            self.assertFalse(axis["fixed"])
+            self.assertFalse(axis["value_id"])
+
+        # 用户逐条挑好取值 → 未映射清零
+        selection = self._selection(product, self.origin, {
+            variant: self.origin.value_ids[index]
+            for index, variant in enumerate(product.product_variant_ids)
+        })
+        mapped = product.get_variant_mapping_preview(commands, selection)
+        self.assertEqual(mapped["unmapped_count"], 0)
+        for row in mapped["rows"]:
+            self.assertTrue(self._axis(row, self.origin)["value_id"])
+
+    def test_snapshot_carries_variants_and_attribute_kinds(self):
+        """快照 = 面板编辑期唯一的服务端数据：既有变体带的取值 + 各属性的变体生成方式。
+
+        它只描述**已经保存的事实**，所以表单里那些没保存的行不会影响它 —— 面板据此在前端算。
+        """
+        product = self._configure(self._create_product(), self.color, self.color.value_ids)
+        snapshot = product.get_variant_mapping_snapshot()
+        self.assertEqual(len(snapshot["variants"]), 2)
+        for variant in snapshot["variants"]:
+            self.assertTrue(variant["label"])
+            self.assertEqual(len(variant["values"]), 1, "既有变体只带着 Color 一个轴")
+            self.assertEqual(list(variant["values"])[0], str(self.color.id))
+        self.assertEqual(snapshot["attributes"][str(self.color.id)]["create_variant"], "always")
+        self.assertEqual(snapshot["attributes"][str(self.origin.id)]["create_variant"], "dynamic")
+        # 装没装 stock 都会给这个键（没装时为 None）
+        self.assertIn("on_hand", snapshot["variants"][0])
+        # 已保存的属性行基线：前端拿它 + getChanges 的命令拼出「当前编辑态」
+        self.assertEqual(len(snapshot["lines"]), 1)
+        self.assertEqual(snapshot["lines"][0]["attribute_id"], self.color.id)
+        self.assertEqual(sorted(snapshot["lines"][0]["value_ids"]), sorted(self.color.value_ids.ids))
+        # 取值字典：id → 名称 + 归属属性（前端手里只有 id，名称都从这里查）
+        self.assertEqual(
+            snapshot["values"][str(self.color.value_ids[0].id)]["attribute_id"], self.color.id)
 
     # ------------------------------------------------------------------
     # 会丢变体的改动：给面板的是 blocked，不是「未映射」
@@ -202,3 +249,58 @@ class TestProductVariantMapping(TransactionCase):
         self.assertTrue(preview["blocked"])
         self.assertEqual(preview["rows"], [])
         self.assertEqual(preview["unmapped_count"], 0)
+
+    # ------------------------------------------------------------------
+    # 还没选属性的新行：不能报错，也不能被拿去试写
+    # ------------------------------------------------------------------
+
+    def test_attribute_line_without_attribute_is_skipped(self):
+        """点 Add a line 后的第一态（只有 value_ids、没有 attribute_id）不该炸。
+
+        这条命令写不进库（attribute_id 必填），拿去试写就会把
+        「Missing required value for the field 'Attribute'」直接抛给用户，
+        所以清洗时把它丢掉；剩下的命令为空 → 按「当前配置」算，正常返回。
+        """
+        product = self._configure(self._create_product(), self.color, self.color.value_ids)
+        commands = [(0, 0, {"value_ids": [Command.set([])]})]
+
+        self.assertEqual(product._sanitize_attribute_line_commands(commands), [])
+
+        preview = product.get_variant_mapping_preview(commands)
+        self.assertFalse(preview.get("incomplete"))
+        self.assertFalse(preview["blocked"])
+        self.assertEqual(len(preview["rows"]), 2, "被丢掉的是半成品行，当前配置照常算")
+
+        legacy = product.get_variant_conversion_preview(commands)
+        self.assertFalse(legacy["blocked"])
+        self.assertFalse(legacy["required"])
+
+    def test_clearing_the_attribute_of_a_line_keeps_the_native_message(self):
+        """把已有行的属性清空：Odoo 原生会给出解释性报错，不能被试写吞掉。
+
+        这一类不完整写法清洗不掉（不是「新建空行」），试写时由原生守卫先抛
+        ``UserError``；我们只兜 ``NotNullViolation`` 那种裸的必填缺失，
+        原生的解释性文案要原样透出去，否则用户看不懂为什么改不了。
+        """
+        product = self._configure(self._create_product(), self.color, self.color.value_ids)
+        line = product.attribute_line_ids.filtered(lambda ptal: ptal.attribute_id == self.color)
+        commands = [(1, line.id, {"attribute_id": False})]
+        self.assertEqual(product._sanitize_attribute_line_commands(commands), commands)
+
+        with self.assertRaises(UserError) as caught:
+            product.get_variant_mapping_preview(commands)
+        self.assertIn("cannot transform the attribute", str(caught.exception))
+
+    def test_incomplete_line_does_not_hide_the_complete_ones(self):
+        """半成品行被丢掉，同一次提交里的正常行照样参与分析。"""
+        product = self._configure(self._create_product(), self.color, self.color.value_ids)
+        commands = [
+            (0, 0, {"value_ids": [Command.set([])]}),                       # 还没选属性
+            self._set_commands(product, self.size, self.size.value_ids)[0],  # 完整的新属性行
+        ]
+        self.assertEqual(len(product._sanitize_attribute_line_commands(commands)), 1)
+        preview = product.get_variant_mapping_preview(commands)
+        self.assertFalse(preview.get("incomplete"))
+        self.assertFalse(preview["blocked"])
+        # 加了尺码：既有两条变体都缺这一轴 → 未映射
+        self.assertEqual(preview["unmapped_count"], 2)

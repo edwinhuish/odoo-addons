@@ -1,64 +1,164 @@
 /** @odoo-module **/
 
-import { Component, useState } from "@odoo/owl";
+import { Component, onPatched, useState } from "@odoo/owl";
 import { registry } from "@web/core/registry";
+import { patch } from "@web/core/utils/patch";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { _t } from "@web/core/l10n/translation";
 import { useService } from "@web/core/utils/hooks";
 import { useRecordObserver } from "@web/model/relational_model/utils";
+import { X2ManyField } from "@web/views/fields/x2many/x2many_field";
+import { ListX2ManyField } from "@web/views/fields/x2many/list_x2many_field";
 
-/** 纯函数：还没拿到组合的变体数（> 0 就不许保存）。 */
-export function countUnmapped(rows) {
-    return rows.filter((row) => !row.mapped).length;
+/**
+ * 「属性 ↔ 变体」映射表 —— **以组合为行，选由哪条既有变体保留**。
+ *
+ * 用户在产品表单「属性与变体」页照常改属性；属性行下方这张表把「这次改动之后会存在的组合」
+ * 逐行列出来（每个属性一列），每行的 **Variant** 下拉用来指定「这个组合由哪条既有变体继续保留」：
+ *
+ * - 留空 = 这个组合新建一条变体；
+ * - 选一条既有变体 = 那条变体继续承载这个组合（它的库存、单据、价格都跟着走）；
+ * - 每条既有变体必须**恰好出现在一行**里：没有出现在任何一行的，会在上方提示「还有 N 条没被分配」，
+ *   并且**阻止保存** —— 本模块绝不静默丢掉既有变体；
+ * - 同一行不会有两条变体（组合是行，天然不重复）；选中的变体若原本在别的行，会自动从那一行让出来，
+ *   所以「两条变体互换组合」只需点两下（先把 A 选到 B 的行，A 原来的行自动空出）。
+ *
+ * 「按需生成」（``dynamic``）的属性：它的列是**可改的下拉**（默认取本行原本那条变体带着的取值，
+ * 没有就取第一个），用户改了就等于把这一行的组合改成那个取值 —— 这样**不会预建**它的其它取值
+ * （``T-039``），既有的组合数也不会因为多一个按需属性而爆炸。
+ *
+ * 编辑期间**不问服务端**（见 AGENTS.md → L2 P4 陷阱 13）：挂载时取一次快照
+ * （既有变体各自带的取值 + 已保存的属性行基线 + 各属性 / 取值的名称与生成方式），
+ * 之后一切变化都用 ``record.getChanges()``（本地）+ 纯函数算；保存时才把映射随表单提交。
+ */
+
+/** 纯函数：还没被分配到任何组合的既有变体数（> 0 就不许保存）。 */
+export function countUnassigned(rows) {
+    return rows.filter((row) => row.unassigned).length;
 }
 
-/** 纯函数：把已选的取值整理成服务端要的 ``{变体 id: {属性 id: 取值 id}}``。 */
-export function buildSelectionPayload(rows) {
-    const selection = {};
-    for (const row of rows) {
-        const axes = {};
-        for (const axis of row.axes) {
-            if (axis.value_id) {
-                axes[axis.attribute_id] = axis.value_id;
-            }
-        }
-        selection[row.variant_id] = axes;
+/** 纯函数：many2one 的 id（``[id, label]``、record、数字都认）。 */
+export function readMany2oneId(value) {
+    if (Array.isArray(value)) {
+        return value[0] || false;
     }
-    return selection;
-}
-
-/** 纯函数：把已选的取值整理成服务端认的归属载荷（与 ``write()`` 的解析端一致）。 */
-export function buildMappingPayload(rows, shareVendorPrices) {
-    return {
-        mapping: rows.map((row) => ({
-            values: row.axes.filter((axis) => axis.value_id).map((axis) => axis.value_id),
-            origin_variant_id: row.variant_id,
-        })),
-        share_vendor_prices: !!shareVendorPrices,
-    };
+    if (typeof value === "number") {
+        return value;
+    }
+    if (value && typeof value === "object") {
+        return value.resId || value.id || false;
+    }
+    return false;
 }
 
 /**
- * 纯函数：属性行当前内容的「签名」—— 用来判断属性配置是不是真的变了。
+ * 纯函数：把一个 m2m 字段的命令集应用到它当前的值上。
  *
- * 读一遍属性行与每行的取值，OWL 的 effect 会因此把这些值登记成依赖：属性行增删、
- * 某一行的取值增减都会让签名变化，面板随之刷新。读不到的结构（Odoo 升级改了内部
- * 表示）一律返回空串 —— 那也只是退化成「保存时才刷新」，保存拦截仍然正确。
+ * ``[6, 0, ids]``（set）是替换；其余（``[4, id]`` 关联 / ``[3, id]`` 取消关联 / ``[5]`` 清空）
+ * 是增量 —— 表单里勾一个取值时发的就是增量命令，直接当替换会把别的取值丢掉。
  */
-export function attributeLineSignature(record) {
-    const list = record?.data?.attribute_line_ids;
-    if (!list || !list.records) {
-        return "";
+export function applyValueCommands(current, commands) {
+    const list = commands || [];
+    if (list.some((command) => Array.isArray(command) && command[0] === 6)) {
+        const set = list.find((command) => Array.isArray(command) && command[0] === 6);
+        return [...(set[2] || [])];
     }
+    const ids = [...(current || [])];
+    for (const command of list) {
+        if (!Array.isArray(command) || !command.length) {
+            continue;
+        }
+        const [operation, first] = command;
+        if (operation === 4 && !ids.includes(first)) {
+            ids.push(first);
+        } else if (operation === 3) {
+            const index = ids.indexOf(first);
+            if (index >= 0) {
+                ids.splice(index, 1);
+            }
+        } else if (operation === 5) {
+            ids.length = 0;
+        }
+    }
+    return ids;
+}
+
+/**
+ * 纯函数：把 ``record.getChanges()`` 的属性行命令合并到快照给的**已保存基线**上，
+ * 得到表单「当前编辑态」的属性行：``[{id, attribute_id, value_ids}]``。
+ *
+ * 关键：新建行必须用 **Odoo 给的虚拟 id 原样记下来** —— 用户点 Add a line 之后，
+ * 「选属性」「勾取值」是**后续命令**（``[1, 虚拟id, {...}]``），Odoo 用那个虚拟 id 定位这一行；
+ * 自己另造一个 id 会让那些更新全部落空（见模块 AGENTS.md → L2 P4 陷阱 15）。
+ */
+export function mergeAttributeLines(baseline, commands) {
+    const lines = (baseline || []).map((line) => ({
+        id: line.id,
+        attribute_id: line.attribute_id,
+        value_ids: [...(line.value_ids || [])],
+    }));
+    for (const command of commands || []) {
+        if (!Array.isArray(command) || !command.length) {
+            continue;
+        }
+        const [operation, first, second] = command;
+        if (operation === 0) {
+            const vals = second || {};
+            lines.push({
+                id: first,
+                attribute_id: readMany2oneId(vals.attribute_id),
+                value_ids: applyValueCommands([], vals.value_ids),
+            });
+        } else if (operation === 1 && second) {
+            let line = lines.find((item) => item.id === first);
+            if (!line) {
+                // 基线里没有这一行 → 它是本次新建的虚拟行，这条命令给的就是它的全部值
+                line = { id: first, attribute_id: false, value_ids: [] };
+                lines.push(line);
+            }
+            if ("attribute_id" in second) {
+                line.attribute_id = readMany2oneId(second.attribute_id);
+            }
+            if ("value_ids" in second) {
+                line.value_ids = applyValueCommands(line.value_ids, second.value_ids);
+            }
+        } else if (operation === 2 || operation === 3) {
+            const index = lines.findIndex((item) => item.id === first);
+            if (index >= 0) {
+                lines.splice(index, 1);
+            }
+        } else if (operation === 5) {
+            lines.length = 0;
+        } else if (operation === 6) {
+            const kept = new Set(second || []);
+            for (let index = lines.length - 1; index >= 0; index -= 1) {
+                if (!kept.has(lines[index].id)) {
+                    lines.splice(index, 1);
+                }
+            }
+        }
+    }
+    return lines;
+}
+
+/** 纯函数：一组取值的「组合签名」（与顺序无关）。 */
+export function combinationKey(valueIds) {
+    return [...valueIds].sort((left, right) => left - right).join("-");
+}
+
+/** 纯函数：属性行内容的签名（用来感知「属性配置有没有变」）。 */
+export function attributeLineSignature(record) {
+    const value = record?.data?.attribute_line_ids;
+    const records = value?.records || [];
     try {
-        return list.records
-            .map((line) => {
-                const values = line.data?.value_ids;
-                const valueIds = values?.records
-                    ? values.records.map((value) => value.resId).join(",")
-                    : "";
-                return [line.resId || "new", line.data?.attribute_id?.[0], valueIds].join(":");
-            })
+        return records
+            .map((line) =>
+                [
+                    line.resId || line.id || "new",
+                    readMany2oneId(line.data?.attribute_id),
+                    (line.data?.value_ids?.records || []).length,
+                ].join(":")
+            )
             .join("|");
     } catch {
         return "";
@@ -66,39 +166,222 @@ export function attributeLineSignature(record) {
 }
 
 /**
+ * 纯函数：把属性行整理成「轴」——每个属性一项，带着它的取值与生成方式。
+ *
+ * 不是轴的行会被跳过：「不生成变体」（``no_variant``）的属性不参与组合；还没勾取值的行也不算。
+ */
+export function buildAxes(lines, snapshot) {
+    const attributes = snapshot?.attributes || {};
+    const values = snapshot?.values || {};
+    const axes = [];
+    for (const line of lines || []) {
+        const info = attributes[line.attribute_id];
+        if (!line.attribute_id || !info || info.create_variant === "no_variant") {
+            continue;
+        }
+        const options = (line.value_ids || [])
+            .filter((id) => values[id] && values[id].attribute_id === line.attribute_id)
+            .map((id) => ({ id, name: values[id].name }));
+        if (!options.length) {
+            continue;
+        }
+        axes.push({
+            attribute_id: line.attribute_id,
+            attribute_label: info.name,
+            values: options,
+            // 「按需生成」属性：预建时不会展开它的其它取值（前端仍然全部列出来供分配）
+            onDemand: info.create_variant === "dynamic",
+        });
+    }
+    return axes;
+}
+
+/**
+ * 纯函数：列出「这次改动之后会存在的组合」——**每行一个组合**。
+ *
+ * 行的身份（``key``）只由**「立即」属性**（``always``）的取值决定：
+ *
+ * - 有「立即」属性 → 按它们的取值做笛卡尔积（这是 Odoo 一定会预建的组合空间）；
+ * - 全是「按需生成」属性（``dynamic``）→ 不展开取值空间（``T-039``：那种属性由 Odoo 在订单里
+ *   创建变体），改用「既有变体现在带着的取值组合」作为行，用户可以在行内改这些取值；
+ * - 没有任何有效轴 → 空表（产品还没加属性行）。
+ *
+ * 「按需生成」属性的取值是**行上的一个可改值**（不是行身份），优先级：
+ * 用户在这一行选过的 → 该行匹配到的既有变体带着的 → 该轴第一个取值。所以它既不会预建
+ * 其它取值，也不会因为取值变化把用户已经做好的分配弄丢。
+ */
+/**
+ * 纯函数：列出「这次改动之后会存在的组合」——**每行一个组合，属性列全部穷举**。
+ *
+ * 所有属性一视同仁（含「按需生成」的）：各属性有效取值做笛卡尔积，每行一个组合。
+ * 用户要求「充分列举所有可能的组合」，所以早期那套「按需轴只钉住既有变体的取值、
+ * 列可改」的特例（``T-039``）已取消。
+ */
+export function buildCombinationRows(axes) {
+    if (!axes.length) {
+        // 一个有效轴都没有（属性行被删空、或都还没勾取值）：没有组合可言
+        return [];
+    }
+    const rows = [];
+    const walk = (index, cells) => {
+        if (index === axes.length) {
+            rows.push({
+                key: combinationKey(cells.map((cell) => cell.value_id)),
+                cells,
+                variant_id: false,
+                on_hand: null,
+                is_new: true,
+            });
+            return;
+        }
+        const axis = axes[index];
+        for (const value of axis.values) {
+            walk(index + 1, [
+                ...cells,
+                {
+                    attribute_id: axis.attribute_id,
+                    attribute_label: axis.attribute_label,
+                    value_id: value.id,
+                    value_name: value.name,
+                    on_demand: Boolean(axis.onDemand),
+                },
+            ]);
+        }
+    };
+    walk(0, []);
+    return rows;
+}
+
+/** 纯函数：某条既有变体是不是「本来就属于这一行的组合」（每个属性取值全等）。 */
+export function rowMatchesVariant(row, variant) {
+    return row.cells.every((cell) => variant.values[cell.attribute_id] === cell.value_id);
+}
+
+/**
+ * 纯函数：按「表单当前编辑态 + 快照」算出面板要显示的内容。
+ *
+ * :param list lines: ``mergeAttributeLines()`` 的结果（只带 id）。
+ * :param list variants: 快照里的既有变体。
+ * :param dict snapshot: 快照（``attributes`` / ``values``）。
+ * :param dict assignment: 用户分配好的 ``{组合 key: 既有变体 id 或 false}``。
+ * :return: ``{rows, axes, unassigned, unassigned_count, new_count}``：
+ *   ``rows`` 每行一个组合（``cells`` 各属性取值 + ``variant_id``）；
+ *   ``unassigned`` 没被任何组合认领的既有变体（**保存会被拦**）。
+ */
+export function computeVariantMapping({ lines, variants, snapshot, assignment }) {
+    const axes = buildAxes(lines, snapshot);
+    const rows = buildCombinationRows(axes);
+    const byId = new Map((variants || []).map((variant) => [variant.id, variant]));
+    const taken = new Set();
+    for (const row of rows) {
+        const wanted = (assignment || {})[row.key];
+        const variant = wanted ? byId.get(wanted) : false;
+        if (variant && !taken.has(variant.id)) {
+            row.variant_id = variant.id;
+            row.on_hand = variant.on_hand;
+            taken.add(variant.id);
+        } else {
+            row.variant_id = false;
+            row.on_hand = null;
+        }
+        row.is_new = !row.variant_id;
+    }
+    const unassigned = (variants || [])
+        .filter((variant) => !taken.has(variant.id))
+        .map((variant) => ({
+            variant_id: variant.id,
+            label: variant.label,
+            on_hand: variant.on_hand,
+        }));
+    // 「按需生成」属性上，被某条既有变体认领的取值（含变体原本带着的、用户在按需轴上改的）。
+    // 只有这些取值才会现在创建 —— 其余的留给 Odoo 在订单里创建（T-039 的口径），
+    // 前端把它们**列出来**是为了让人看清全貌、能提前分配（见 AGENTS.md → L2 P4 陷阱 18）。
+    const claimed = new Set();
+    for (const row of rows) {
+        if (!row.variant_id) {
+            continue;
+        }
+        for (const cell of row.cells) {
+            if (cell.on_demand) {
+                claimed.add(cell.value_id);
+            }
+        }
+    }
+    for (const row of rows) {
+        const onDemandCells = row.cells.filter((cell) => cell.on_demand);
+        row.will_create =
+            Boolean(row.variant_id) || onDemandCells.every((cell) => claimed.has(cell.value_id));
+    }
+    return {
+        rows,
+        axes,
+        unassigned,
+        unassigned_count: unassigned.length,
+        new_count: rows.filter((row) => row.is_new && row.will_create).length,
+        pending_count: rows.filter((row) => !row.will_create).length,
+    };
+}
+
+/**
+ * 纯函数：Variant 下拉的选项 —— 每条既有变体 + 它当前被**哪一行**占着（``taken_by``）。
+ *
+ * 一条变体只能承载一个组合，所以已经被别行占着的变体在那一行里要禁用（灰显、选不了）：
+ * 要换位置只能先把占着它的那一行改回「(new variant)」把它让出来，再给另一行选 ——
+ * 否则两个下拉互相抢，用户改哪一行都像是从另一行「抢走」了变体，看不出到底谁让给谁
+ * （见 AGENTS.md → L2 P4 陷阱 19）。
+ *
+ * :param list variants: 快照里的既有变体。
+ * :param list rows: ``computeVariantMapping()`` 算出的组合行（带 ``key`` / ``variant_id``）。
+ */
+export function buildVariantOptions(variants, rows) {
+    const takenBy = new Map();
+    for (const row of rows || []) {
+        if (row.variant_id) {
+            takenBy.set(row.variant_id, row.key);
+        }
+    }
+    return (variants || []).map((variant) => ({
+        id: variant.id,
+        label: variant.label,
+        on_hand: variant.on_hand,
+        taken_by: takenBy.get(variant.id) || false,
+    }));
+}
+
+/** 纯函数：把映射表整理成服务端认的归属载荷（``mapping`` 里每条就是一个组合）。 */
+export function buildMappingPayload(rows, shareVendorPrices) {
+    return {
+        mapping: rows.map((row) => ({
+            values: row.cells.filter((cell) => cell.value_id).map((cell) => cell.value_id),
+            origin_variant_id: row.variant_id || false,
+        })),
+        share_vendor_prices: !!shareVendorPrices,
+    };
+}
+
+/**
  * 映射表状态存在 ``model`` 上（不是组件里）：
  *
  * 面板挂在「属性与变体」页里，用户切到别的页签它就卸载了。把状态放在 model 上，
  * 保存钩子（``FormController.onWillSaveRecord``）与面板共享同一份数据 —— 无论面板
- * 当前有没有挂载，「用户选到哪一步」都不会丢。
+ * 当前有没有挂载，「用户怎么分配的」都不会丢；快照也只取一次。
  */
 export function getMappingStore(model) {
     if (!model.variantMapping) {
         model.variantMapping = {
             rows: [],
-            blocked: false,
-            newCombinations: [],
-            dynamic: false,
+            unassigned: [],
+            assignment: {},
+            cleared: {},
             shareVendorPrices: false,
             signature: undefined,
+            snapshot: null,
         };
     }
     return model.variantMapping;
 }
 
-/**
- * 「属性 ↔ 变体」映射表：产品表单「属性与变体」页、属性行下方的常驻面板。
- *
- * 每行是一条**既有变体**，每个属性轴一列：
- *
- * - 该轴由 Odoo 自己补取值（单取值轴 /「按需生成」轴）→ 直接显示取值，不可改；
- * - 其它轴 → 下拉，用户挑；挑完这条变体才回到「已映射」。
- *
- * 属性行一改，面板就问服务端（``get_variant_mapping_preview``）这次改动之后每条变体
- * 带哪个组合：缺了取值的那条立刻变成**未映射**，而只要还有未映射的变体，保存就被拦住
- * （见 ``variant_conversion_form_patch.js``）。全部映射好后，保存钩子把映射表里确认的
- * 归属随本次保存一起提交。
- */
+/** 「属性 ↔ 变体」映射表：产品表单「属性与变体」页、属性行下方的常驻面板。 */
 export class VariantMappingPanel extends Component {
     static template = "product_variant.VariantMappingPanel";
     static props = { ...standardFieldProps };
@@ -106,139 +389,203 @@ export class VariantMappingPanel extends Component {
     setup() {
         this.orm = useService("orm");
         this.store = useState(getMappingStore(this.props.record.model));
-        const initial = this.parseValue(this.props.value);
-        const reopened = Boolean(this.store.rows.length);
-        if (!reopened) {
-            // 首次打开：字段里带的初始状态就是当前配置，不用再问服务端一次
-            this.store.rows = initial.rows || [];
-            this.store.blocked = initial.blocked || false;
-            this.store.newCombinations = initial.new_combinations || [];
-            this.store.dynamic = !!initial.dynamic;
-        }
-        // 重新挂回来（切回本页签）时属性行可能已经改过，先问一次服务端
-        this.refreshOnFirstObservation = reopened;
+        // 保存钩子要用同一个实例重算（用户可能在本页改完就走保存）
+        this.props.record.model.variantMappingPanel = this;
         this.store.signature = undefined;
-        let firstCall = true;
-        useRecordObserver((record) => {
-            const current = attributeLineSignature(record);
-            if (firstCall) {
-                firstCall = false;
-                this.store.signature = current;
-                if (this.refreshOnFirstObservation) {
-                    this.scheduleRefresh();
-                }
-                return;
-            }
-            if (current === this.store.signature) {
-                return;
-            }
-            this.store.signature = current;
-            this.scheduleRefresh();
-        });
+        // 属性行增删、勾取值都会让 record 变化：统一防抖后重算（重算里再按签名去重）
+        useRecordObserver(() => this.scheduleRefresh());
+        // 兜底自检：Odoo 的 observer 触发条件依赖内部实现（见 AGENTS.md → L2 P4 陷阱 16），
+        // 面板挂载期间每秒本地比较一次签名；没变化时 recompute() 直接返回，没有开销。
+        this.pollTimer = setInterval(() => this.scheduleRefresh(), 1000);
+        this.load();
     }
 
     willUnmount() {
         clearTimeout(this.refreshTimer);
-    }
-
-    parseValue(value) {
-        try {
-            return JSON.parse(value || "{}");
-        } catch {
-            return {};
-        }
+        clearInterval(this.pollTimer);
     }
 
     // ------------------------------------------------------------------
-    // 数据：向服务端问「这次改动之后每条变体带哪个组合」
+    // 数据：一次快照 + 纯前端重算
     // ------------------------------------------------------------------
 
-    /** 属性行变化很密（加一行 / 勾一个取值都会触发），防抖后只问一次。 */
-    scheduleRefresh() {
-        clearTimeout(this.refreshTimer);
-        this.refreshTimer = setTimeout(() => this.refresh(), 300);
-    }
-
-    async refresh() {
+    /** 取一次快照（有缓存就不重复取），然后重算映射。 */
+    async load() {
         const record = this.props.record;
         if (!record || !record.resId) {
             return;
         }
-        if (this.refreshing) {
-            this.refreshPending = true;
+        if (!this.store.snapshot) {
+            this.store.snapshot = await this.orm.call(
+                "product.template",
+                "get_variant_mapping_snapshot",
+                [[record.resId]]
+            );
+        }
+        this.store.signature = undefined;
+        await this.recompute();
+    }
+
+    /** 变化很密（加一行 / 勾一个取值都会触发），防抖后只算一次。 */
+    scheduleRefresh() {
+        clearTimeout(this.refreshTimer);
+        this.refreshTimer = setTimeout(() => this.recompute(), 150);
+    }
+
+    /**
+     * 纯前端重算：``getChanges()``（本地）拿属性行命令 → 合并到快照基线 → 算组合表。
+     *
+     * 属性配置没真的变（例如只是改了产品名）就直接返回，省掉重算与重渲染；
+     * 但**分配关系**变了要走 ``refreshRows()``（那里不做签名去重）。
+     */
+    async recompute() {
+        const record = this.props.record;
+        const snapshot = this.store.snapshot;
+        if (!record || !record.resId || !snapshot) {
             return;
         }
-        this.refreshing = true;
-        try {
-            do {
-                this.refreshPending = false;
-                // 本次尚未保存的属性行命令：服务端拿它做「只写配置、不碰变体」的试写
-                const changes = await record.getChanges({ withReadonly: true });
-                const preview = await this.orm.call(
-                    "product.template",
-                    "get_variant_mapping_preview",
-                    [[record.resId], changes.attribute_line_ids || [], this.selectionPayload()]
-                );
-                this.applyPreview(preview);
-            } while (this.refreshPending);
-        } finally {
-            this.refreshing = false;
+        const changes = await record.getChanges({ withReadonly: true });
+        const lines = mergeAttributeLines(snapshot.lines, changes.attribute_line_ids);
+        const signature = JSON.stringify(lines);
+        if (signature === this.store.signature) {
+            return;
         }
+        this.store.signature = signature;
+        this.store.lines = lines;
+        this.refreshRows();
     }
 
-    /** 保存钩子算完预览后推回来的最新状态（避免同一次改动问两遍）。 */
-    applyPreview(preview) {
-        this.store.blocked = preview.blocked || false;
-        this.store.rows = preview.rows || [];
-        this.store.newCombinations = preview.new_combinations || [];
-        this.store.dynamic = !!preview.dynamic;
+    /** 用当前属性行 + 快照 + 用户已做的分配，重算组合表（纯本地，不同步去重）。 */
+    refreshRows() {
+        const snapshot = this.store.snapshot;
+        if (!snapshot) {
+            return;
+        }
+        const variants = snapshot.variants || [];
+        const lines = this.store.lines || [];
+        // 属性行变了：把已经失效的分配丢掉，其余（行还在的）保留
+        const preview = computeVariantMapping({
+            lines,
+            variants,
+            snapshot,
+            assignment: this.store.assignment,
+        });
+        const liveKeys = new Set(preview.rows.map((row) => row.key));
+        for (const key of Object.keys(this.store.assignment)) {
+            if (!liveKeys.has(key)) {
+                delete this.store.assignment[key];
+                delete this.store.cleared[key];
+            }
+        }
+        // 默认分配：把「本来就属于这一行」的既有变体放回它的行（用户显式清空过的行不碰）
+        const taken = new Set(Object.values(this.store.assignment).filter(Boolean));
+        for (const row of preview.rows) {
+            if (this.store.assignment[row.key] || this.store.cleared[row.key]) {
+                continue;
+            }
+            const match = variants.find(
+                (variant) => !taken.has(variant.id) && rowMatchesVariant(row, variant)
+            );
+            if (match) {
+                this.store.assignment[row.key] = match.id;
+                taken.add(match.id);
+            }
+        }
+        const result = computeVariantMapping({
+            lines,
+            variants,
+            snapshot,
+            assignment: this.store.assignment,
+        });
+        this.store.rows = result.rows;
+        this.store.unassigned = result.unassigned;
+        this.store.axes = result.axes;
+        this.store.newCount = result.new_count;
+        this.store.pendingCount = result.pending_count || 0;
     }
 
-    /** 面板里已选的取值，交给服务端去重算「改动之后的映射状态」。 */
-    selectionPayload() {
-        return buildSelectionPayload(this.store.rows);
+    /** 交给服务端落库的归属载荷（保存钩子把它塞进本次保存的 ``changes``）。 */
+    mappingPayload() {
+        return buildMappingPayload(this.store.rows, this.store.shareVendorPrices);
     }
 
     // ------------------------------------------------------------------
     // 展示
     // ------------------------------------------------------------------
 
-    get unmappedCount() {
-        return countUnmapped(this.store.rows);
+    get isEditable() {
+        return this.props.record.isInEdition;
     }
 
     get axisLabels() {
-        return (this.store.rows[0] || { axes: [] }).axes.map((axis) => axis.attribute_label);
+        return (this.store.axes || []).map((axis) => axis.attribute_label);
+    }
+
+    /** Variant 下拉的选项：所有既有变体 + 它被哪一行占着（被别行占着的会在那一行禁用）。 */
+    get variantOptions() {
+        return buildVariantOptions(
+            this.store.snapshot?.variants || [],
+            this.store.rows || []
+        ).map((option) => ({
+            ...option,
+            label: option.on_hand === null || option.on_hand === undefined
+                ? option.label
+                : _t("%(label)s — %(count)s on hand", { label: option.label, count: option.on_hand }),
+        }));
+    }
+
+    /** 某一行里这个选项是不是「已被别的组合占着」（要禁用）。 */
+    isOptionTaken(option, row) {
+        return Boolean(option.taken_by) && option.taken_by !== row.key;
+    }
+
+    get takenElsewhereLabel() {
+        return _t(
+            "Already kept by another combination — set that one back to (new variant) first if you want to move it here"
+        );
+    }
+
+    get unassignedCount() {
+        return (this.store.unassigned || []).length;
     }
 
     get introLabel() {
         return _t(
-            "Every existing variant and the combination it keeps. A variant that has no value on an attribute becomes unmapped and blocks the save until you pick one."
+            "Every combination that will exist, and which existing variant keeps it. Leave the variant empty to create a new one; a variant that is not assigned to any combination would be dropped, so the save is blocked until each of them is assigned."
         );
     }
 
-    get mappedLabel() {
-        return _t("Mapped");
+    get newVariantLabel() {
+        return _t("(new variant)");
     }
 
-    get unmappedAxisLabel() {
-        return _t("Unmapped");
+    get chooseVariantLabel() {
+        return _t("Choose a variant");
     }
 
-    get chooseLabel() {
-        return _t("Choose a value");
+    get unassignedHint() {
+        return _t(
+            "%(count)s existing variants are not assigned to any combination yet: assign each of them in the Variant column (the combination itself is never dropped, it would just create a new variant).",
+            { count: this.unassignedCount }
+        );
     }
 
-    get unmappedHint() {
-        return _t("%(count)s variants still have no combination", {
-            count: this.unmappedCount,
-        });
+    get pendingCount() {
+        return this.store.pendingCount || 0;
+    }
+
+    get pendingHint() {
+        return _t(
+            "%(count)s combinations are not created now: they only sit on attributes that create their variants on demand, and no existing variant keeps them yet — Odoo creates those variants when they are ordered. Assign a variant here to create one right away.",
+            { count: this.pendingCount }
+        );
     }
 
     get newVariantsLabel() {
+
         return _t(
-            "%(count)s combinations do not exist yet and will be created as new variants",
-            { count: this.store.newCombinations.length }
+            "%(count)s combinations have no existing variant and will be created as new variants",
+            { count: this.store.newCount || 0 }
         );
     }
 
@@ -246,37 +593,37 @@ export class VariantMappingPanel extends Component {
         return _t("Apply the vendor prices of these variants to all variants");
     }
 
-    get onDemandHint() {
-        return _t(
-            "This product creates some variants on demand: the other values of those attributes are not created now — Odoo creates them when they are ordered. Only the combinations listed here are created."
-        );
-    }
-
-    /** 变体后面附上手数量（装了 stock 时），让「谁带哪个组合」的判断有依据。 */
-    variantDisplay(row) {
-        if (row.on_hand === null || row.on_hand === undefined) {
-            return row.label;
-        }
-        return _t("%(label)s — %(count)s on hand", { label: row.label, count: row.on_hand });
-    }
-
-    /** 某一行在某个轴上的取值文本（自动补的轴没有下拉，直接显示）。 */
-    axisDisplay(row, axis) {
-        const option = axis.options.find((item) => item.id === axis.value_id);
-        return option ? option.name : "";
+    /** 未分配变体的简短清单（提示里点名，用户知道还差哪几条）。 */
+    get unassignedLabel() {
+        return (this.store.unassigned || []).map((variant) => variant.label).join(", ");
     }
 
     // ------------------------------------------------------------------
     // 交互
     // ------------------------------------------------------------------
 
-    onSelectValue(row, axis, ev) {
-        for (const item of row.axes) {
-            if (item.attribute_id === axis.attribute_id) {
-                item.value_id = Number(ev.target.value) || false;
+    /** 给某一行指定「由哪条既有变体保留」（空 = 新建变体）。 */
+    onSelectVariant(row, ev) {
+        const variantId = Number(ev.target.value) || false;
+        if (variantId) {
+            // 已经被别行占着的变体在下拉里是禁用的（浏览器不会触发它），这里只是防御：
+            // 想把它换到这一行，得先把占着它的那一行改回「(new variant)」让出来
+            // （见 AGENTS.md → L2 P4 陷阱 19）
+            const takenElsewhere = this.store.rows.some(
+                (other) => other !== row && other.variant_id === variantId
+            );
+            if (takenElsewhere) {
+                this.refreshRows();
+                return;
             }
+            this.store.assignment[row.key] = variantId;
+            delete this.store.cleared[row.key];
+        } else {
+            // 留空 = 这一行新建变体；记下来，别在下次重算时又自动分配回去
+            delete this.store.assignment[row.key];
+            this.store.cleared[row.key] = true;
         }
-        row.mapped = row.axes.every((item) => item.value_id);
+        this.refreshRows();
     }
 
     onToggleShareVendorPrices(ev) {
@@ -284,4 +631,44 @@ export class VariantMappingPanel extends Component {
     }
 }
 
-registry.category("fields").add("variant_mapping_panel", VariantMappingPanel);
+/**
+ * 让映射表跟着「属性与变体」页的那个 o2m 动起来。
+ *
+ * ``useRecordObserver`` 的依赖是 ``[props.record]``（record 对象本身不变），子行里改字段
+ * 不一定触发它；o2m 组件自己会随列表变化重渲染，所以在它每次 patch 之后通知面板重算
+ * （见模块 AGENTS.md → L2 P4 陷阱 16）。外层与真正渲染行的 ``ListX2ManyField`` 都挂，
+ * 包装原 ``setup`` 时不依赖 ``super.setup`` 是否存在。
+ */
+function notifyMappingPanel(component) {
+    const model = component?.props?.record?.model || component?.props?.list?.model;
+    if (model?.variantMappingPanel) {
+        onPatched(() => model.variantMappingPanel.scheduleRefresh());
+    }
+}
+
+for (const X2Many of [X2ManyField, ListX2ManyField]) {
+    const originalSetup = X2Many.prototype.setup;
+    patch(X2Many.prototype, {
+        setup() {
+            if (originalSetup) {
+                originalSetup.call(this);
+            }
+            notifyMappingPanel(this);
+        },
+    });
+}
+
+/**
+ * 字段注册表的描述对象。
+ *
+ * **必须**是 ``{ component, displayName, supportedTypes }`` 这种对象，不能把组件类
+ * 直接丢进去：``web.Field`` 模板渲染的是 ``field.component``，注册裸类时它是
+ * ``undefined``，渲染会崩在 ``Component.name``（见模块 AGENTS.md → L2 P4 陷阱 8）。
+ */
+export const variantMappingPanelField = {
+    component: VariantMappingPanel,
+    displayName: _t("Attribute / Variant Mapping"),
+    supportedTypes: ["text"],
+};
+
+registry.category("fields").add("variant_mapping_panel", variantMappingPanelField);

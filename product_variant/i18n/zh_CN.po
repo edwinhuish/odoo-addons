@@ -25,23 +25,42 @@ msgstr "转换次数"
 #. module: product_variant
 #. odoo-javascript
 #: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid ""
-"%(count)s combinations do not exist yet and will be created as new variants"
-msgstr "还有 %(count)s 个组合现在还不存在，将作为新变体创建"
+msgid "%(count)s combinations are not created now: they only sit on attributes that create their variants on demand, and no existing variant keeps them yet — Odoo creates those variants when they are ordered. Assign a variant here to create one right away."
+msgstr "有 %(count)s 个组合现在不会创建：它们落在「按需生成变体」的属性上，而且还没有任何既有变体认领 —— 这些变体由 Odoo 在订单里创建。在这里给它分配一条变体即可立即创建。"
 
 #. module: product_variant
 #. odoo-javascript
 #: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid "%(count)s variants still have no combination"
-msgstr "还有 %(count)s 条变体没有组合"
+msgid "Already kept by another combination — set that one back to (new variant) first if you want to move it here"
+msgstr "已被另一个组合占用 —— 想挪到这一行，请先把占着它的那一行改回「(new variant)」"
 
 #. module: product_variant
 #. odoo-javascript
-#: code:addons/product_variant/static/src/js/variant_conversion_form_patch.js:0
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "%(count)s combinations have no existing variant and will be created as new variants"
+msgstr "还有 %(count)s 个组合没有既有变体认领，将作为新变体创建"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
 msgid ""
-"%(count)s variants still have no combination: pick the combination each of "
-"them keeps in the mapping table below the attribute lines, then save again."
-msgstr "还有 %(count)s 条变体没有组合：请在属性行下方的映射表里给每条变体指定它保留的组合，然后再保存"
+"%(count)s variants are mapped to the same combination: a combination can only be kept by "
+"one variant. Change the values so that each variant has its own combination."
+msgstr ""
+"有 %(count)s 条变体被映射到了同一个组合：每个组合只能由一条变体保留。"
+"请调整取值，让每条变体都有自己的组合。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "%(count)s existing variants are not assigned to any combination yet: assign each of them in the Variant column (the combination itself is never dropped, it would just create a new variant)."
+msgstr "还有 %(count)s 条既有变体没有被分配到任何组合：请在 Variant 列里逐条指定（组合本身不会丢，没人认领的组合就新建一条变体）。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "%(count)s variants have not been assigned to a combination yet: pick each of them in the Variant column of the mapping table below the attribute lines, then save again."
+msgstr "还有 %(count)s 条变体没有被分配到组合：请在属性行下方映射表的 Variant 列里逐条指定，然后再保存。"
 
 #. module: product_variant
 #. odoo-javascript
@@ -102,6 +121,8 @@ msgid ""
 msgstr "属性 %(attribute)s 设置为不生成变体，无法用于转换产品。"
 
 #. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
 #: model:ir.model.fields,field_description:product_variant.field_product_product__variant_mapping_state
 #: model:ir.model.fields,field_description:product_variant.field_product_template__variant_mapping_state
 msgid "Attribute / Variant Mapping"
@@ -148,12 +169,6 @@ msgid ""
 " variant ownership of %(product)s. Save the products one by one from the "
 "product form."
 msgstr "一次改多个产品的属性没法逐条记录变体归属（%(product)s）。请逐个产品在产品表单里保存。"
-
-#. module: product_variant
-#. odoo-javascript
-#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid "Choose a value"
-msgstr "请选择取值"
 
 #. module: product_variant
 #: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__result_summary
@@ -256,11 +271,8 @@ msgstr "每次从产品表单给产品增加属性时都会留下转换记录。
 #. module: product_variant
 #. odoo-javascript
 #: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid ""
-"Every existing variant and the combination it keeps. A variant that has no "
-"value on an attribute becomes unmapped and blocks the save until you pick "
-"one."
-msgstr "每条既有变体与它当前带的组合。某个属性上没有取值的变体会变成未映射，并阻止保存，直到你为它选好取值。"
+msgid "Every combination that will exist, and which existing variant keeps it. Leave the variant empty to create a new one; a variant that is not assigned to any combination would be dropped, so the save is blocked until each of them is assigned."
+msgstr "这次改动之后会存在的每个组合，以及由哪条既有变体继续保留它。变体留空 = 这个组合新建一条变体；没被分配到任何组合的既有变体会被丢弃，所以在每条既有变体都分配好之前，保存会被拦住。"
 
 #. module: product_variant
 #. odoo-python
@@ -299,12 +311,6 @@ msgstr ""
 #: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__write_date
 msgid "Last Updated on"
 msgstr ""
-
-#. module: product_variant
-#. odoo-javascript
-#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid "Mapped"
-msgstr "已映射"
 
 #. module: product_variant
 #: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__new_variant_count
@@ -464,10 +470,16 @@ msgstr "状态"
 #: model:ir.model.fields,help:product_variant.field_product_product__variant_mapping_state
 #: model:ir.model.fields,help:product_variant.field_product_template__variant_mapping_state
 msgid ""
-"Technical field that feeds the mapping table shown under the attribute lines"
-" of the product form: one row per existing variant, with the combination it "
-"carries. It is computed on the fly and never stored."
-msgstr "产品表单属性行下方那张映射表用的技术字段：每条既有变体一行，显示它带的组合。它随算随用，不落库。"
+"Technical mount point for the mapping table shown under the attribute lines "
+"of the product form: the table asks get_variant_mapping_preview() for its "
+"content when it mounts, this field itself carries no value. It is "
+"deliberately NOT a computed field: a compute runs inside every onchange, "
+"with the unsaved rows of the form around, and would try to serialize their "
+"NewId (see AGENTS.md, L2 P4 trap 12)."
+msgstr ""
+"产品表单属性行下方那张映射表的技术挂载点：映射表在挂载时自己调 get_variant_mapping_preview() "
+"取内容，这个字段本身不带值。它**故意不做 compute** —— compute 会在每次 onchange 里被求值，那时表单里还有没保存的行（带 "
+"NewId），序列化会抛 TypeError（见 AGENTS.md，L2 P4 陷阱 12）。"
 
 #. module: product_variant
 #: model:ir.model.fields,help:product_variant.field_product_product__variant_conversion_mapping
@@ -699,17 +711,8 @@ msgstr ""
 #. module: product_variant
 #. odoo-javascript
 #: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid ""
-"This product creates some variants on demand: the other values of those "
-"attributes are not created now — Odoo creates them when they are ordered. "
-"Only the combinations listed here are created."
-msgstr "本产品有「按需生成」的属性：这些属性的其它取值不会现在建变体（下单时才由 Odoo 创建），本次只会建出下面列出的组合。"
-
-#. module: product_variant
-#. odoo-javascript
-#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid "Unmapped"
-msgstr "未映射"
+msgid "Some attributes create their variants on demand: their column is a list you can change, and only the values you keep here are created now — Odoo creates the others when they are ordered."
+msgstr "有属性是「按需生成变体」的：它的那一列是可以改的下拉，只有这里保留的取值才会现在就创建 —— 其它取值由 Odoo 在订单里创建。"
 
 #. module: product_variant
 #. odoo-python
@@ -973,3 +976,10 @@ msgstr ""
 "- 产品的变体级数据（参考号、条码、图片）原样保留：模块只把既有变体映射到改动后的组合，绝不改写变体上带着的内容；\n"
 "- 映射会被显式记录：转换台账 + 每个变体一条谱系行（哪条记录被保留、哪条派生自哪条、新增了哪些取值），并在变体上留下可搜索的「所属转换」「来源变体」字段，显示在变体表单、变体列表与变体搜索里；\n"
 "- 整个转换在保存点内执行，并有前置与后置校验：任何不符合预期的情况都完全不写库。\n"
+
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "(new variant)"
+msgstr "（新建变体）"
