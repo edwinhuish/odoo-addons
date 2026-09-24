@@ -10,7 +10,7 @@
           管理入口与徽标保留
     -->
     <t t-name="product_reference.ProductReferenceEditor">
-        <div class="o_product_reference_editor">
+        <div class="o_product_reference_editor" t-ref="root">
             <t t-if="props.readonly">
                 <span class="o_pr_code" t-esc="codeValue"/>
                 <span t-if="count"

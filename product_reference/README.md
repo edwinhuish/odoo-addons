@@ -27,6 +27,8 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
   与多变体产品的产品编号（搜 `G001` 命中该产品）
 - 命中参考号时，列表结果显示「产品名（命中参考号：xxx）」便于区分
 - 参考号行支持增删改排序，支持在列表内直接批量录入
+- **型号一律大写**（`19.0.3.1.0` 起）：产品编号 / 变体编号 / 额外参考号在输入时就显示为大写（CSS），
+  提交 / 保存时转一次大写（不吃字、光标不跳），后端写入同样兜底（导入 / API 一起覆盖）；只归一大小写，不裁剪空格
 
 ---
 
@@ -44,6 +46,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品挂载
 | 数据库层搜索 | 冗余字段 `reference_code_index`（`Text` + trigram 索引）拼接所有参考号，由参考号行增删改时自动同步 |
 | `_search_display_name` 扩展 | Many2one 下拉、搜索建议、快速搜索按 `reference_code_index` 命中产品 |
 | `web_search_read` 提示 | 列表请求 `name` 且搜索域命中参考号时，在 `name` 后附加「命中参考号：xxx」 |
+| 型号一律大写 | 参考号行 `reference_code`、产品编号 `base_reference`、产品 / 变体表单的 `Ref.`（`default_code`）在 `create` / `write` 时就地转大写（见 `models/reference_case.py`）；前端两个输入框输入时即显示大写，两处互为兜底 |
 | 同产品去重 | `@api.constrains` 中文提示 + 数据库 `UNIQUE(product_tmpl_id, reference_code)` 兜底 |
 | 级联清理 | 删除产品时参考号行 `ondelete='cascade'`，无孤儿数据 |
 
@@ -199,10 +202,61 @@ odoo -d <db> -u product_reference --stop-after-init
 
 ### 用「+」弹窗管理额外参考号
 
-- 参考号 / 类型 / 启用 / 备注直接在弹窗行内改；右侧箭头调整顺序，垃圾桶删除行。
+- 参考号 / 类型 / 启用 / 备注直接在弹窗行内改；右侧箭头调整顺序，垃圾桶删除行
+  （**空行也能删**：`19.0.3.1.0` 起删除走 x2many 列表自身的 `delete()`）。
+- 新增行用表格下方的 **Add a line** 链接（与 Odoo 列表 / x2many 的标准入口一致）；
+  没有参考号时表格只剩这一行，不再显示「还没有额外参考号」占位行。
+- 弹窗的结构与类名沿用 Odoo 原生弹窗（`web.Dialog`），标题、关闭按钮、footer 按钮、
+  字体颜色全部走原生样式。
 - 弹窗内的改动都作用在产品表单 record 上，**点产品「保存」才入库**；不保存则不落库，
   新建产品可以先录参考号再一起保存。
 - 弹窗内不做去重校验，保存时由服务端 `@api.constrains` + `UNIQUE(product_tmpl_id, reference_code)` 兜底。
+
+### 型号一律大写（`19.0.3.1.0` 起）
+
+外贸 SOHO 录单时型号大小写混着写，同一个型号会变成 `g001` 与 `G001` 两条：列表 / 下拉里看着重复、
+去重与人工核对都受干扰。本模块统一口径：**型号一律大写**。
+
+| 范围 | 说明 |
+|------|------|
+| 额外参考号 `product.reference.code.reference_code` | 表单弹窗输入即大写；后端 `create` / `write` 兜底 |
+| 产品编号 `product.template.base_reference` | 同上（含直接写字段的导入 / API） |
+| 产品表单 `Ref.`（`product.template.default_code`） | 同上；单变体产品那条变体的编号一起是大写（两处同值） |
+| 变体编号 `product.product.default_code` | 变体表单 / 变体列表 / 导入同样转大写 |
+
+- **前端**：输入过程中**不改写输入框的值**，大写显示交给 CSS `text-transform: uppercase`
+  （逐键改 `value` 会把光标顶到末尾、并与输入法的 composition 抢文本，出现「吃字」）；
+  **提交时才转一次大写** —— `Ref.` 输入框在捕获阶段监听 `change` 与 `keydown`（`Tab` / `Enter`），
+  先把值改成大写，原生 `CharField` 随后写入记录的就是大写；弹窗参考号输入框在 `change`（`onFieldChange`）
+  时转一次再写记录。两处输入框都加了 `text-transform: uppercase`，存量小写数据也显示成大写。
+- **后端**：三个模型的 `create` / `write` 在调 `super()` **之前**就地改写 `vals`
+  （`models/reference_case.py` 的 `UPPERCASE_FIELDS`）—— 不产生额外写入，也不会触发
+  `AGENTS.md` → L2 P4 那条反向同步环路。
+- **只归一大小写**：不裁剪空格、不改数字与符号；清空编号（`False`）不会被变成字符串 `"FALSE"`。
+- **搜索不受影响**：`ilike` 不区分大小写，用小写照样能搜到大写的型号。
+- **存量数据不自动改写**：同一主人下已有 `abc` 与 `ABC` 两行时，转大写会撞
+  `UNIQUE(product_tmpl_id, reference_code)`，脚本无法替用户消歧。需要统一历史数据时在
+  odoo shell 里执行（会跳过撞唯一约束的行）：
+
+```python
+env.cr.execute("""
+    UPDATE product_reference_code c
+       SET reference_code = UPPER(reference_code)
+     WHERE reference_code <> UPPER(reference_code)
+       AND NOT EXISTS (
+           SELECT 1 FROM product_reference_code o
+            WHERE o.id <> c.id
+              AND o.reference_code = UPPER(c.reference_code)
+              AND COALESCE(o.product_tmpl_id, 0) = COALESCE(c.product_tmpl_id, 0)
+              AND COALESCE(o.product_id, 0) = COALESCE(c.product_id, 0))
+""")
+env.cr.execute("UPDATE product_template SET base_reference = UPPER(base_reference) WHERE base_reference <> UPPER(base_reference)")
+env.cr.execute("UPDATE product_template SET default_code = UPPER(default_code) WHERE default_code <> UPPER(default_code)")
+env.cr.execute("UPDATE product_product SET default_code = UPPER(default_code) WHERE default_code <> UPPER(default_code)")
+# 改写后重算搜索索引
+env["product.template"].search([])._sync_reference_index()
+env["product.product"].search([])._sync_variant_reference_index()
+```
 
 ---
 
@@ -256,6 +310,15 @@ odoo -d <db> -u product_reference --stop-after-init
 | 中英双语 | 英文界面 `Ref.` / `Reference` 系列文案，中文界面「参考号」系列文案 | 通过 |
 | 索引与约束 | `product_template__reference_code_index_index`、`product_product__variant_reference_code_index_index`（trigram）与两条 `UNIQUE` 存在 | 通过 |
 | 应用列表中文名（19.0.2.5.1） | 中文环境「应用」搜 `product_reference`，卡片标题显示「产品参考号」，摘要与详情描述为中文，左侧分类显示「库存 / 产品」；英文环境仍为英文 | 通过 |
+| 型号自动转大写（19.0.3.1.0） | 产品表单 / 变体表单 `Ref.` 与弹窗参考号输入框输入小写字母，输入即显示大写，保存后库里是大写 | **待目标环境验证**（本地 9 项用例通过，前端需强刷浏览器） |
+| 输入过程不吃字（19.0.3.1.0） | 在 `Ref.` 中间插入 / 用中文输入法连续输入，字符不丢失、光标不跳到末尾 | **待目标环境验证**（本版就是为了避免逐键改写 value 的吃字问题） |
+| 两层同值为大写（19.0.3.1.0） | 单变体产品 `Ref.` 填 `g001` → `base_reference` 与那条变体的 `default_code` 都是 `G001` | **本地通过**（契约测试） |
+| 小写仍能搜到（19.0.3.1.0） | 列表搜索框输入 `g001` 仍能命中 `G001` | **本地通过**（契约测试） |
+| 弹窗样式统一（19.0.3.1.0） | 弹窗标题 / × / footer 按钮 / 字体颜色与 Odoo 原生弹窗一致；宽度回到原生 `modal-lg` | **待目标环境验证**（强刷浏览器，中英各验一遍） |
+| 空列表无占位行（19.0.3.1.0） | 没有任何参考号时，弹窗表格只剩表头与 `Add a line`，不再显示「还没有额外参考号」 | **待目标环境验证** |
+| `Add a line`（19.0.3.1.0） | 表格下方是链接式的 `Add a line`（不带图标），点击新增一行 | **待目标环境验证** |
+| 删除空行（19.0.3.1.0） | 刚 `Add a line` 出来的空行，点垃圾桶立即被删除（不再「点了没反应」） | **待目标环境验证**（本地按 Odoo 源码核对了实现路径） |
+| 删除已保存行（19.0.3.1.0） | 弹窗删掉已保存的行 → 保存产品，库里该行确实被删除（回归项，行为不变） | **待目标环境验证** |
 
 ### 产品级编号 `base_reference`（`19.0.2.6.0` ~ `19.0.3.0.0`，T-033 / T-035）
 
@@ -295,6 +358,8 @@ odoo -d <db> -u product_reference --stop-after-init
 - 历史产品无参考号：`reference_code_index` 为空，搜索框输入参考号不命中（预期行为）
 - 同产品重复参考号：`@api.constrains` 阻止 + DB `UNIQUE` 兜底
 - 不同产品同参考号：允许，列表 `name` 附加「命中参考号：xxx」区分
+- 型号大小写不统一：新写入一律转大写；**历史小写数据不会被自动改写**
+  （同主人下已有大小写两种写法时会撞唯一约束，无法自动消歧），按「型号一律大写」里的命令手工统一
 - 索引与参考号行不一致：shell 执行 `env['product.template'].search([])._sync_reference_index()`，
   变体侧执行 `env['product.product'].search([])._sync_variant_reference_index()`
 - 变体里加的参考号在产品列表搜不到：先按上一条重算变体索引，再确认产品搜索视图的

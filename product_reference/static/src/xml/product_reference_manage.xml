@@ -4,122 +4,132 @@
     <!--
         额外参考号管理弹窗（点击 Reference 输入框右侧「+」打开）。
         - 顶层 overlay（main_components），与产品表单渲染树解耦
+        - **结构与类名沿用 Odoo 原生弹窗**：`.o_dialog > .modal.o_technical_modal >
+          .modal-dialog > .modal-content > (header.modal-header / main.modal-body /
+          footer.modal-footer)`，与 `web/static/src/core/dialog/dialog.xml` 一致 ——
+          标题、关闭按钮、footer 按钮、字体颜色都走原生样式；本弹窗不走 dialog 服务
+          （没有独立的 backdrop 元素），遮罩画在 `.modal` 上（见 scss）。
+          footer 的类名同样沿用原生（左对齐、按钮无外边距）
         - 行内可直接改参考号 / 类型 / 启用 / 备注；上移下移改排序；右侧删除按钮删行
         - 所有改动作用在产品表单 record 上，点产品表单「保存」才入库
           （未保存的新产品也能先录入参考号）
         - 关闭：右上角 × / 遮罩 / Esc / 底部「Done」按钮
     -->
     <t t-name="product_reference.ProductReferenceManageDialog">
-        <div class="o_product_reference_manage modal d-block show"
-             tabindex="0"
-             t-ref="autofocus"
-             t-on-keydown.stop="onKeydown"
-             t-on-click.self="close">
-            <div class="modal-dialog modal-dialog-centered modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header align-items-center">
-                        <h5 class="modal-title mb-0">Additional References</h5>
-                        <button type="button"
-                                class="btn-close"
-                                t-on-click="close"
-                                aria-label="Close"/>
-                    </div>
+        <div class="o_dialog">
+            <div role="dialog"
+                 class="o_product_reference_manage modal d-block o_technical_modal"
+                 tabindex="-1"
+                 t-ref="autofocus"
+                 t-on-keydown.stop="onKeydown"
+                 t-on-click.self="close">
+                <div class="modal-dialog modal-dialog-centered modal-lg">
+                    <div class="modal-content">
+                        <header class="modal-header">
+                            <h4 class="modal-title text-break flex-grow-1">Additional References</h4>
+                            <button type="button"
+                                    class="btn-close"
+                                    tabindex="-1"
+                                    t-on-click="close"
+                                    aria-label="Close"/>
+                        </header>
 
-                    <div class="modal-body">
-                        <p class="text-muted small">
-                            These references are saved together with the product; searching a product by any of them finds this product.
-                        </p>
-                        <table class="table table-sm align-middle o_pr_table">
-                            <thead>
-                                <tr>
-                                    <th class="o_pr_col_code">Reference</th>
-                                    <th class="o_pr_col_type">Type</th>
-                                    <th class="o_pr_col_active text-center">Active</th>
-                                    <th class="o_pr_col_note">Note</th>
-                                    <th class="o_pr_col_actions"/>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <t t-foreach="state.items" t-as="it" t-key="it.key">
-                                    <tr t-att-class="it.active ? '' : 'opacity-50'">
-                                        <td>
-                                            <input type="text"
-                                                   class="o_input"
-                                                   t-att-value="it.code"
-                                                   placeholder="e.g. REF-A, SKU-1234"
-                                                   t-on-change="(ev) => this.onFieldChange(it, 'reference_code', ev.target.value)"/>
-                                        </td>
-                                        <td>
-                                            <select class="o_input"
-                                                    t-on-change="(ev) => this.onFieldChange(it, 'reference_type', ev.target.value)">
-                                                <t t-foreach="typeOptions" t-as="opt" t-key="opt[0]">
-                                                    <option t-att-value="opt[0]"
-                                                            t-att-selected="it.type === opt[0]"
-                                                            t-esc="opt[1]"/>
-                                                </t>
-                                            </select>
-                                        </td>
-                                        <td class="text-center">
-                                            <input type="checkbox"
-                                                   class="form-check-input"
-                                                   t-att-checked="it.active"
-                                                   t-on-change="(ev) => this.onFieldChange(it, 'active', ev.target.checked)"/>
-                                        </td>
-                                        <td>
-                                            <input type="text"
-                                                   class="o_input"
-                                                   t-att-value="it.note"
-                                                   placeholder="Optional, e.g. customer / version / effective date"
-                                                   t-on-change="(ev) => this.onFieldChange(it, 'note', ev.target.value)"/>
-                                        </td>
-                                        <td class="text-end text-nowrap">
-                                            <button type="button"
-                                                    class="btn btn-sm btn-link"
-                                                    t-att-disabled="it_index === 0"
-                                                    title="Move up"
-                                                    aria-label="Move up"
-                                                    t-on-click="() => this.onMove(it_index, -1)">
-                                                <i class="fa fa-arrow-up"/>
-                                            </button>
-                                            <button type="button"
-                                                    class="btn btn-sm btn-link"
-                                                    t-att-disabled="it_index === state.items.length - 1"
-                                                    title="Move down"
-                                                    aria-label="Move down"
-                                                    t-on-click="() => this.onMove(it_index, 1)">
-                                                <i class="fa fa-arrow-down"/>
-                                            </button>
-                                            <button type="button"
-                                                    class="btn btn-sm btn-link text-danger"
-                                                    title="Delete"
-                                                    aria-label="Delete"
-                                                    t-on-click="() => this.onDelete(it)">
-                                                <i class="fa fa-trash"/>
-                                            </button>
+                        <main class="modal-body">
+                            <p class="text-muted small">
+                                These references are saved together with the product; searching a product by any of them finds this product.
+                            </p>
+                            <table class="table table-sm align-middle o_pr_table">
+                                <thead>
+                                    <tr>
+                                        <th class="o_pr_col_code">Reference</th>
+                                        <th class="o_pr_col_type">Type</th>
+                                        <th class="o_pr_col_active text-center">Active</th>
+                                        <th class="o_pr_col_note">Note</th>
+                                        <th class="o_pr_col_actions"/>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="state.items" t-as="it" t-key="it.key">
+                                        <tr t-att-class="it.active ? '' : 'opacity-50'">
+                                            <td>
+                                                <input type="text"
+                                                       class="o_input o_pr_code_input"
+                                                       t-att-value="it.code"
+                                                       placeholder="e.g. REF-A, SKU-1234"
+                                                       t-on-change="(ev) => this.onFieldChange(it, 'reference_code', ev.target.value)"/>
+                                            </td>
+                                            <td>
+                                                <select class="o_input"
+                                                        t-on-change="(ev) => this.onFieldChange(it, 'reference_type', ev.target.value)">
+                                                    <t t-foreach="typeOptions" t-as="opt" t-key="opt[0]">
+                                                        <option t-att-value="opt[0]"
+                                                                t-att-selected="it.type === opt[0]"
+                                                                t-esc="opt[1]"/>
+                                                    </t>
+                                                </select>
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="checkbox"
+                                                       class="form-check-input"
+                                                       t-att-checked="it.active"
+                                                       t-on-change="(ev) => this.onFieldChange(it, 'active', ev.target.checked)"/>
+                                            </td>
+                                            <td>
+                                                <input type="text"
+                                                       class="o_input"
+                                                       t-att-value="it.note"
+                                                       placeholder="Optional, e.g. customer / version / effective date"
+                                                       t-on-change="(ev) => this.onFieldChange(it, 'note', ev.target.value)"/>
+                                            </td>
+                                            <td class="text-end text-nowrap">
+                                                <button type="button"
+                                                        class="btn btn-sm btn-link"
+                                                        t-att-disabled="it_index === 0"
+                                                        title="Move up"
+                                                        aria-label="Move up"
+                                                        t-on-click="() => this.onMove(it_index, -1)">
+                                                    <i class="fa fa-arrow-up"/>
+                                                </button>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-link"
+                                                        t-att-disabled="it_index === state.items.length - 1"
+                                                        title="Move down"
+                                                        aria-label="Move down"
+                                                        t-on-click="() => this.onMove(it_index, 1)">
+                                                    <i class="fa fa-arrow-down"/>
+                                                </button>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-link text-danger"
+                                                        title="Delete"
+                                                        aria-label="Delete"
+                                                        t-on-click="() => this.onDelete(it)">
+                                                    <i class="fa fa-trash"/>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                </tbody>
+                                <!-- 「Add a line」沿用 Odoo 列表 / x2many 的标准写法（链接式、
+                                     不带图标）：`web/static/src/views/list/list_renderer.xml`
+                                     的 `.o_field_x2many_list_row_add`；没有参考号时表格只剩
+                                     这一行（Odoo 原生 x2many 空列表也是这个样子） -->
+                                <tfoot>
+                                    <tr>
+                                        <td colspan="5" class="o_field_x2many_list_row_add">
+                                            <a href="#" role="button" t-on-click.stop.prevent="onAddLine">Add a line</a>
                                         </td>
                                     </tr>
-                                </t>
-                                <tr t-if="!state.items.length">
-                                    <td colspan="5" class="text-muted">
-                                        No additional reference yet.
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <button type="button"
-                                class="btn btn-sm btn-primary"
-                                t-on-click="onAddLine">
-                            <i class="fa fa-plus me-1"/>
-                            Add a reference
-                        </button>
-                    </div>
+                                </tfoot>
+                            </table>
+                        </main>
 
-                    <div class="modal-footer">
-                        <button type="button"
-                                class="btn btn-primary"
-                                t-on-click="close">
-                            Done
-                        </button>
+                        <footer class="modal-footer d-empty-none justify-content-around justify-content-md-start flex-wrap gap-1 w-100">
+                            <button type="button"
+                                    class="btn btn-primary"
+                                    t-on-click="close">
+                                Done
+                            </button>
+                        </footer>
                     </div>
                 </div>
             </div>

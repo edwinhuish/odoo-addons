@@ -6,8 +6,28 @@ import { formatChar } from "@web/views/fields/formatters";
 import { CharField } from "@web/views/fields/char/char_field";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
 
-import { Component } from "@odoo/owl";
+import { Component, onMounted, onWillUnmount, useRef } from "@odoo/owl";
 import { useProductReferenceManage } from "./product_reference_manage";
+
+// 型号一律大写（与后端 models/reference_case.py 同一口径），分两步走：
+// - **输入过程中不碰输入框的值**：显示大写交给 CSS `text-transform: uppercase`
+//   （见 product_reference.scss）。每敲一个键就改写 value 会把光标顶到末尾、
+//   并与输入法的 composition 抢文本，出现「吃字」；
+// - **提交时才转一次大写**：在捕获阶段把输入框的值改成大写，原生 CharField
+//   随后读到的（`ev.target.value` / `inputRef.el.value`）就是大写，写进记录的
+//   也是大写。它把监听直接挂在 input 上（冒泡阶段），故捕获阶段先跑。
+// 只有提交类事件才改值：普通按键改值同样会顶走光标。
+const COMMIT_KEYS = ["Tab", "Enter"];
+
+function uppercaseOnCommit(input) {
+    if (!input || typeof input.value !== "string") {
+        return;
+    }
+    const upper = input.value.toUpperCase();
+    if (upper !== input.value) {
+        input.value = upper;
+    }
+}
 
 // 额外参考号的 One2many，按主人分流（多变体产品的参考号不共用）：
 // - 产品模板表单 → reference_code_line_ids（产品级共享行，反向到 product_tmpl_id）
@@ -42,6 +62,31 @@ export class ProductReferenceEditor extends Component {
 
     setup() {
         this.manage = useProductReferenceManage();
+        this.root = useRef("root");
+        // 提交前统一转一次大写（change = 失焦提交，keydown 的 Tab / Enter 也是
+        // 原生提交路径）；输入过程中的大写显示由 CSS 负责，不改输入框的值。
+        this.beforeCommit = (ev) => {
+            if (ev.type === "keydown" && !COMMIT_KEYS.includes(ev.key)) {
+                return;
+            }
+            uppercaseOnCommit(ev.target);
+        };
+        onMounted(() => {
+            const el = this.root.el;
+            if (!el) {
+                return;
+            }
+            el.addEventListener("change", this.beforeCommit, true);
+            el.addEventListener("keydown", this.beforeCommit, true);
+        });
+        onWillUnmount(() => {
+            const el = this.root.el;
+            if (!el) {
+                return;
+            }
+            el.removeEventListener("change", this.beforeCommit, true);
+            el.removeEventListener("keydown", this.beforeCommit, true);
+        });
     }
 
     // ------------------------------------------------------------------

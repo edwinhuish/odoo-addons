@@ -13,7 +13,7 @@
 - 自定义组件（前端）：字段 widget `product_reference_editor`、额外参考号管理弹窗
   （顶层 `main_components` overlay）、徽标 tooltip 模板
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.3.0.0`（19.0.3.0.0 架构调整：产品级编号 `base_reference` **叠加**进模板级 `default_code` 的 compute（`base_reference` 优先）、单变体产品两处同值、多变体产品只写 `base_reference`、产品级参考号两层都可见（不再按变体数隐藏）+ 存量回填迁移；19.0.2.7.1 补契约测试；19.0.2.5.2 修主变体表单的参考号归属）
+- 当前版本：`19.0.3.1.0`（19.0.3.1.0 型号一律大写：前端两个输入框输入即转大写 + 后端 `create` / `write` 就地改写 `vals` 兜底（导入 / API 一起覆盖），见 L1 第 11 条；19.0.3.0.0 架构调整：产品级编号 `base_reference` **叠加**进模板级 `default_code` 的 compute（`base_reference` 优先）、单变体产品两处同值、多变体产品只写 `base_reference`、产品级参考号两层都可见（不再按变体数隐藏）+ 存量回填迁移；19.0.2.7.1 补契约测试；19.0.2.5.2 修主变体表单的参考号归属）
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用
@@ -153,9 +153,48 @@
      与产品级共享行完全独立；widget 通过 `options.lines_field` / `resModel` 分流，
      不要把变体表单接到 `reference_code_line_ids` 上（那会变成变体之间共用）
    - 原生 Reference 在常规信息页 / Codes 组被隐藏，避免与标题区重复；新增表单入口时必须同步处理
+   - **弹窗的结构 / 类名沿用 Odoo 原生弹窗**（`.o_dialog > .modal.o_technical_modal >
+     .modal-dialog > .modal-content > header / main.modal-body / footer.modal-footer`，
+     依据 `web/static/src/core/dialog/dialog.xml`）：不要自造 header / footer 样式、
+     不要改字体颜色、不要自定义 `modal-dialog` 宽度；本弹窗不走 dialog 服务，
+     遮罩画在 `.modal` 上（见 `static/src/scss/product_reference.scss`）
+   - 新增行入口是表格 `tfoot` 里的 **`Add a line`** 链接
+     （`<a role="button" class="o_field_x2many_list_row_add">`，依据
+     `web/static/src/views/list/list_renderer.xml`）：链接式、不带图标，
+     不要改回带 `fa-plus` 的 `btn-primary`，也不要给空列表加占位提示行
+   - **删除行一律走 x2many 列表自身的 `list.delete(rec)`**（它按
+     `record.resId || record._virtualId` 下发 DELETE，`_applyCommands` 会先撤销该 id
+     上待发的 CREATE）：用 `x2ManyCommands.unlink(rec.id)` 删不掉未保存的空行
+     （`rec.id` 是 datapoint 内部 id，不是命令认的虚拟 id，表现为点了没反应）
    - 违反后果：出现「页签 + 标题区」两套参考号 UI，或变体表单改的是共享行（变体之间串数据）
 
-10. **模块 / 模型 / 字段改名必须有迁移与运维步骤**
+10. **型号一律大写，前后端同一口径**（`19.0.3.1.0` 起）
+   - 范围（唯一清单在 `models/reference_case.py` 的 `UPPERCASE_FIELDS`）：
+     额外参考号 `product.reference.code.reference_code`、产品编号
+     `product.template.base_reference`、产品表单 `Ref.`（`product.template.default_code`）、
+     变体编号 `product.product.default_code`
+   - **后端**：三个模型的 `create` / `write` 在调 `super()` **之前**就地改写 `vals`
+     （`uppercase_reference_vals`）；**禁止**改成「写完再读回来改另一个字段」——
+     那会触发 L2 P4 那条反向同步环路（实测 `RecursionError`）
+   - **前端分两步，顺序不能倒过来**：
+     ① **输入过程中绝不改写 `input.value`** —— 大写显示只靠 CSS
+     `text-transform: uppercase`（`static/src/scss/product_reference.scss`）。
+     逐键改写 `value` 会把光标顶到末尾、并与输入法的 composition 抢文本，
+     实测就是「吃字」（中间插入的字符跑到末尾、输入法候选串被打断）；
+     ② **提交时才转一次大写** —— `Ref.` 输入框在**捕获阶段**监听 `change` 与
+     `keydown`（只认 `Tab` / `Enter`，普通按键不改值，理由同 ①），先把值改成大写，
+     原生 `CharField` 随后读到的 `ev.target.value` / `inputRef.el.value` 就是大写
+     （它把监听直接挂在 input 上、走冒泡阶段，故捕获先跑；依据
+     `web/static/src/views/fields/input_field_hook.js`）；弹窗参考号输入框在
+     `onFieldChange`（`change` 事件）里转一次再写记录
+   - **只归一大小写**：不裁剪空格、不改数字与符号；`False` 不能被转成字符串 `"FALSE"`
+   - **存量数据不自动改写**：同主人下已有 `abc` 与 `ABC` 两行时转大写会撞
+     `UNIQUE(product_tmpl_id, reference_code)`，脚本无法替用户消歧；
+     手工统一的命令见 `README.md` →「型号一律大写」
+   - 违反后果：同一个型号出现大小写两种写法（列表 / 下拉看着像两条、去重失效），
+     或「产品大写、变体小写」的半截数据（违反 L1.3 的两处同值）
+
+11. **模块 / 模型 / 字段改名必须有迁移与运维步骤**
    - 结构变更一律写 `migrations/<版本>/pre-migration.py`，且脚本必须幂等（可重复执行）
    - 模块改名（`product_model` → `product_reference`）需先手工执行
      `README.md` →「从 product_model 升级」的 SQL，否则 Odoo 会当成新模块安装
@@ -350,6 +389,7 @@ compute / inverse 之前）。
 | 文件 | 职责 |
 |------|------|
 | `__manifest__.py` | 模块元数据、依赖、数据文件声明（security → views） |
+| `models/reference_case.py` | 型号大小写规范化：`UPPERCASE_FIELDS` 清单 + `uppercase_reference_vals`（在 `create` / `write` 调 `super()` 前就地改写 `vals`） |
 | `models/product_reference_code.py` | 参考号明细模型：字段、归属二选一约束、按主人去重、冗余索引同步、级联 |
 | `models/product_template.py` | 扩展 `product.template`：共享参考号 One2many、冗余字段 `reference_code_index`、`_search_display_name`、`web_search_read`、搜索词提取（供变体侧复用） |
 | `models/product_product.py` | 扩展 `product.product`：变体专属 One2many `variant_reference_code_line_ids`、冗余字段 `variant_reference_code_index`、变体搜索与命中提示、子行剥离模板默认 |

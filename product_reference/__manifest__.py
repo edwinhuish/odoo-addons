@@ -1,6 +1,6 @@
 {
     "name": "Product References",
-    "version": "19.0.3.0.0",
+    "version": "19.0.3.1.0",
     "summary": "Attach several references to one product and find the product from any of its references; the standard Odoo Reference is edited right under the product name and the extra references are managed from the + button inside it (on a product with several variants it is the product reference, and every variant keeps its own set as well)",
     "description": """
         Product reference management module for foreign trade SOHO scenarios.
@@ -44,6 +44,7 @@
         - When a reference is hit, the result shows
           "Product (Matching reference: xxx)" so products can be told apart
         - Reference lines are removed with the product, no orphan data
+        - References are stored in uppercase: what you type in the form (or import from a file) is uppercased right away
     """,
     "category": "Inventory/Product",
     "author": "edwinhuish",

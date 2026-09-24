@@ -16,6 +16,8 @@
 from odoo import _, api, fields, models
 from odoo.fields import Domain
 
+from .reference_case import UPPERCASE_FIELDS, uppercase_reference_vals
+
 
 class ProductTemplate(models.Model):
     _inherit = "product.template"
@@ -123,11 +125,16 @@ class ProductTemplate(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        # 型号一律大写：产品编号 `base_reference` 与产品表单的 `Ref.`（原生
+        # `default_code`）同口径，避免出现「产品大写、变体小写」的半截数据
+        for vals in vals_list:
+            uppercase_reference_vals(vals, UPPERCASE_FIELDS[self._name])
         templates = super().create(vals_list)
         templates._sync_single_variant_default_code()
         return templates
 
     def write(self, vals):
+        uppercase_reference_vals(vals, UPPERCASE_FIELDS[self._name])
         res = super().write(vals)
         if "base_reference" in vals:
             self._sync_single_variant_default_code()

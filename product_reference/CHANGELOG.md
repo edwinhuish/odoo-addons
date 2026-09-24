@@ -1,5 +1,104 @@
 # 变更日志
 
+## [19.0.3.1.0] - 2026-09-24（型号一律大写 + 额外参考号弹窗与 Odoo 原生统一 / 删除空行修复）
+
+> 类型：功能新增 ｜ 涉及文件：`models/reference_case.py`（新增）/ `models/product_reference_code.py` /
+> `models/product_template.py` / `models/product_product.py` /
+> `static/src/js/product_reference_editor.js` / `static/src/js/product_reference_manage.js` /
+> `static/src/xml/product_reference_editor.xml` / `static/src/xml/product_reference_manage.xml` /
+> `static/src/scss/product_reference.scss` / `tests/test_reference_uppercase.py`（新增）/
+> `__manifest__.py` / `i18n/zh_CN.po` / `README.md` / `AGENTS.md`
+
+### 优化目标
+
+外贸 SOHO 录单时型号（产品编号 / 变体编号 / 额外参考号）大小写混着写，同一个型号会出现
+`g001` 与 `G001` 两种写法：列表与下拉里看着像两条、人工核对与去重都受干扰。
+统一口径：**型号一律大写，录入时即生效**（不必等保存后再看结果）。
+
+### 变更
+
+1. **后端兜底**：新增 `models/reference_case.py`（`UPPERCASE_FIELDS` 清单 +
+   `uppercase_reference_vals`），三个模型的 `create` / `write` 在调 `super()` **之前**
+   就地改写 `vals`：
+   - `product.reference.code.reference_code`（额外参考号）
+   - `product.template.base_reference` + `product.template.default_code`（产品编号 / 产品表单 `Ref.`）
+   - `product.product.default_code`（变体编号）
+
+   就地改 vals **不产生额外写入**，不会触发 L2 P4 那条反向同步环路（那里实测过 `RecursionError`）；
+   导入 / API / 其它模块写入因此与大屏口径一致。
+2. **前端分两步（CSS 显示 + 提交时转一次）**：
+   - **输入过程中不碰 `input.value`**，大写显示交给 CSS `text-transform: uppercase`。
+     逐键改写 value 会把光标顶到末尾、并与输入法的 composition 抢文本 —— 这就是「吃字」
+     （中间插入的字符跑到末尾、候选串被打断）；
+   - **提交时才转一次大写**：`Ref.` 输入框在**捕获阶段**监听 `change` 与 `keydown`
+     （只认 `Tab` / `Enter`，普通按键不改值），先把值改成大写，原生 `CharField`
+     随后读到的、写进记录的就是大写 —— 依据 `web/static/src/views/fields/input_field_hook.js`
+     （`onChange` / `commitChanges` 读的是 `ev.target.value` / `inputRef.el.value`，
+     监听直接挂在 input 上走冒泡阶段，故捕获先跑）；
+   - 额外参考号弹窗：参考号输入在 `change`（`onFieldChange`）时转一次大写再写记录；
+   - 两处输入框都加 `text-transform: uppercase`（存量小写数据也显示成大写）。
+3. **只归一大小写**：不裁剪空格、不改数字与符号；清空编号（`False`）不会被变成字符串 `"FALSE"`。
+4. **存量数据不自动改写**：同主人下已有 `abc` 与 `ABC` 两行时转大写会撞
+   `UNIQUE(product_tmpl_id, reference_code)`，脚本无法替用户消歧；手工统一的命令写在
+   `README.md` →「型号一律大写」（会跳过撞约束的行）。
+5. **测试**：新增 `tests/test_reference_uppercase.py`（9 项：参考号行 create / write、
+   只归一大小写、产品编号、单变体两处同值、变体侧同步、多变体不动变体编号、
+   清空不为字符串、小写仍能搜到）。
+6. 文档：`README.md` 新增「型号一律大写」小节 + 验证清单三行 + 异常处理一条；
+   `AGENTS.md` 新增 L1 第 11 条（原第 10 条顺延为 11）与文件职责一行；
+   `__manifest__.py` 版本 `19.0.3.1.0` + description 新增一条（同步 `i18n/zh_CN.po` 的
+   `description:` 条目，`task check` 一致性校验已通过）。
+7. **额外参考号弹窗与 Odoo 原生弹窗统一**（`static/src/xml/product_reference_manage.xml` / scss）：
+   - 结构 / 类名改成与 `web/static/src/core/dialog/dialog.xml` 一致：
+     `.o_dialog > .modal.o_technical_modal > .modal-dialog > .modal-content >
+     (header.modal-header / main.modal-body / footer.modal-footer)` —— 标题改用
+     原生的 `<h4 class="modal-title">` + `btn-close`，footer 用原生那套类名
+     （左对齐、按钮无外边距），字体颜色 / 按钮样式全部走原生，删掉自定义的
+     `modal-dialog` 宽度（改回原生 `modal-lg`）；
+   - 删掉空列表时那行 `No additional reference yet.` 占位提示（Odoo 原生 x2many
+     空列表也不显示占位行，只剩「Add a line」）；
+   - 「Add a reference」（带图标的 `btn-primary`）改成 **Odoo 标准的 `Add a line`**：
+     表格 `tfoot` 里 `<a role="button" class="o_field_x2many_list_row_add">`，
+     链接式、不带图标 —— 与 `web/static/src/views/list/list_renderer.xml` 一致。
+8. **修复「删除空行没反应」**（`static/src/js/product_reference_manage.js`）：
+   - 原因：未保存的新行走的是 `x2ManyCommands.unlink(rec.id)`，`rec.id` 是 datapoint
+     内部 id，不是 x2many 命令认的虚拟 id → 命令匹配不到任何行，点了没反应
+     （已保存的行走 `delete(rec.resId)` 那条分支才正常）；
+   - 改法：一律走 x2many 列表自身的 `list.delete(rec)`（Odoo 官方行删除入口，见
+     `web/static/src/views/fields/x2many/x2many_field.js` 的 kanban `deleteRecord` /
+     `useX2ManyCrud` 的 `removeRecord`）：它按 `record.resId || record._virtualId`
+     下发 DELETE，`_applyCommands` 会先找该 id 上待发的 CREATE，有就撤销这条新建
+     （`static_list.js` 的 `hasCreateCommand` 分支）→ 未保存的空行也能删掉。
+
+### 影响
+
+- 型号写库即大写：表单 / 列表 / 卡片 / 单据 / 导入 / API 全部同一口径；
+- 搜索不受影响（`ilike` 不区分大小写），用小写仍能命中大写型号；
+- 已存的小写型号**不会**被自动改写，与新写入的值共存（需要时按 README 手工统一）；
+- 不新增字段、不改视图结构，**无迁移**；
+- 弹窗外观回到 Odoo 原生口径（标题 / 关闭按钮 / footer 按钮 / 字体颜色），
+  空列表不再有占位行，新增行入口变成标准的 `Add a line`；
+- 弹窗里删除未保存的空行恢复正常（已保存的行行为不变）。
+
+### 文档
+
+- 模块 `README.md`（「型号一律大写」小节 + 手工统一命令 + 验证清单 + 「+」弹窗小节）、
+  `AGENTS.md`（L1 第 11 条 + 第 9 条弹窗结构与删除实现 + 文件职责表 + 版本行）、本条目
+- 根 `README.md` 模块一览表版本行
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_reference` | 见本轮执行记录（新增 9 项 + 原 6 项） |
+| `task check` | 通过（未发现结构性问题；应用列表元数据 `msgid` 与 manifest 逐字符一致、po 无重复 `msgid`） |
+| JS 语法（`node --check`） | 2 个文件通过 |
+| XML（`minidom` 解析） | 弹窗模板通过 |
+| 目标环境 | 产品表单 `Ref.` / 变体表单 `Ref.` / 弹窗参考号输入框**待验证**（前端资源需强刷浏览器），中英各验一遍；重点看**输入过程不吃字、光标不跳**，以及失焦 / `Tab` / `Enter` 后值变大写 |
+| 目标环境（弹窗） | **待验证**：① 弹窗外观与 Odoo 原生弹窗一致（标题 / × / footer）；② 空列表只剩 `Add a line`；③ 新增一行后立刻点删除能删掉；④ 已保存的行删除后保存产品，库里该行真的被删 |
+
+---
+
 ## [19.0.4.0.0] - 2026-09-23（**评估记录，当日回退，未发布**：曾试「产品编号直接用原生 default_code 那一列」）
 
 > ⚠ **本版未发布、已全部回退**：实现完成后按要求回到 `base_reference` 方案（`19.0.3.0.0`）。

@@ -3,7 +3,6 @@
 import { Component, onWillDestroy, useState } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useAutofocus, useService } from "@web/core/utils/hooks";
-import { x2ManyCommands } from "@web/core/orm_service";
 import { _t } from "@web/core/l10n/translation";
 
 // 参考号类型选项，与 product.reference.code.reference_type 的 selection 一一对应；
@@ -16,6 +15,11 @@ const REFERENCE_TYPES = [
 
 // 排序步长，与后端 sequence 默认 10 保持一致
 const SEQUENCE_STEP = 10;
+
+// 型号一律大写（与后端 models/reference_case.py 同一口径）：
+// - 输入过程中**不改写输入框的值**，显示大写交给 CSS `text-transform: uppercase`
+//   （逐键改 value 会顶走光标、与输入法抢 composition，出现「吃字」）；
+// - 提交时（`onFieldChange`，即 change 事件）转一次大写再写进记录。
 
 /**
  * 额外参考号管理弹窗（点击 Reference 输入框右侧「+」按钮打开）。
@@ -152,7 +156,11 @@ export class ProductReferenceManageDialog extends Component {
         }
         this.state.busy = true;
         try {
-            await rec.update({ [fieldName]: value });
+            const nextValue =
+                fieldName === "reference_code" && typeof value === "string"
+                    ? value.toUpperCase()
+                    : value;
+            await rec.update({ [fieldName]: nextValue });
             this.refresh();
         } catch (_e) {
             this.notification.add(_t("The reference could not be updated."), {
@@ -163,18 +171,27 @@ export class ProductReferenceManageDialog extends Component {
         }
     }
 
-    /** 删除一行：未保存行用 unlink（移除关联），已保存行用 delete（删除记录）。 */
+    /**
+     * 删除一行：走 x2many 列表自己的 `delete()`（Odoo 官方行删除入口，见
+     * `web/static/src/views/fields/x2many/x2many_field.js` 的 kanban `deleteRecord`
+     * / `useX2ManyCrud` 的 `removeRecord`）：它按 `record.resId || record._virtualId`
+     * 下发 DELETE 命令，**未保存的新行（空行）也能删掉** —— `_applyCommands` 收到
+     * DELETE 时会先找该 id 上待发的 CREATE 命令，有就直接撤销这条新建、不再下发
+     * DELETE（`static_list.js` 的 `hasCreateCommand` 分支）。
+     *
+     * 之前写的是 `x2ManyCommands.unlink(rec.id)`：`rec.id` 是 datapoint 内部 id，
+     * 不是 x2many 命令认的虚拟 id，命令匹配不到任何行 → 点删除没反应
+     * （表现为「删空行不生效」，已保存的行走 `delete(rec.resId)` 那条分支才正常）。
+     */
     async onDelete(item) {
         const rec = this._findRecord(item.key);
-        if (!rec || this.state.busy) {
+        const list = this.list;
+        if (!rec || !list || this.state.busy) {
             return;
         }
         this.state.busy = true;
         try {
-            const command = rec.isNew
-                ? x2ManyCommands.unlink(rec.id)
-                : x2ManyCommands.delete(rec.resId);
-            await this.props.record.update({ [this.linesField]: [command] });
+            await list.delete(rec);
             this.refresh();
         } catch (_e) {
             this.notification.add(_t("The reference could not be deleted."), {

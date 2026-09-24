@@ -15,6 +15,8 @@
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 
+from .reference_case import UPPERCASE_FIELDS, uppercase_reference_vals
+
 
 class ProductReferenceCode(models.Model):
     """产品参考号明细。
@@ -193,11 +195,15 @@ class ProductReferenceCode(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        # 型号一律大写（参考号行）：与前端弹窗输入框同一口径，导入 / API 也兜住
+        for vals in vals_list:
+            uppercase_reference_vals(vals, UPPERCASE_FIELDS[self._name])
         records = super().create(vals_list)
         records._sync_owners_index()
         return records
 
     def write(self, vals):
+        uppercase_reference_vals(vals, UPPERCASE_FIELDS[self._name])
         res = super().write(vals)
         # 仅当影响拼接内容的字段变动时才同步，避免无谓写入
         if any(k in vals for k in (

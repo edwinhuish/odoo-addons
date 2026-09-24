@@ -25,6 +25,11 @@
             flex: 1 1 auto;
             min-width: 0;
             background: transparent;
+            // 型号一律大写：输入过程中只在这里显示成大写（不改输入框的值，
+            // 避免顶走光标 / 与输入法抢 composition 的「吃字」），真正的值在
+            // 提交（change / Tab / Enter）时才转一次大写
+            // （存量小写数据也显示成大写，与保存后的值一致）
+            text-transform: uppercase;
         }
     }
 
@@ -75,13 +80,14 @@
 }
 
 // 额外参考号管理弹窗（顶层 overlay，与产品表单渲染树解耦）
+// 结构与类名与 Odoo 原生弹窗一致（`.o_dialog > .modal.o_technical_modal > …`，
+// 见 web/static/src/core/dialog/dialog.xml）：标题、关闭按钮、footer 按钮、字体
+// 颜色全部走原生样式，这里只留本弹窗必需的两件事 —— 遮罩（挂在 main_components，
+// 不走 dialog 服务，没有独立的 backdrop 元素）与表格列宽。
 .o_product_reference_manage {
     background: rgba(0, 0, 0, 0.5);
+    // 高于 Odoo 模态（1055），避免被表单里的下拉 / 通知盖住
     z-index: 1080;
-
-    .modal-dialog {
-        max-width: 760px;
-    }
 
     .o_pr_table {
         th,
@@ -91,6 +97,11 @@
 
         .o_pr_col_code {
             width: 30%;
+        }
+
+        // 参考号输入框：与产品表单 `Ref.` 同一口径，输入即大写
+        .o_pr_code_input {
+            text-transform: uppercase;
         }
 
         .o_pr_col_type {

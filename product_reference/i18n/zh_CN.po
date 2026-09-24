@@ -281,15 +281,15 @@ msgid "Type"
 msgstr "类型"
 
 #. module: product_reference
+#. odoo-javascript
 #: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
+msgid "Add a line"
+msgstr "添加一行"
+
+#. module: product_reference
 #: code:addons/product_reference/static/src/js/product_reference_editor.js:0
 msgid "Add a reference"
 msgstr "新增一条参考号"
-
-#. module: product_reference
-#: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
-msgid "No additional reference yet."
-msgstr "还没有额外参考号。"
 
 #. module: product_reference
 #: code:addons/product_reference/static/src/xml/product_reference_manage.xml:0
@@ -444,6 +444,8 @@ msgid ""
 "- When a reference is hit, the result shows\n"
 "  \"Product (Matching reference: xxx)\" so products can be told apart\n"
 "- Reference lines are removed with the product, no orphan data\n"
+"- References are stored in uppercase: what you type in the form (or import "
+"from a file) is uppercased right away\n"
 msgstr ""
 "\n"
 "外贸 SOHO 场景下的产品参考号管理模块。\n"
@@ -471,3 +473,4 @@ msgstr ""
 "  也能按多变体产品的产品编号找到产品\n"
 "- 命中参考号时结果显示「产品（命中参考号：xxx）」，便于区分产品\n"
 "- 参考号明细随产品删除，不留孤儿数据\n"
+"- 参考号一律以大写存储：表单里输入（或从文件导入）的型号会立即转为大写\n"

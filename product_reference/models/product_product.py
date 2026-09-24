@@ -21,6 +21,8 @@
 from odoo import _, api, fields, models
 from odoo.fields import Command, Domain
 
+from .reference_case import UPPERCASE_FIELDS, uppercase_reference_vals
+
 
 class ProductProduct(models.Model):
     _inherit = "product.product"
@@ -67,10 +69,14 @@ class ProductProduct(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        # 型号一律大写：变体编号（变体表单 / 变体列表 / 导入）与产品编号同口径
+        for vals in vals_list:
+            uppercase_reference_vals(vals, UPPERCASE_FIELDS[self._name])
         self._strip_variant_reference_template_default(vals_list)
         return super().create(vals_list)
 
     def write(self, vals):
+        uppercase_reference_vals(vals, UPPERCASE_FIELDS[self._name])
         self._strip_variant_reference_template_default([vals])
         res = super().write(vals)
         if "default_code" in vals:
