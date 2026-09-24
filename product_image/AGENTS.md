@@ -562,7 +562,7 @@ task test -- product_image,stock,sale_management,purchase --test-tags=/product_i
 > **提交**：`9748eeb fix(product_image): 产品列表 Images 列改显主图缩略`（11 个文件）。
 > **落点**：模块 [`CHANGELOG.md`](CHANGELOG.md) → `[19.0.2.6.5]`（逐版本变更）、[`README.md`](README.md)
 > →「功能概述 / 视图 / 验证清单 / 执行流程 / 异常情况与处理 / 后续维护」（使用者视角）；
-> 阶段汇总见根 [`STAGE_REPORT_2026-09-24.md`](../STAGE_REPORT_2026-09-24.md) → 第 7 节。
+> 阶段汇总见根 [`STAGE_REPORT_2026-09-24.md`](../docs/archive/STAGE_REPORT_2026-09-24.md)（已归档） → 第 7 节。
 
 ### 1. 操作时间线（可追溯）
 

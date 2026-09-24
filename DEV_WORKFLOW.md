@@ -1,14 +1,18 @@
 # 本地开发工作流（`.dev/`）
 
-> 本文是**日常操作手册**（怎么跑、怎么调、怎么拉数据）。
-> 环境是怎么搭起来的、方案为什么这么选、踩过哪些坑 → 见 [`DEV_ENV_SETUP.md`](DEV_ENV_SETUP.md)。
+> 本文是**本地开发的唯一手册**：怎么跑、怎么调、怎么拉数据、环境为什么这样搭、有哪些坑。
+>
+> 环境**搭建过程**的完整复盘（方案 A→B 演进史、当时的踩坑与迁移步骤）已归档到
+> [`docs/archive/DEV_ENV_SETUP.md`](docs/archive/DEV_ENV_SETUP.md)；
+> 其中仍需要长期遵守的几项收在第 1 节与第 8 节，其余以那份归档为准。
+> 全仓库文档地图见 [`docs/README.md`](docs/README.md)。
 
 给外贸 SOHO 自研 addons 的一套**轻量**开发环境：Odoo 19 + PostgreSQL 跑在容器里，
 **编辑器和调试都在宿主机**——不连远程容器，改完即生效。
 
 ```bash
 task                                  # 列出所有命令
-task up                               # 启动 → http://localhost:8069（首次自动建库装 base）
+task up                               # 启动 → http://localhost:8069（首次自动建库并按 .dev/init.yaml 装模块 / 仓库扩展 / 语言 / 演示数据）
 task logs                             # 跟日志
 task update -- product_image          # 升级模块（注意参数前要加 --）
 task down                             # 停止（数据保留）
@@ -53,7 +57,22 @@ GOBIN="$HOME/.local/bin" go install github.com/go-task/task/v3/cmd/task@latest
 
 ---
 
-## 1. 为什么这么轻
+## 1. 为什么这么轻（方案选型的结论）
+
+**结论：本机编辑 + compose 跑服务**。曾评估并短暂采用过「VS Code Dev Container + 自建镜像」
+（= 归档文档里的方案 A），最终因为「扩展开发 90% 的时间在写 Python / XML，而这件事在宿主机上最快」
+而降级为现在这套。三类候选的对比、以及 A 阶段踩过的 8 个坑，见
+[`docs/archive/DEV_ENV_SETUP.md`](docs/archive/DEV_ENV_SETUP.md) → 第 2、3 节 —— 那份复盘的目的就是
+**避免以后再走回头路**。
+
+这套环境仍然要长期遵守的三件事（从那份归档里提炼）：
+
+1. **镜像 / 依赖只写在 `.dev/docker/Dockerfile.*`**，不要 `pip install` 完就算（容器重建就丢）。
+2. **改了镜像 tag 要做三件事**：`task rebuild` → 重跑 `task odoo-src` 刷新核心源码副本 → `task init` 让库跟着升级。
+3. **构建上下文必须是 `.dev/docker/`**（只含三个小文件）。若设成 `.dev/`，每次 rebuild 都会把整个 `data/`
+   （几十上百 MB 的 PGDATA + filestore）打包发给守护进程。
+
+具体做法：
 
 - **不连远程容器**：文件在宿主机上，Pylance / pre-commit / git 都是本机速度，没有远程往返。
 - **不维护自建镜像**：基础镜像是官方 `odoo:19.0`（已含 Odoo、wkhtmltopdf、psql 客户端），
@@ -148,6 +167,7 @@ modules:
   - stock
 
 # --- 本仓库扩展（自研模块，名字 = 模块目录名）---------------------------------
+# 当前登记 8 个；web_multi_tabs 暂被注释（不在这台 dev 库里装，需要时把注释去掉再 task init）
 addons:
   - product_card_view
   - product_image
@@ -157,11 +177,13 @@ addons:
   - sale_order_no
   - sale_product_hover
   - web_image_paste
-  - web_multi_tabs
+  # - web_multi_tabs
 
 # --- 语言（行内数组，值少时紧凑）---------------------------------------------
 langs: [en_US, zh_CN]
 ```
+
+> 列表一律以 **`.dev/init.yaml` 实际内容为准**，本文档里的示例可能滞后（就像这次复盘发现的那一行）。
 
 - 块列表（`- xxx` 一行一个）与行内数组（`[a, b]`）等价，注释随便加。
 - 解析用宿主机的 `python3` + PyYAML；宿主机没有时自动退回 **Odoo 容器里的 python3**（镜像自带 PyYAML，
@@ -370,6 +392,20 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
   ```
 - 上线：本地验收通过后 `MODULES=x task deploy`，服务器侧仍按 AGENTS.md 出「待验证清单」
 
+### 8.1 后续优化方向（未立项，按需择优）
+
+> 从 [`docs/archive/DEV_ENV_SETUP.md`](docs/archive/DEV_ENV_SETUP.md) 第 7 节迁来。它们都不是缺陷，
+> 而是「有余力时让环境更好用」的候选；真要动请先立项到 `TODO.md`，不要顺手加命令。
+
+| 方向 | 收益 | 备注 |
+|------|------|------|
+| `task doctor`：一键自检（docker 可用、端口占用、属主、init.yaml 里的模块是否都装上、lang/locale） | 新人排障从「翻文档」变成「跑一条命令」 | 本质是把第 9 节的坑变成检查项，成本可控 |
+| CI 里跑 `task check` + `task test`，复用同一份 compose | 提交即验证，不依赖本地环境 | 需要一套无 GUI 的最小 compose，工作量中等 |
+| 首次启动耗时统计 + 进度提示（装中文几分钟） | 新人不至于以为卡死 | 可只加日志行 |
+| `task reset` 后自动 `task init` | 少记一条命令 | 注意别顺手把 dev 库删了 |
+| 把 `.dev/.cache/odoo-src` 换成「attach 容器」零拷贝方案 | 省约 160MB 磁盘 | 前提是团队接受在容器里读核心源码 |
+| 把「多版本并行（worktree + `.dev/.env`）」包装成脚本 | 同时维护两条分支的环境 | 机制已具备，只差一层包装 |
+
 ---
 
 ## 9. 常见坑
@@ -402,7 +438,7 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 
 ---
 
-## 10. 验证清单（2026-09-16 实跑）
+## 10. 已验证过的 `task` 命令（2026-09-16 实跑，快照）
 
 已实测通过的：
 
@@ -426,7 +462,9 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 14. ✅ `PUID`/`PGID` 运行时切换（含腾位、0:0 例外）、`task debug`、`task pull` 之外的任务均已实测
 15. ✅ **开发库一键到位**（`.dev/scripts/init-db.sh`，在临时库上以 `--fresh` 实跑）：
    `admin/admin` 可登录（`/web/session/authenticate` 返回 uid=2，错密码返回 Access Denied）、
-   `sale_management` / `purchase` / `stock` 全部 installed、仓库 8 个模块全部 installed、
+   `sale_management` / `purchase` / `stock` 全部 installed、
+   `.dev/init.yaml` 里登记的本仓库扩展全部 installed（当时登记 8 个；仓库现有 9 个模块，
+   `web_multi_tabs` 当时在清单里被注释掉）、
    演示数据已加载（`base.user_demo` 存在、`product_template` 37 条）；重复执行幂等（「模块齐全，跳过安装」）
 
 实跑时踩到并已修掉的坑（都写进了第 9 节）：
@@ -444,11 +482,25 @@ task db-sync -- duplicate dev dev_clean    # 先留个干净副本，折腾坏�
 - **`getent` 未命中返回 2 + `pipefail`**：腾位函数里 `$(getent ... | cut ...)` 直接把脚本杀掉
   （exit 2、一行日志都没有）→ 加 `|| true` 兜住
 
-还需你验的：
+上面的 1~15 项是 **2026-09-16 的实跑快照**（当时环境刚定型）。此后这些能力每天都在用、没有再记录：
+把这个清单留在正文里会让人误以为「还需要验收」。因此下面改成**新机器上的一次性核对表**（用完即可跳过）。
 
-16. ☐ 改一个模型 `.py` → 日志出现原地重启；改视图 XML / QWeb → 刷新浏览器生效
-17. ☐ `task debug` + F5 能断在自定义模块里
-18. ☐ `task pull` 能拉到**服务器**含 filestore 的备份，本地图片正常显示
-19. ☐ `pre-commit install` 后提交一次门禁生效
+### 10.1 新机器首跑核对表（逐条打勾，不必回报）
 
-验证结果请回写到本清单与对应模块的 `CHANGELOG.md`（AGENTS.md 的交付要求）。
+| # | 核对项 | 命令 |
+|---|--------|------|
+| 1 | 起了两个容器，`db` 是 healthy | `task ps` |
+| 2 | 页面可达 | `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8069`（期望 303） |
+| 3 | `admin/admin` 能登录、Sales / Purchase / Inventory 与本仓库扩展都在商店里 | 浏览器打开 <http://localhost:8069> |
+| 4 | 热重载生效 | 改一个模型 `.py` → `task logs` 出现 restart；改视图 XML / QWeb → 刷新浏览器即生效 |
+| 5 | 断点能断在自定义模块 | `task debug` → F5 attach |
+| 6 | 门禁挂上了 | `pre-commit install` 后提交一次，`task check` 自动跑起来 |
+| 7 | 拉过一次现场数据（可选，需要服务器） | `SSH_HOST=... REMOTE_DB=prod task pull`，本地图片应正常显示 |
+
+### 10.2 仍然没有自动化覆盖的部分（每次改动都要人工兜一手）
+
+- **OWL 前端补丁的交互**（如归属弹窗、卡片布局）：无浏览器测试基建，只能 `-u` + 强刷后在界面上验。
+- **`task pull` 拉回来的数据是否完整**（filestore 尤其重要，图片类模块强依赖）。
+- **到核心源码的单步**：依赖 `pathMappings` 与 `task odoo-src` 导出的副本，改了镜像 tag 要重跑一次。
+
+验证结果请回写到对应模块的 `CHANGELOG.md`（根 `AGENTS.md` 第 7 节的交付要求），不必回写本文件。

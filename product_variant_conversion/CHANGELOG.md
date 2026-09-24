@@ -1011,4 +1011,4 @@
 
 - 同步更新 `__manifest__.py`、`README.md`、`AGENTS.md`、`CHANGELOG.md`（本文件）
 - 根 `TODO.md`（T-015 归档）、根 `README.md`（模块一览表 / 路线图 / 应用列表元数据总览）、根 `AGENTS.md`（第 9 节模块速查表）
-- `.dev/init.yaml` 与 `DEV_WORKFLOW.md` 的开发库模块清单加入本模块，`DEV_ENV_SETUP.md` 的验收描述同步模块数量
+- `.dev/init.yaml` 与 `DEV_WORKFLOW.md` 的开发库模块清单加入本模块，`DEV_ENV_SETUP.md`（现已归档到 `docs/archive/`）的验收描述同步模块数量

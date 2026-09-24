@@ -1,5 +1,10 @@
 # 阶段总结与交接报告（2026-09-24）
 
+> **已归档（2026-09-24 文档复盘）**：本文件是 2026-09-24 那轮迭代的**交付快照**，
+> 内容不再更新，也已沉淀到各模块 `CHANGELOG.md` / `AGENTS.md` 与根 `TODO.md` 已归档条目。
+> 归档原因与取回方式见 [`docs/README.md`](../README.md) →「四、本次归档的决策记录」。
+> 文中的相对链接已按归档后的位置调整。
+
 > **本文件定位**：汇总本阶段（2026-09-23 夜 ~ 2026-09-24 一轮迭代）的全部工作。本阶段有**两条并行工作流**：
 > 主战场 `product_variant_conversion`（两次线上报错修复、一次边界核实、两个需求 `T-039` / `T-040`），
 > 以及同期并行的 `product_image`（`T-038`：产品列表「Images」列改显主图缩略）。
@@ -8,8 +13,8 @@
 > **权威细节仍在模块三件套**：`README.md`（使用者）、`CHANGELOG.md`（逐版本变更）、`AGENTS.md`（约束与踩坑）。
 > 本文件只做汇总、索引与横切归纳，冲突时以模块文档为准。
 >
-> 规范依据：根 [`AGENTS.md`](AGENTS.md) 第 7/8 节、[`DOCS_TEMPLATE.md`](DOCS_TEMPLATE.md)；
-> 上一轮报告见 [`STAGE_REPORT_2026-09-22.md`](STAGE_REPORT_2026-09-22.md)。
+> 规范依据：根 [`AGENTS.md`](../../AGENTS.md) 第 7/8 节、[`DOCS_TEMPLATE.md`](../../DOCS_TEMPLATE.md)；
+> 上一轮报告见 [`STAGE_REPORT_2026-09-22.md`](STAGE_REPORT_2026-09-22.md)（同为本目录归档）。
 
 ---
 
@@ -234,8 +239,8 @@ task i18n -- zh_CN product_variant_conversion                         # 强制�
 
 > 与第 1~6 节的 `product_variant_conversion` 是**两条并行的工作流**（同一工作区、各自独立提交）。
 > 本节给出目标 / 根因 / 改动 / 验证 / 复验清单；**权威细节**见模块
-> [`product_image/CHANGELOG.md`](product_image/CHANGELOG.md) → `[19.0.2.6.5]` 与
-> [`product_image/AGENTS.md`](product_image/AGENTS.md) →「开发复盘与关键经验（T-038）」（含操作时间线、
+> [`product_image/CHANGELOG.md`](../../product_image/CHANGELOG.md) → `[19.0.2.6.5]` 与
+> [`product_image/AGENTS.md`](../../product_image/AGENTS.md) →「开发复盘与关键经验（T-038）」（含操作时间线、
 > 备选方案与取舍、坑点 7 条）。
 
 ### 7.1 目标与结论
