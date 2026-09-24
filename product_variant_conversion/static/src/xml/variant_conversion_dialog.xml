@@ -4,6 +4,7 @@
     <t t-name="product_variant_conversion.VariantConversionDialog">
         <Dialog title.translate="Variant Ownership" size="'lg'">
             <p>This attribute change adds variants. Tell which existing variant keeps each combination: the chosen variant record keeps its stock, its orders and its invoices, and the other combinations are created as new variants.</p>
+            <p t-if="isOnDemand" class="text-muted" t-esc="onDemandHint"/>
             <table class="table table-sm align-middle">
                 <thead>
                     <tr>
@@ -28,7 +29,7 @@
                 </tbody>
             </table>
             <div t-if="unassignedCount" class="text-danger" t-esc="unassignedLabel"/>
-            <div class="form-check mt-2">
+            <div t-if="!isOnDemand" class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" id="variant_conversion_share_vendor_prices"
                        t-att-checked="state.shareVendorPrices" t-on-change="onToggleShareVendorPrices"/>
                 <label class="form-check-label" for="variant_conversion_share_vendor_prices" t-esc="shareVendorPricesLabel"/>

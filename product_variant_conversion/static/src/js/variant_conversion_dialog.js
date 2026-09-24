@@ -63,6 +63,17 @@ export class VariantConversionDialog extends Component {
         return _t("Apply the vendor prices of these variants to all variants");
     }
 
+    /** 产品是否带「按需生成」的属性（T-039）：这类产品只展开「立即」轴。 */
+    get isOnDemand() {
+        return !!this.props.preview.dynamic;
+    }
+
+    get onDemandHint() {
+        return _t(
+            "This product creates some variants on demand: the other values of those attributes are not created now — Odoo creates them when they are ordered. Only the combinations listed here are created."
+        );
+    }
+
     /** 还没被分配组合的既有变体数量：必须为 0 才能确认 */
     get unassignedCount() {
         return countUnassigned(this.variants, this.state.selection);

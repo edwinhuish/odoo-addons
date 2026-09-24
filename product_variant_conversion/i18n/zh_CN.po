@@ -55,14 +55,6 @@ msgstr "把这些变体的供应商价格应用到全部变体"
 #. odoo-python
 #: code:addons/product_variant_conversion/models/product_template.py:0
 msgid ""
-"Attribute %(attribute)s creates variants on demand; set its variant creation"
-" mode to instantly before converting the product."
-msgstr "属性 %(attribute)s 设置为按需生成变体，请先把它的变体生成方式改为「立即」再转换产品。"
-
-#. module: product_variant_conversion
-#. odoo-python
-#: code:addons/product_variant_conversion/models/product_template.py:0
-msgid ""
 "Attribute %(attribute)s is configured twice on the product; keep a single "
 "attribute line before converting."
 msgstr "产品上属性 %(attribute)s 配置了两行，请先合并为一行再转换。"
@@ -254,6 +246,15 @@ msgstr "新增变体数"
 #: code:addons/product_variant_conversion/static/src/js/variant_conversion_dialog.js:0
 msgid "New variant (created by the conversion)"
 msgstr "新建变体（由本次转换创建）"
+
+#. module: product_variant_conversion
+#. odoo-javascript
+#: code:addons/product_variant_conversion/static/src/js/variant_conversion_dialog.js:0
+msgid ""
+"This product creates some variants on demand: the other values of those "
+"attributes are not created now — Odoo creates them when they are ordered. "
+"Only the combinations listed here are created."
+msgstr "本产品有「按需生成」的属性：这些属性的其它取值不会现在建变体（下单时才由 Odoo 创建），本次只会建出下面列出的组合。"
 
 #. module: product_variant_conversion
 #: model_terms:ir.actions.act_window,help:product_variant_conversion.product_variant_conversion_action
@@ -520,19 +521,16 @@ msgstr ""
 #: code:addons/product_variant_conversion/models/product_template.py:0
 msgid ""
 "The attribute %(attributes)s of %(product)s creates its variants on demand: "
-"Odoo itself creates those variants (a product saved with such an attribute "
-"gets no variant at all, and later ones are created from the orders), so "
-"there is nothing here for this module to confirm or keep track of. Nothing "
-"has been changed. To manage the variants of this product from this form, "
-"remove that attribute from the product first — Odoo only lets you change an "
-"attribute's Variant Creation while it is used on no product — then set its "
-"Variant Creation to Instantly and add it back."
+"Odoo itself creates those variants from the orders, so a product saved with "
+"such an attribute gets no variant at all (the first one is created the first "
+"time it is ordered). Create the product without that attribute and add it to "
+"the product afterwards — the conversion then keeps the existing variants — "
+"or set its Variant Creation to Instantly before saving."
 msgstr ""
-"属性 %(attributes)s 的变体生成方式是「按需生成」：这类变体由 Odoo 自己创建"
-"（用这种属性保存产品时一条变体都不会建出来，之后按订单创建），本模块没有可确认、可保留的归属，"
-"本次改动也没有写入任何内容。想让这个产品的变体在本表单里维护，请先把该属性从产品上移除"
-"（Odoo 只允许修改「未被任何产品使用」的属性的变体生成方式），把它的变体生成方式改成「立即」，"
-"再加回产品。"
+"属性 %(attributes)s 的变体生成方式是「按需生成」：这类变体由 Odoo 按订单创建，"
+"所以建产品时带上它会一条变体都没有（第一次下单时才创建第一条）。"
+"请先不带这个属性把产品建好、保存，再把该属性加到产品上（届时本模块的转换会保住既有变体）；"
+"或者把它的变体生成方式改成「立即」再一起保存。"
 
 #. module: product_variant_conversion
 #. odoo-python
@@ -864,6 +862,7 @@ msgstr "本产品的供应商价格与价格表规则是否已按变体分离（
 
 
 #. module: product_variant_conversion
+#. odoo-javascript
 #: code:addons/product_variant_conversion/static/src/js/variant_conversion_dialog.js:0
 msgid "%(label)s — %(count)s on hand"
 msgstr "%(label)s — 在手 %(count)s"

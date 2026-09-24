@@ -1165,12 +1165,12 @@ class TestProductVariantConversion(TransactionCase):
         with self.assertRaises(UserError):
             self._confirm(product, commands, self._payload(self._default_rows(preview)))
 
-    def _dynamic_attribute(self, name="Test Dynamic"):
+    def _dynamic_attribute(self, name="Test Dynamic", values=None):
         """建一个「按需生成变体」（``create_variant == 'dynamic'``）的属性。"""
         return self.Attribute.create({
             "name": name,
             "create_variant": "dynamic",
-            "value_ids": [(0, 0, {"name": "Test D1"}), (0, 0, {"name": "Test D2"})],
+            "value_ids": [(0, 0, {"name": value}) for value in (values or ("Test D1", "Test D2"))],
         })
 
     def _dynamic_commands(self, dynamic):
@@ -1179,24 +1179,101 @@ class TestProductVariantConversion(TransactionCase):
             "value_ids": [Command.set(dynamic.value_ids.ids)],
         })]
 
-    def test_dynamic_attribute_is_refused(self):
-        """「按需生成变体」的属性拒绝走本流程，并**点名属性**、给出能走通的出路。
+    def _on_demand_product(self, dynamic, carried_values=None):
+        """造一个「按需生成」属性的产品：沙盒建产品（0 变体）+ 订单期的入口建变体。
 
-        只提示「去把属性改成「立即」」是不够的：Odoo 不允许修改已被产品使用的属性的变体生成方式
-        （``product.attribute.write()`` 里的 ``number_related_products`` 检查），
-        所以文案必须带上「先把属性从产品上移除」这一步。
+        ``carried_values`` 只给出要建变体的取值 —— 其余取值保持「按需」（一个变体都没有），
+        用来验证「按需轴不会被本模块展开」。
         """
-        dynamic = self._dynamic_attribute()
+        product = self.env["product.template"].with_context(
+            create_product_product=False).create({
+                "name": "Test On Demand Product %s" % dynamic.name,
+                "type": "consu",
+                "attribute_line_ids": self._dynamic_commands(dynamic),
+            })
+        # 沙盒上下文会留在记录集上，重新 browse，让后续写入回到正常上下文
+        product = self.env["product.template"].browse(product.id)
+        ptavs = product.valid_product_template_attribute_line_ids.product_template_value_ids._only_active()
+        for value in (carried_values if carried_values is not None else dynamic.value_ids):
+            product._create_product_variant(
+                ptavs.filtered(lambda ptav: ptav.product_attribute_value_id == value))
+        return product
+
+    def test_on_demand_product_expands_only_the_instant_attributes(self):
+        """带「按需生成」属性的产品：只展开「立即」轴，按需轴按既有变体钉住（`T-039` 主场景）。
+
+        产品：`Length`（按需，D1/D2/D3 三个取值，只有 D1 / D2 各有一条变体）。
+        加「立即」属性 `Color`（Red / Blue）后：
+
+        - 既有两条变体**原记录保留**（id 不变），各自带上自己的 Length 取值；
+        - 展开得到 4 条变体（每条既有变体 × Color 的两个取值），新增的 2 条带上来源字段；
+        - **D3 不产生任何变体**（按需轴的其它取值由 Odoo 在订单里创建）；
+        - 台账 1 条、谱系 4 行；带按需属性的产品**不做价格分离**（台账记为否）——
+          否则以后订单期新建的变体会取不到价格。
+        """
+        dynamic = self._dynamic_attribute(
+            name="Test On Demand Length", values=("Test D1", "Test D2", "Test D3"))
+        value_1, value_2, value_3 = dynamic.value_ids
+        product = self._on_demand_product(dynamic, carried_values=(value_1, value_2))
+        originals = product.product_variant_ids
+        self.assertEqual(len(originals), 2)
+
+        commands = self._set_commands(product, self.color, self.color.value_ids)
+        preview = self._preview(product, commands)
+        self.assertFalse(preview["blocked"])
+        self.assertTrue(preview["required"])
+        self.assertTrue(preview["dynamic"])
+        self.assertEqual(len(preview["combinations"]), 4)
+        # 预览里没有 D3 参与的组合
+        self.assertFalse([
+            combination for combination in preview["combinations"]
+            if value_3.id in combination["values"]
+        ])
+
+        self._confirm(product, commands, self._payload(self._default_rows(preview)))
+
+        variants = product.product_variant_ids
+        self.assertEqual(len(variants), 4)
+        # 既有变体一条不少（原记录）
+        self.assertEqual(originals - variants, self.env["product.product"])
+        # 每条变体恰好带一个 Length 取值与一个 Color 取值，且没人带着 D3
+        for variant in variants:
+            attributes = variant.product_template_attribute_value_ids.attribute_id
+            self.assertEqual(len(attributes), 2)
+            self.assertNotIn(value_3, variant.product_template_attribute_value_ids.product_attribute_value_id)
+        new_variants = variants - originals
+        self.assertEqual(len(new_variants), 2)
+        self.assertTrue(all(variant.variant_origin_id for variant in new_variants))
+        self.assertTrue(all(variant.variant_conversion_id for variant in variants))
+        conversions = product.variant_conversion_ids
+        self.assertEqual(len(conversions), 1)
+        self.assertEqual(len(conversions.lineage_ids), 4)
+        # 按需属性的产品不做价格分离（以后订单期新建的变体还要靠模板级价格）
+        self.assertFalse(conversions.separate_variant_prices)
+
+    def test_adding_an_on_demand_attribute_keeps_the_existing_variant(self):
+        """给既有变体加一个**多取值**的「按需生成」属性：必须自己锚定，不能让原生删掉变体。
+
+        原生 ``_create_variant_ids()`` 在按需分支只激活命中组合的变体、不新建，
+        所以「变体没有带上新行取值」时它会判定组合不完整而**删掉这条变体**。
+        本模块改为自己把锚点写下去（此时不需要弹窗：没有新变体要确认归属）。
+        """
+        dynamic = self._dynamic_attribute(name="Test On Demand Size")
         product = self._create_product()
+        original = product.product_variant_ids
         commands = self._set_commands(product, dynamic, dynamic.value_ids)
         preview = self._preview(product, commands)
-        self.assertTrue(preview["blocked"])
-        self.assertIn(dynamic.display_name, preview["blocked"])
-        self.assertIn("Instantly", preview["blocked"])
-        with self.assertRaises(UserError) as catch:
-            product.write({"attribute_line_ids": commands})
-        self.assertIn(dynamic.display_name, str(catch.exception))
-        self.assertFalse(product.attribute_line_ids)
+        self.assertFalse(preview["blocked"])
+        self.assertFalse(preview["required"])
+
+        product.write({"attribute_line_ids": commands})
+
+        self.assertTrue(original.exists(), "the existing variant must survive")
+        self.assertEqual(product.product_variant_count, 1)
+        # 锚定到该轴第一个有效取值（与默认归属、Odoo「按需变体取第一个组合」的口径一致）
+        self.assertEqual(
+            original.product_template_attribute_value_ids.product_attribute_value_id,
+            dynamic.value_ids[:1])
 
     def test_product_created_with_a_dynamic_attribute_is_refused(self):
         """``create`` 带「按需生成」属性：拒绝，而不是留下一个「有属性、没变体」的产品。
@@ -1229,13 +1306,15 @@ class TestProductVariantConversion(TransactionCase):
         self.assertEqual(product.product_variant_count, 0)
 
     def test_variants_created_on_demand_are_neither_blocked_nor_adopted(self):
-        """按需生成的产品在**订单期**被 Odoo 建出变体：本模块不拦、也不接管（边界用例）。
+        """按需生成的产品在**订单期**被 Odoo 建出变体：本模块当时不拦、也不接管（边界用例）。
 
         订单期的入口是配置器 → ``sale.order.line`` → ``product.template._create_product_variant()``
         → ``product.product.create()``，全程不经过 ``product.template.write()``，所以本模块既不会拦，
         也不会给这些变体补数据（不写台账 / 谱系 / 来源字段，也不做「按谱系继承」——
-        继承只发生在**本模块自己的转换**里，而按需生成的产品根本不走转换）。
+        继承只发生在**本模块自己的转换**里）。
         把这个边界钉住，防止将来「顺手 hook 变体创建」时误伤订单流程。
+        `T-039` 起这类产品**可以**被转换：下面最后一段断言「之后再改属性会走转换、要求归属确认」，
+        不再是「产品整个不可编辑」。
         """
         dynamic = self._dynamic_attribute()
         product = self.env["product.template"].with_context(
@@ -1257,12 +1336,17 @@ class TestProductVariantConversion(TransactionCase):
         self.assertFalse(variant.variant_origin_id)
         self.assertFalse(product.variant_conversion_ids)
         self.assertFalse(product.lineage_ids)
-        # 属性依旧改不了：产品带按需生成的属性 = 本模块的处理范围之外
+        # `T-039` 起这类产品可以被转换：之后改属性会走「归属确认」那条路（不再是被整体拒绝）
+        commands = self._set_commands(product, self.color, self.color.value_ids)
+        preview = self._preview(product, commands)
+        self.assertFalse(preview["blocked"])
+        self.assertTrue(preview["dynamic"])
+        self.assertTrue(preview["required"])
         with self.assertRaises(UserError):
-            product.write({
-                "attribute_line_ids": self._set_commands(
-                    product, self.color, self.color.value_ids),
-            })
+            product.write({"attribute_line_ids": commands})         # 没有归属映射 → 拦住保存
+        self._confirm(product, commands, self._payload(self._default_rows(preview)))
+        self.assertEqual(product.product_variant_count, 2)          # 订单期那条变体 × Color 两个取值
+        self.assertTrue(variant.exists())
 
     # ------------------------------------------------------------------
     # 组合数前置上限（T-018）

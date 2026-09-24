@@ -160,9 +160,6 @@ class ProductTemplate(models.Model):
             return super().write(vals)
 
         affected = self._analyze_variant_conversion_write(vals["attribute_line_ids"])
-        if affected["dynamic_attributes"]:
-            raise UserError(self._get_variant_conversion_dynamic_message(
-                affected["dynamic_attributes"]))
         if affected["lost_variant_ids"]:
             if affected.get("lost_values_archived"):
                 raise UserError(_(
@@ -186,11 +183,15 @@ class ProductTemplate(models.Model):
                 product=self.display_name,
             ))
         if affected["expected_count"] <= affected["before_count"]:
-            # 既有变体一条不少、也不会新增变体（例如只加单取值属性、只加不生成变体的属性）→ 原生保存
-            if mapping_payload:
-                vals["variant_conversion_mapping"] = False
-            return super().write(vals)
-        if not mapping_payload:
+            # 既有变体一条不少、也不会新增变体（例如只加单取值属性、只加不生成变体的属性）→ 原生保存。
+            # 例外：原生这次会把某条既有变体的组合判成「不完整」而删掉它（needs_anchoring，
+            # 典型是给产品加一个**多取值**的「按需生成」属性行）→ 不能交给原生，
+            # 往下走转换、用默认归属把每条既有变体的锚点写下去（没有新变体，所以不用弹窗确认）。
+            if not affected["needs_anchoring"]:
+                if mapping_payload:
+                    vals["variant_conversion_mapping"] = False
+                return super().write(vals)
+        elif not mapping_payload:
             raise UserError(_(
                 "This attribute change creates new variants of %(product)s: every existing variant has to be told which combination it keeps, so the save is held back until the ownership is confirmed from the product form. Save again from the form to get the dialog; if it does not show up, reload the page (Ctrl+F5) so that the module's assets are up to date.",
                 product=self.display_name,
@@ -202,8 +203,11 @@ class ProductTemplate(models.Model):
         })
         # ② 再做安全转换：按归属映射把每条既有变体锚定到它的组合上、只新增缺失的组合，
         #    并写下转换台账与谱系。此时配置已是目标配置，转换里那一步写属性行是幂等的。
-        variant_mapping, share_vendor_prices = self._parse_variant_conversion_mapping(
-            mapping_payload)
+        # 没有映射也走转换的唯一情况：本次不新增变体、但原生会丢变体（needs_anchoring，见上），
+        # 这时不需要用户确认归属，用默认归属即可，所以 mapping 留空由 _convert_to_multi_variant 兜底
+        variant_mapping, share_vendor_prices = (
+            self._parse_variant_conversion_mapping(mapping_payload) if mapping_payload
+            else ({}, False))
         self._convert_to_multi_variant(
             self._get_variant_conversion_specification(),
             variant_mapping=variant_mapping,
@@ -225,18 +229,12 @@ class ProductTemplate(models.Model):
         - ``blocked``：非空字符串表示这次改动会丢既有变体（删取值 / 删属性），前端据此拦住保存；
         - ``required``：是否需要用户确认归属（会新增变体时为 True）；
         - ``variants``：既有变体（弹窗里「由谁继续承载」的候选项，含在手数量）；
+        - ``dynamic``：产品是否带「按需生成」的属性（那种产品只展开「立即」轴，
+          弹窗要据此提示「按需轴的其它取值不会被预建」并隐藏供应商价格勾选框）；
         - ``combinations``：改动后的组合，``origin_variant_id`` 是「什么都不指定时」的默认归属。
         """
         self.ensure_one()
         affected = self._analyze_variant_conversion_write(attribute_line_ids)
-        if affected["dynamic_attributes"]:
-            return {
-                "blocked": self._get_variant_conversion_dynamic_message(
-                    affected["dynamic_attributes"]),
-                "required": False,
-                "variants": [],
-                "combinations": [],
-            }
         if affected["lost_variant_ids"]:
             if affected.get("lost_values_archived"):
                 return {
@@ -275,6 +273,7 @@ class ProductTemplate(models.Model):
         return {
             "blocked": False,
             "required": affected["expected_count"] > affected["before_count"],
+            "dynamic": bool(affected["dynamic_attributes"]),
             "variants": self._get_variant_conversion_variant_options(),
             "combinations": affected["combinations"],
         }
@@ -291,6 +290,8 @@ class ProductTemplate(models.Model):
         :return: dict：
             ``lost_variant_ids`` 受删取值影响、无法再锚定的既有变体 id；
             ``expected_count`` / ``before_count`` 改动后的组合数与既有变体数；
+            ``needs_anchoring`` 走原生保存会不会丢变体（变体缺某个多取值行的取值 → True，
+            这时必须自己锚定，见 ``write()``）；
             ``combinations`` 改动后的组合（取值 id + 标签 + 默认归属），供弹窗使用；
             ``specification`` 改动后的变体生成配置（属性 + 取值），回滚后依然可用
             （它只引用属性与 product.attribute.value，这些记录是客户端保存前就建好的）；
@@ -313,8 +314,8 @@ class ProductTemplate(models.Model):
             self.with_context(create_product_product=False).write({
                 "attribute_line_ids": attribute_line_ids,
             })
-            self._check_variant_conversion_combination_cap(
-                self._get_variant_conversion_attribute_lines())
+            attribute_lines = self._get_variant_conversion_attribute_lines()
+            self._check_variant_conversion_combination_cap(attribute_lines)
             specification = self._get_variant_conversion_specification()
             spec_attributes = self.env["product.attribute"]
             for spec in specification:
@@ -327,8 +328,7 @@ class ProductTemplate(models.Model):
                 for variant, values in default_mapping.items()
             }
             combinations = []
-            for ptavs in self._get_variant_conversion_combinations(
-                    self._get_variant_conversion_attribute_lines()):
+            for ptavs in self._get_variant_conversion_combinations(attribute_lines):
                 pav_ids = ptavs.product_attribute_value_id.ids
                 combinations.append({
                     "values": pav_ids,
@@ -351,6 +351,21 @@ class ProductTemplate(models.Model):
             lost_pavs = self.env["product.attribute.value"].browse(sorted(lost_value_ids))
             lost_values_archived = bool(lost_pavs) and all(not value.active for value in lost_pavs)
             lost_value_names = ", ".join(lost_pavs.mapped("name"))
+            # 「原生写法会不会丢变体」：只要某条既有变体没带上某个**多取值**属性行的取值，
+            # 原生 _create_variant_ids 就会把它的组合判成「不完整」并删掉它
+            # （按需分支只激活命中组合的变体、不新建）；单取值行原生会自己补到所有变体上，
+            # 不需要本模块介入。命中时不能走「原生保存」，必须自己把锚点写下去。
+            needs_anchoring = False
+            for variant in variants:
+                carried_lines = variant.product_template_attribute_value_ids.attribute_line_id
+                for line in attribute_lines:
+                    if line in carried_lines:
+                        continue
+                    if len(line.product_template_value_ids._only_active()) > 1:
+                        needs_anchoring = True
+                        break
+                if needs_anchoring:
+                    break
             analysis = {
                 "dynamic_attributes": self._get_variant_conversion_dynamic_attributes(),
                 "lost_variant_ids": lost,
@@ -358,6 +373,7 @@ class ProductTemplate(models.Model):
                 "lost_value_names": lost_value_names,
                 "expected_count": len(combinations),
                 "before_count": len(variants),
+                "needs_anchoring": needs_anchoring,
                 "combinations": combinations,
                 "specification": specification,
                 "added_attributes": spec_attributes - before_attributes,
@@ -424,16 +440,24 @@ class ProductTemplate(models.Model):
         return mapping, share_vendor_prices
 
     def _check_variant_conversion_combination_cap(self, attribute_lines):
-        """组合总数（各属性有效取值数的乘积）超过 ``product.dynamic_variant_limit`` 就拒绝。
+        """本次转换会落到多少个变体（组合数）超过 ``product.dynamic_variant_limit`` 就拒绝。
 
         必须在 ``itertools.product`` 枚举**之前**做：超限的配置先拒绝，而不是先把几十万个
-        组合枚举出来再拒绝（T-018）。只数取值个数，不生成任何组合。
+        组合枚举出来再拒绝（T-018）。只数取值个数，不生成任何组合。算法与
+        ``_get_variant_conversion_combinations()`` 一致：
+
+        - 只有「立即」属性：``各属性有效取值数的乘积``（与老版本一致）；
+        - 还有「按需生成」属性：``既有变体数 × 各「立即」属性有效取值数的乘积`` ——
+          按需轴不展开（每条既有变体在自己的按需取值上各展开一份），所以要多乘变体数。
         """
         self.ensure_one()
         cap = int(self.env["ir.config_parameter"].sudo().get_param(
             "product.dynamic_variant_limit", 1000))
-        total = 1
-        for line in attribute_lines:
+        managed_lines, fixed_lines = self._split_variant_conversion_lines(attribute_lines)
+        total = len(self.product_variant_ids) if fixed_lines else 1
+        if not total:
+            return                                      # 没有既有变体：转换走原生（没有可锚定的目标）
+        for line in (managed_lines if fixed_lines else attribute_lines):
             count = len(line.product_template_value_ids._only_active())
             if not count:
                 return                                  # 没有有效取值的属性不产生组合
@@ -530,6 +554,11 @@ class ProductTemplate(models.Model):
             "product.dynamic_variant_limit", 1000))
         inherit_variant_data = self._get_variant_conversion_inherit_variant_data()
         separate_variant_prices = self._get_variant_conversion_separate_variant_prices()
+        if self._get_variant_conversion_dynamic_attributes():
+            # 「按需生成」的产品以后还会被 Odoo 在订单里新建变体，而分离会把模板级的
+            # 供应商价格 / 价格表规则拆到既有变体上并删掉原记录 —— 那些新变体就再也取不到价了。
+            # 所以这类产品**不做分离**（价格记录保持模板级，对所有变体生效），台账如实记 False。
+            separate_variant_prices = False
 
         # 同一产品的转换串行化：避免两个会话同时改属性行，导致前置换算与实际不符
         self.env.cr.execute(
@@ -594,14 +623,20 @@ class ProductTemplate(models.Model):
                     "product_template_attribute_value_ids": [Command.set(anchor.ids)],
                 })
 
-            # ④ 交给 Odoo 生成缺失的组合；组合匹配上的既有变体被复用
+            # ④ 交给 Odoo 生成缺失的组合；组合匹配上的既有变体被复用。
+            #    注意：产品带「按需生成」属性时 Odoo **一个变体都不会新建**
+            #    （``_create_variant_ids()`` 在该分支只激活命中组合的既有变体），
+            #    所以「展开『立即』轴」应当存在的那些组合要我们自己补（T-039）——
+            #    按需轴的其它取值不在本次计划里，仍然留给订单去创建。
             self._create_variant_ids()
+            new_variants = self._create_variant_conversion_missing_variants(
+                attribute_lines) or (self.product_variant_ids - originals)
 
             # ⑤ 后置断言：任何不符合预期的情况都整单回滚，不留半成品
             self._check_variant_conversion_result(anchors, expected_count)
+            new_variants = self.product_variant_ids - originals
 
             # ⑥ 显式记录归属：转换台账 + 谱系行 + 变体上的来源字段
-            new_variants = self.product_variant_ids - originals
             self._create_variant_conversion_lineage(
                 originals, anchors, old_values, new_variants,
                 new_attributes, attribute_lines, share_vendor_prices,
@@ -625,12 +660,73 @@ class ProductTemplate(models.Model):
 
         return new_variants
 
+    def _create_variant_conversion_combination(self, combination):
+        """用 Odoo 自己的入口建「这个组合」的变体，返回建出来的变体（失败时返回空记录集）。
+
+        走 ``product.template._create_product_variant()`` —— 销售配置器建变体调的就是它，
+        所以行为与「订单期创建」完全一致。
+
+        一个坑：它内部用 ``_is_combination_possible()``（``ignore_no_variant=False``）校验组合，
+        要求组合里带上「不生成变体」属性行的取值；而本模块的组合枚举是 ``ignore_no_variant=True``
+        的口径（那些取值不参与变体）。所以这里给每条「不生成变体」的属性行补一个占位取值
+        （第一个有效取值）让校验通过 —— Odoo 建变体时会用 ``_without_no_variant_attributes()``
+        把它们丢掉，不会写进变体。
+        """
+        self.ensure_one()
+        no_variant_values = self.env["product.template.attribute.value"]
+        for line in self.valid_product_template_attribute_line_ids.filtered(
+                lambda ptal: ptal.attribute_id.create_variant == "no_variant"):
+            no_variant_values |= line.product_template_value_ids._only_active()[:1]
+        return self._create_product_variant(combination | no_variant_values)
+
+    def _create_variant_conversion_missing_variants(self, attribute_lines):
+        """补上本次转换计划里「还没有变体」的组合（只对带「按需生成」属性的产品有效）。
+
+        Odoo 的 ``_create_variant_ids()`` 一遇到按需生成的属性就整段跳过新建
+        （见其 ``if not tmpl_id.has_dynamic_attributes()``），所以「展开『立即』轴」得到的
+        组合必须自己建 —— 建法用 Odoo 自己的 ``_create_product_variant()``（订单期同款）。
+        按需轴的其它取值**不在本次计划里**，仍然等订单创建（这正是「按需」的含义）。
+
+        :param attribute_lines: 转换后的属性行（``_get_variant_conversion_attribute_lines()``）。
+        :return: 本次新建的变体记录集（没有按需属性、或计划里没有缺失组合时为空）。
+        :rtype: product.product
+        """
+        self.ensure_one()
+        _, fixed_lines = self._split_variant_conversion_lines(attribute_lines)
+        if not fixed_lines:
+            return self.env["product.product"]
+
+        planned = self._get_variant_conversion_combinations(attribute_lines)
+        existing = {
+            frozenset(variant.product_template_attribute_value_ids.ids)
+            for variant in self.with_context(active_test=False).product_variant_ids
+        }
+        created = self.env["product.product"]
+        for combination in planned:
+            signature = frozenset(combination.ids)
+            if signature in existing:
+                continue
+            variant = self._create_variant_conversion_combination(combination)
+            if not variant:
+                raise UserError(_(
+                    "The combination %(values)s of %(product)s could not be created; nothing has been changed.",
+                    values=self._get_variant_conversion_combination_label(combination),
+                    product=self.display_name,
+                ))
+            existing.add(signature)
+            created |= variant
+        return created
+
     # ------------------------------------------------------------------
     # 校验
     # ------------------------------------------------------------------
 
     def _check_variant_conversion_allowed(self):
-        """入口校验：非组合产品、有变体、无按需生成属性、无归档变体。"""
+        """入口校验：非组合产品、有变体、无归档变体。
+
+        「按需生成」的属性**不再拒绝**（`T-039`）：转换只展开「立即」轴，
+        按需轴按每条既有变体现带的取值钉住，不预建它的其它取值（那些留给 Odoo 在订单里创建）。
+        """
         self.ensure_one()
         if self.type == "combo":
             raise UserError(_("A combo product cannot be converted into a multi-variant product."))
@@ -639,9 +735,6 @@ class ProductTemplate(models.Model):
                 "The product %(product)s has no variant to keep.",
                 product=self.display_name,
             ))
-        dynamic_attributes = self._get_variant_conversion_dynamic_attributes()
-        if dynamic_attributes:
-            raise UserError(self._get_variant_conversion_dynamic_message(dynamic_attributes))
         archived = self.with_context(active_test=False).product_variant_ids - self.product_variant_ids
         if archived:
             raise UserError(_(
@@ -673,11 +766,8 @@ class ProductTemplate(models.Model):
                     "Attribute %(attribute)s never creates variants, so it cannot be used to convert the product.",
                     attribute=attribute.display_name,
                 ))
-            if attribute.create_variant != "always":
-                raise UserError(_(
-                    "Attribute %(attribute)s creates variants on demand; set its variant creation mode to instantly before converting the product.",
-                    attribute=attribute.display_name,
-                ))
+            # 「按需生成」的属性（create_variant == 'dynamic'）是支持的（T-039）：
+            # 它不参与展开，只把每条既有变体现带的取值钉住 —— 见 _split_variant_conversion_lines()。
             if not values:
                 raise UserError(_(
                     "Attribute %(attribute)s needs at least one value.",
@@ -817,20 +907,19 @@ class ProductTemplate(models.Model):
             lambda attribute: attribute.create_variant == "dynamic")
 
     def _get_variant_conversion_dynamic_message(self, dynamic_attributes):
-        """「按需生成」属性的报错文案（前端预览与服务端拒绝共用同一份，保证两处一字不差）。
+        """建产品时带「按需生成」属性的报错文案（``create()`` 用；`T-039` 起只在这一处用）。
 
-        必须给出**能走通**的出路：Odoo 不允许修改「已被产品使用」的属性的变体生成方式
-        （``product.attribute.write()`` 里那条 ``number_related_products`` 检查），
-        所以「改成「立即」」这一步只能先把属性从产品上摘下来再做 —— 只说「去改属性设置」
-        会让用户撞上 Odoo 自己的报错，等于没有出路。
+        这种属性 Odoo 不会预建变体（变体在第一次下单时创建），所以**建产品**时带上它，
+        产品会一条变体都没有 —— 既卖不了，也进不了本模块的转换流程（转换要求至少有一条既有变体）。
+        出路必须是**能走通的**：先建产品（不带这个属性）、保存，再把属性加到产品上
+        （本模块会按归属保住既有变体），或者把该属性的变体生成方式改成「立即」再一起建。
         """
         return _(
             "The attribute %(attributes)s of %(product)s creates its variants on demand: Odoo itself creates "
-            "those variants (a product saved with such an attribute gets no variant at all, and later ones are "
-            "created from the orders), so there is nothing here for this module to confirm or keep track of. "
-            "Nothing has been changed. To manage the variants of this product from this form, remove that "
-            "attribute from the product first — Odoo only lets you change an attribute's Variant Creation "
-            "while it is used on no product — then set its Variant Creation to Instantly and add it back.",
+            "those variants from the orders, so a product saved with such an attribute gets no variant at all "
+            "(the first one is created the first time it is ordered). Create the product without that "
+            "attribute and add it to the product afterwards — the conversion then keeps the existing variants "
+            "— or set its Variant Creation to Instantly before saving.",
             attributes=", ".join(dynamic_attributes.mapped("display_name")),
             product=self.display_name,
         )
@@ -845,15 +934,65 @@ class ProductTemplate(models.Model):
                 added |= spec["attribute"]
         return added
 
-    def _get_variant_conversion_combinations(self, attribute_lines):
-        """按 Odoo 自身的组合规则列出转换后会存在的组合（每个组合是一组 ptav）。
+    def _split_variant_conversion_lines(self, attribute_lines):
+        """把属性行分成「本模块负责展开的」与「固定取值、不展开的」两类。
 
-        与 ``_create_variant_ids`` 内的算法一致（同样的取值集合、同样的排除规则过滤），
-        因此既能直接当作转换后的变体总数来断言，也能拿来生成确认弹窗里的组合清单。
+        - 展开的（``create_variant == 'always'``）：转换会对它们的取值做笛卡尔积，
+          这是本模块一直以来的行为；
+        - 固定的（``create_variant == 'dynamic'``，即「按需生成」）：变体由 Odoo 按订单创建，
+          转换**不展开**它们的其它取值，只把每条既有变体现在带的取值「钉住」（见 ``T-039``）。
         """
         self.ensure_one()
-        combinations = itertools.product(
-            *[line.product_template_value_ids._only_active() for line in attribute_lines])
+        fixed = attribute_lines.filtered(
+            lambda line: line.attribute_id.create_variant == "dynamic")
+        return attribute_lines - fixed, fixed
+
+    def _get_variant_conversion_fixed_values(self, variant, fixed_lines):
+        """某条既有变体在「按需生成」各轴上被钉住的取值（每个固定轴恰好一个 ptav）。
+
+        规则：变体已经带着该轴的取值就用它（**不动既有数据**）；没有（例如本次刚加上这个
+        按需属性）就用该轴第一个有效取值 —— 与 ``_get_variant_conversion_default_mapping()``
+        的默认规则同源，也与 Odoo 自己「按需变体默认取第一个可能组合」的口径一致。
+        """
+        self.ensure_one()
+        values = self.env["product.template.attribute.value"]
+        for line in fixed_lines:
+            ptavs = line.product_template_value_ids._only_active()
+            values |= (variant.product_template_attribute_value_ids & ptavs)[:1] or ptavs[:1]
+        return values
+
+    def _get_variant_conversion_combinations(self, attribute_lines):
+        """列出这次转换会落到哪些组合（每个组合是一组 ptav）。
+
+        - **只有「立即」属性**（老路径）：所有属性的取值做笛卡尔积，再按 Odoo 的排除规则过滤
+          —— 与 ``_create_variant_ids`` 内的算法一致，因此可以直接当作转换后的变体总数来断言；
+        - **有「按需生成」属性**（`T-039`）：按需轴**不展开**（它的其它取值由 Odoo 在订单里创建），
+          只把每条既有变体现在带的按需取值钉住，然后在「立即」各轴上展开一份 ——
+          即「每条既有变体 × 各『立即』属性的取值组合」，最后同样过一遍排除规则与去重。
+
+        两种情况下这个集合都等于「转换后应当存在的变体集合」，所以既能当预期数量断言，
+        也能拿来生成确认弹窗里的组合清单。
+        """
+        self.ensure_one()
+        managed_lines, fixed_lines = self._split_variant_conversion_lines(attribute_lines)
+        if not fixed_lines:
+            combinations = itertools.product(
+                *[line.product_template_value_ids._only_active() for line in managed_lines])
+            return list(self._filter_combinations_impossible_by_config(
+                combinations, ignore_no_variant=True))
+        managed_combinations = list(itertools.product(
+            *[line.product_template_value_ids._only_active() for line in managed_lines]))
+        combinations = []
+        seen = set()
+        for variant in self.product_variant_ids:
+            fixed_values = self._get_variant_conversion_fixed_values(variant, fixed_lines)
+            for managed in managed_combinations:
+                combination = fixed_values | self.env["product.template.attribute.value"].concat(*managed)
+                signature = frozenset(combination.ids)
+                if signature in seen:
+                    continue
+                seen.add(signature)
+                combinations.append(combination)
         return list(self._filter_combinations_impossible_by_config(
             combinations, ignore_no_variant=True))
 

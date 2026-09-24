@@ -3,6 +3,82 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.6.0.0] - 2026-09-24（T-039：支持「按需生成变体」的属性 —— 只展开「立即」轴）
+
+> 修订日期：2026-09-24 ｜ 类型：功能新增（+y）｜ 影响文件：`models/product_template.py` /
+> `static/src/js/variant_conversion_dialog.js` / `static/src/xml/variant_conversion_dialog.xml` /
+> `tests/test_product_variant_conversion.py` / `i18n/zh_CN.po` / `__manifest__.py` /
+> `AGENTS.md` / `README.md`（无数据结构变化、无迁移）
+
+### 优化目标
+
+`19.0.5.3.1` 起，只要产品带「按需生成变体」（`create_variant == 'dynamic'`）的属性，
+本模块就**整块拒绝**改属性。但这条边界很痛：**Odoo 的产品导入会把新建属性自动设成「按需生成」**，
+导入来的产品因此在表单里改不了任何属性，而 Odoo 又不允许修改「已被产品使用」的属性的变体生成方式 ——
+用户只能走「归档 / 删除变体 → 摘掉属性行 → 改属性设置 → 再加回来」这条难路。
+
+`T-039` 把这条边界打开：**只展开「立即」（`always`）的属性轴，按需轴不展开**。
+
+### 变更
+
+1. **组合枚举按「轴」分类**：`_split_variant_conversion_lines()` 把属性行分成
+   「本模块负责展开的（`always`）」与「固定取值、不展开的（`dynamic`）」；
+   `_get_variant_conversion_combinations()` 改成「每条既有变体 × 各『立即』属性的取值组合」
+   （按需轴取该变体现带的取值，没有则取第一个取值 —— 见 `_get_variant_conversion_fixed_values()`），
+   最后仍过一遍 Odoo 的排除规则并去重。**只有「立即」属性时结果与老版本逐条一致**。
+2. **新增变体自己建**：`_create_variant_ids()` 遇到按需生成的属性会整段跳过新建，所以
+   `_create_variant_conversion_missing_variants()` 用 Odoo 自己的 `_create_product_variant()`
+   （销售配置器同款入口）补上「计划里还没有变体」的组合；按需轴的其它取值**不建**，
+   仍然由 Odoo 在订单里创建。`_create_variant_conversion_combination()` 负责给
+   「不生成变体」的属性行补占位取值，好通过 `_is_combination_possible()` 的校验。
+3. **原生会丢变体时必须自己锚定**：分析新增 `needs_anchoring` —— 某条既有变体没带上某个
+   **多取值**属性行的取值时，原生 `_create_variant_ids()` 会把它的组合判成「不完整」而删掉它；
+   这种情况（例如给产品加一个多取值的按需属性）不再走「原生保存」，改为走转换、用默认归属锚定
+   （没有新变体，所以不弹窗）。
+4. **带按需属性的产品不做价格分离**：分离会把模板级的供应商价格 / 价格表规则拆到既有变体上并删掉
+   原记录，而这类产品以后还会由 Odoo 在订单里新建变体 —— 那些新变体就再也取不到价格。
+   所以这类产品保持模板级共享（台账 `separate_variant_prices` 记为否），弹窗里也不再显示勾选框。
+5. **组合数上限按新口径**：带按需属性时 = `既有变体数 × 各「立即」属性有效取值数乘积`（按需轴不乘）。
+6. **保留的拦截**：建产品时带按需生成的属性仍然拒绝（原生会建出「有属性、没变体」的产品），
+   文案改为**可执行**的出路：先不带该属性把产品建好、保存，再把属性加到产品上（本模块会保住既有变体）。
+7. **弹窗提示**：预览接口新增 `dynamic`，弹窗据此显示「按需轴的其它取值不会现在建变体」的提示，
+   并隐藏供应商价格勾选框。
+8. 删除已无用的两条拒绝文案（属性行级别的「按需生成」拒绝、入口校验里的同款），同步 `zh_CN.po`；顺手补上
+   `code:.../variant_conversion_dialog.js:0` 那条 `%(label)s — %(count)s on hand` 缺失的
+   `#. odoo-javascript` 标记（缺标记的前端译文**永远不下发且不报错**，弹窗「在手 N」的中文一直没生效 ——
+   即 `T-026` 在本模块的那 1 条）。
+9. 测试 46 → **47 项**：`test_dynamic_attribute_is_refused` 换成两条正向用例
+   （按需产品只展开「立即」轴 / 加按需属性不能丢变体），并更新「订单期变体不被接管」那条边界用例。
+
+### 影响
+
+- **导入来的产品现在可以正常改属性**：加「立即」属性会弹窗确认归属，既有变体一条不少，
+  只多出「展开轴」带来的变体；按需轴的其它取值仍然按订单创建
+- 给既有产品加**多取值**的按需属性：既有变体不再被原生删掉（改由本模块锚定到第一个取值）
+- 带按需属性的产品：价格记录保持模板级（不做按需分离）——这是刻意的，见上文第 4 条
+- 只有「立即」属性的产品（绝大多数）：行为**一字不变**（46 项老用例全部保持通过）
+- 无数据结构变化、无迁移
+
+### 文档
+
+- 模块 `README.md`（场景矩阵 S11、使用前提、被拒绝的改动、价格分离、已知边界、后续迭代、验证清单）、
+  `AGENTS.md`（L1 约束 18 改写、L2 P5 覆盖矩阵与缺口 10 结案）、本条目
+- 根 `README.md` 模块一览表版本、`TODO.md`（`T-039` 移入「已归档」）
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant_conversion` | 47 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,stock,sale_management` | 47 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,product_dimension` | 47 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,product_reference,product_card_view,sale_management` | 57 项 0 failed / 0 error ✓ |
+| shell 实测（按需产品加「立即」属性） | 计划组合 4 条（未展开未被使用的按需取值）、既有变体原记录保留、新增 2 条带来源字段、台账 1 / 谱系 4、`separate_variant_prices=False` ✓ |
+| shell 实测（加多取值按需属性） | 预览 `required=False`、原变体记录存活并锚定到第一个取值（原生原本会删掉它）✓ |
+| 目标环境 | 导入产品加属性、弹窗提示与中文文案**待验证** |
+
+---
+
 ## [19.0.5.3.2] - 2026-09-24（修：一次加两个属性时 chatter 记录抛 Expected singleton，整单回滚）
 
 > 修订日期：2026-09-24 ｜ 类型：修复（+z）｜ 影响文件：`models/product_template.py` /

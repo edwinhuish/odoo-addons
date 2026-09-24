@@ -43,7 +43,7 @@
 
 
 - [ ] T-026 ｜ `product_reference` + `sale_product_hover` + `product_image` + `product_variant_conversion` + `sale_order_no` ｜ P2 ｜ 补齐 po 里 `code:` 条目缺失的运行期注释标记（这些前端 / Python 文案一直没翻译）
-  - 背景：前端译文由 `web/controllers/utils.py::_local_web_translations()` 读 po 时按 `#. odoo-javascript` 过滤，Python `_()` 由 `CodeTranslations._load_python_translations()` 按 `#. odoo-python` 过滤 —— 缺标记的条目**永远不下发且不报错**（界面一直英文）。`task check` 现在会给警告（`--strict` 算失败），实测受影响条目（`task check` 口径，共 25 条）：`product_reference` 20 条、`sale_product_hover` 2 条、`product_image` / `product_variant_conversion` 各 1 条（均为 JS）、`sale_order_no` 1 条（Python）；`product_card_view` 的 5 条已随 T-025 修掉
+  - 背景：前端译文由 `web/controllers/utils.py::_local_web_translations()` 读 po 时按 `#. odoo-javascript` 过滤，Python `_()` 由 `CodeTranslations._load_python_translations()` 按 `#. odoo-python` 过滤 —— 缺标记的条目**永远不下发且不报错**（界面一直英文）。`task check` 现在会给警告（`--strict` 算失败），实测受影响条目（`task check` 口径，共 25 条）：`product_reference` 20 条、`sale_product_hover` 2 条、`product_image` 1 条（JS）、`sale_order_no` 1 条（Python）；`product_card_view` 的 5 条已随 T-025 修掉、`product_variant_conversion` 的 1 条已随 `T-039`（`19.0.6.0.0`）修掉
   - 建议：给这些模块的 `code:` 条目补上对应注释（按引用文件后缀区分 `.py` → `odoo-python`，`.js` / `.xml` → `odoo-javascript`），逐模块升 `+z` 版本并记 CHANGELOG；补完把 `check_repo.py` 里这两条从 `report.warn` 改回 `report.fail`
   - 验收方式：`task check -- --strict` 不再报这两类警告（`检测：` 条件只能做单条文本匹配，覆盖不了「所有 `code:` 条目都带上标记」，故本条目不写检测行）
   - 关联：`product_card_view/AGENTS.md` → L2 P5；根 `AGENTS.md` 4.3「`code:` 译文在运行时按注释标记放行」
@@ -53,14 +53,6 @@
   - 建议：逐模块把列表项改成「一条一行」（不换行）；改完必须同步该模块 `i18n/zh_CN.po` 里 `model:ir.module.module,description:base.module_<模块>` 的 `msgid`（必须与 `textwrap.dedent(manifest["description"])` 逐字符一致，`task check` 会卡住）；每模块升 `+z` 版本并记 CHANGELOG
   - 验收方式：安装该模块时日志不再出现上述 docutils 告警（暂无自动检测条件：`检测：` 语法只支持单条文本 / 正则匹配，覆盖不了「描述整体 RST 合法」；试过用 docutils 复现该告警未成功，装库看日志最可靠）
   - 关联：`product_dimension/__manifest__.py` 的描述写法；根 `AGENTS.md` → i18n 约束
-
-- [ ] T-039 ｜ `product_variant_conversion` ｜ P1 ｜ 支持「按需生成变体」（`create_variant == 'dynamic'`）的属性：只展开「立即」的属性轴，按需轴固定取值不展开
-  - 背景：现在只要产品上有按需生成的属性就**整块拒绝**（`write()` / 预览 / `create()` 三处，见 `19.0.5.3.1`），理由是「变体由 Odoo 按订单创建，本模块没有归属可确认」。但两个现实问题让这条边界很痛：① **Odoo 的产品导入会把新建属性自动设成「按需生成」**（`product.product._load_records_create()`），且导入自己逐行建变体，导入来的产品因此在表单里改不了任何属性；② Odoo 不允许修改「已被产品使用」的属性的变体生成方式，用户只能走「先归档 / 删除变体 → 摘掉属性行 → 改属性设置 → 再加回来」这条难路。
-  - 做法：属性行分成两类 —— 「本模块负责展开的」（`always`）与「固定取值、不展开的」（`dynamic`）。组合枚举、默认归属、组合数上限、后置断言都只对前者做笛卡尔积，动态轴取「该既有变体现有取值（没有则第一个取值）」。既有变体照旧按归属锚定、全部保留；**新增变体必须自己调 `product.product._create_product_variant()`**（`_create_variant_ids()` 遇到按需生成的属性会整段跳过，不会建任何变体）；弹窗语义要跟着改（动态轴不展开 = 未分配的其它动态取值不建变体，需要在文案里说清）。
-  - 风险：这条会动到本模块的核心模型（「变体数 == 组合数」在按需属性下不再成立），必须先在 `_analyze_variant_conversion_write()` 里把「按需产品」的预期变体数算法定清楚，并补测试锁住「既有变体一条不少 + 只多了展开轴带来的变体」。
-  - 已核实的两条事实（`19.0.5.3.2` 实测）：① 按需生成的产品，变体在**订单期**由 Odoo 自己建（配置器 → `sale.order.line` → `product.template._create_product_variant()` → `product.product.create()`，不经过 `product.template.write()`）—— 本模块既不拦也不接管（无来源字段 / 台账 / 谱系，成本 / 体积 / 重量保持 0），`T-039` 落地时若要让这些变体也有来源与继承，得在「订单期创建」这条路上找接入点（**不要**全局 hook `product.product.create`）；② 非沙盒的 `product.template.attribute.line.create()` 会自己调 `_create_variant_ids()`，对按需产品会把组合「不完整」的既有变体**直接删掉**（实测 2 条在用变体消失）—— 属性行守卫目前只覆盖「移走取值 / 删行」，`T-017` 这条要一并补上「新增行」。
-  - 验收方式：`task test -- product_variant_conversion` 全绿 + 手工验证：导入一个带属性取值的产品（属性被自动设成按需生成）→ 在表单里加一个 `always` 属性 → 弹窗确认后既有变体全保留、只多出展开轴的变体，动态轴的其它取值仍不建变体。
-  - 关联：模块 `AGENTS.md` → L1 约束 18、L2 P5 缺口 1 / 10；根 `AGENTS.md` → 解耦矩阵；`19.0.5.3.1` / `19.0.5.3.2` 的 CHANGELOG 条目
 
 ## 搁置 / 放弃
 
@@ -72,6 +64,13 @@
 
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
+
+- **T-039 支持「按需生成变体」（`create_variant == 'dynamic'`）的属性：改属性只展开「立即」轴** ｜ `product_variant_conversion` ｜ P1
+  - 完成日期：2026-09-24 ｜ 状态：**已交付，待目标环境验证**
+  - 落地版本：`product_variant_conversion` `19.0.6.0.0`
+  - 做法：属性行按 `_split_variant_conversion_lines()` 分成「展开的（`always`）」与「固定取值的（`dynamic`）」；组合枚举 = **每条既有变体 × 各「立即」属性的取值组合**（按需轴取该变体现带的取值，没有则第一个取值），按需轴的其它取值**不预建变体**；缺失组合自己调 `_create_product_variant()` 补（`_create_variant_ids()` 对按需属性整段跳过）；新增 `needs_anchoring` 判定，拦住「原生把缺取值的既有变体当组合不完整删掉」那条路；带按需属性的产品**不做价格分离**（否则以后订单期新建的变体取不到价）；**建产品**时带按需属性仍然拦住（原生会建出「有属性、没变体」的产品），文案给出「先建产品、保存，再加属性」的出路
+  - 验收记录：模块 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.6.0.0]`；47 项测试 0 failed / 0 error（`product` 单装、`+stock,sale_management`、`+product_dimension`、`+product_reference,product_card_view,sale_management` 四组）；shell 实测「只展开『立即』轴、未被使用的按需取值不建变体」「加多取值按需属性时既有变体存活并锚定到第一个取值」
+  - 遗留：目标环境验证「导入来的按需产品加属性」「弹窗按需提示与中文文案」；`19.0.5.3.2` 实测的两条边界仍未闭环 —— ① 订单期由 Odoo 自建的变体不带来源 / 继承（本模块当时不接管，**之后**的属性改动才会走转换）；② 非沙盒的 `product.template.attribute.line.create()`（其它模块 / 脚本）会把按需产品的既有变体**直接删掉**，属性行守卫目前未覆盖 `create()`
 
 - **T-038 修复产品列表「Images」列看不到图片（列绑的是图库计数，应显示产品主图）** ｜ `product_image` ｜ P1
   - 完成日期：2026-09-23 ｜ 状态：**已交付，待目标环境界面复验**

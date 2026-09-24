@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.5.3.2`（19.0.5.3.2：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
+- 当前版本：`19.0.6.0.0`（19.0.6.0.0：**`T-039` 支持「按需生成变体」的属性** —— 只展开「立即」轴、按需轴按既有变体现带取值钉住、缺失组合自己用 `_create_product_variant()` 补、带按需属性的产品不做价格分离；建产品时带按需属性仍然拦住；`19.0.5.3.2`：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -121,18 +121,23 @@
     - 违反后果：属性主数据里删取值会连坐删 / 归档在用变体（库存与单据跟着消失），绕过整个归属确认
     - 已知不拦：**归档**属性取值（Odoo 原生也不拦）——归档后变体仍带着该取值，见 README →「已知边界」
 
-18. **「按需生成」属性必须在「建产品」与「改属性」两处都拦住，且报错要点名属性 + 给出可执行的出路**
-    - `create()`：带按需生成属性的产品，原生 `_create_variant_ids()` 会整段跳过建变体
-      （`if not tmpl_id.has_dynamic_attributes()`）→ 产品有属性却没变体，既卖不了也进不了转换流程
-      （转换前提是「至少有一条既有变体可以保留」）→ 直接拒绝，别留半成品
-    - 文案由 `_get_variant_conversion_dynamic_message()` **一处提供**（`write()` / 预览 / `create()` 共用），
-      必须**点名**是哪个属性，并给**能走通**的出路：Odoo 不允许修改「已被产品使用」的属性的变体生成方式
-      （`product.attribute.write()` 的 `number_related_products` 检查），所以顺序必须是
-      「先把属性从产品上移除 → 改属性设置为「立即」→ 加回产品」；只说「去改设置」等于没有出路
-    - 属性来源：`_get_variant_conversion_dynamic_attributes()`（与 Odoo `has_dynamic_attributes()` 同源，
-      但返回记录集以便点名）；**不要**退回 `self.has_dynamic_attributes()` 的自己造判断
-    - 违背后果：用户撞上「改不了属性设置、也摘不掉属性行」的死结（实践中**产品导入**会把新建属性
-      自动设成按需生成，见 `product.product._load_records_create()`，很容易踩到）
+18. **「按需生成」（`dynamic`）属性：改属性要支持，只展开「立即」轴；建产品时要拦住**（`T-039`）
+    - 改属性（`write()` / 预览 / 转换）：**支持**。属性行按 `_split_variant_conversion_lines()` 分成
+      「展开的（`always`）」与「固定取值的（`dynamic`）」；组合枚举 = **每条既有变体 × 各「立即」属性的取值组合**
+      （按需轴取该变体现带的取值，没有则取第一个），因此按需轴的其它取值**永远不预建变体**（等订单创建）
+    - 新增变体必须**自己建**：`_create_variant_ids()` 遇到按需属性整段跳过新建
+      （`if not tmpl_id.has_dynamic_attributes()`），所以走 `_create_variant_conversion_missing_variants()`
+      → `_create_product_variant()`（销售配置器同款入口）；**不要**自己拼 `product.product.create()`
+    - 原生会丢变体时必须自己锚定：`needs_anchoring`（某条既有变体缺某个**多取值**属性行的取值）→
+      不能走「原生保存」，走转换、用默认归属锚定（无新变体 → 不弹窗）；否则原生会把它当组合不完整删掉
+    - **不做价格分离**：带按需属性的产品保持模板级价格（分离会拆走模板级记录并删除，之后订单期新建的
+      变体会取不到价），台账 `separate_variant_prices` 记否，弹窗也不显示勾选框
+    - `create()`：**仍然拦住**带按需属性的产品 —— 原生会建出「有属性、没变体」的产品。
+      文案由 `_get_variant_conversion_dynamic_message()` 一处提供（`#. odoo-python`），必须点名属性并给
+      **能走通**的出路：「先不带该属性建产品、保存，再把属性加到产品上（届时转换会保住既有变体）」；
+      只说「去改成「立即」」等于没有出路（Odoo 不允许修改已被产品使用的属性的变体生成方式）
+    - 违背后果：回到 `19.0.5.3.1` 的死结 —— 导入来的产品（导入会把新建属性设成按需生成，
+      见 `product.product._load_records_create()`）改不了任何属性，而属性设置也改不动
 
 ---
 
@@ -173,7 +178,7 @@
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
 | `views/product_variant_conversion_views.xml` | 转换台账的列表 / 详情视图与动作 |
 | `security/ir.model.access.csv` | 两个模型的访问规则（`base.group_user` 与 `product.group_product_variant`） |
-| `tests/test_product_variant_conversion.py` | 46 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、按需生成属性的「建产品 / 改属性」两处拦截与文案、**订单期自建变体不接管（边界）**、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter（含**一次加两个属性**的 chatter 回归）、加取值时的来源映射与尺寸落到对应变体、装了 `product_dimension` 时的尺寸继承、装了 `product_reference` 时的共享参考号交接） |
+| `tests/test_product_variant_conversion.py` | 47 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、按需生成属性的「只展开『立即』轴 / 按需轴钉住既有取值 / 建产品时拦截」、**订单期自建变体不接管（边界）**、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter（含**一次加两个属性**的 chatter 回归）、加取值时的来源映射与尺寸落到对应变体、装了 `product_dimension` 时的尺寸继承、装了 `product_reference` 时的共享参考号交接） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目 |
 | `README.md` | 用户可见功能、字段表、归属怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
@@ -395,7 +400,8 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 | 删取值 / 删属性行 | blocked | 拒绝保存 | ✅ |
 | 组合数变少（改动后被排除规则过滤） | blocked | 拒绝保存 | — |
 | 多记录批量写入 | 视情况 | 会动到变体 → 拒绝（表达不了逐条归属）；不动到变体 → 放行 | — |
-| 按需生成变体（dynamic）的属性（改属性 / **建产品**） | blocked | 拒绝，点名属性 + 给出「先摘掉该属性行 → 改属性设置 → 再加回」的出路 | ✅ |
+| 按需生成变体（dynamic）的属性（**改属性**） | required | **支持**（`T-039`）：只展开「立即」轴，按需轴按既有变体现带取值钉住，缺失组合自己建 | ✅ |
+| **建产品时**带按需生成变体（dynamic）的属性 | blocked | 拒绝（原生会建出 0 变体），提示先建产品、保存再加属性 | ✅ |
 | 带归档变体的产品 | blocked | 拒绝，要求先恢复 / 删除 | — |
 | combo 产品 | blocked | 拒绝 | — |
 
@@ -416,12 +422,12 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   弹窗勾选框**默认不勾选**，勾上时供应商价格退回模板级共享（`_share_vendor_prices_with_variants()`：
   所有变体取同一批数值；价格表规则仍按变体分离）。
 - 模板级字段（`list_price`、`taxes_id`、`uom_id`）天然覆盖全部变体；ptav 级（`price_extra`）随取值走。
-- **按需生成产品的「订单期变体」完全在本模块之外**（`19.0.5.3.2` 核实）：配置器 → `sale.order.line`
-  → `product.template._create_product_variant()` → `product.product.create()`，全程不经过 `product.template.write()`，
-  所以本模块**不拦、也不接管**：不写台账 / 谱系 / 来源字段，也不做按谱系继承（继承只发生在
-  `_apply_variant_data_inheritance()`，即**本模块自己的转换**里）。这类产品的属性改动本来就被拒（L1 约束 18），
-  所以它的变体永远由 Odoo 自己建 —— 想让它也有来源 / 继承，只能等 `T-039`。（`webhook` 式地 hook
-  `product.product.create` 会波及全库所有变体创建，风险远大于收益，**不要**顺手加。）
+- **按需生成产品的「订单期变体」完全在本模块之外**（`19.0.5.3.2` 核实，`T-039` 后依然成立）：配置器 →
+  `sale.order.line` → `product.template._create_product_variant()` → `product.product.create()`，
+  全程不经过 `product.template.write()`，所以本模块**不拦、也不接管**：不写台账 / 谱系 / 来源字段，
+  也不做按谱系继承（继承只发生在 `_apply_variant_data_inheritance()`，即**本模块自己的转换**里）。
+  这些变体是「Odoo 的」；**之后**的属性改动会走本模块的转换，届时新增的变体才有来源与继承。
+  （`webhook` 式地 hook `product.product.create` 会波及全库所有变体创建，风险远大于收益，**不要**顺手加。）
 - **字段归属与「单变体桥接」（T-016 核实结论，完整表见 `README.md` →「属性归属审计」）**：
   - `product.product._inherits = {'product.template': 'product_tmpl_id'}`：模板字段在变体上是**委托**关系；
   - 但 `barcode` / `standard_price` / `volume` / `weight` / `default_code` 是 `product.product` **自己声明的存储字段**，
@@ -498,10 +504,12 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 7. **弹窗未展示在手数量**：预览已返回 `variants[].on_hand`，模板只渲染了 `label`。
 8. **前端无自动化测试**：28 项都是服务端测试，弹窗与钩子靠手工验证（见 `README.md` →「验证清单」）。
 9. **有代码无测试的服务端分支**（多记录写入、归档变体、dynamic 属性已于 `19.0.4.0.0` 补测）：combo 产品（构造合法组合产品需要先配 combo choice）、组合被排除规则过滤（排除规则本身会先让原生收编变体，难以构造）、无 `stock` / 无读权限时的降级。
-10. **「按需生成」属性只做到「拦住 + 讲清楚」，没做到「支持」**（`19.0.5.3.1` 的边界，见 `TODO.md` → `T-039`）：
-    `write()` / `create()` 两处都拒绝，而**产品导入**（`product.product._load_records_create()` 会把新建属性设成按需生成、并自己逐行建变体）绕过 `create()` 的拦截（它走 `create_product_product=False`），
-    于是导入来的产品一旦带这种属性，就只剩「先归档 / 删除变体 → 摘掉属性行 → 改属性设置 → 再加回来」这条难走的路。
-    真正的支持是「只展开 `always` 的属性轴、按需轴固定取值不展开」，且新建变体必须自己调 `_create_product_variant()`（`_create_variant_ids()` 对按需生成的属性整段跳过）—— 需要动组合枚举、归属默认值、后置断言与弹窗语义，属功能级改动。
+10. ~~「按需生成」属性只做到「拦住 + 讲清楚」，没做到「支持」~~ **已解决**（`T-039`，`19.0.6.0.0`）：
+    只展开 `always` 的属性轴、按需轴按既有变体现带取值钉住（`_split_variant_conversion_lines()` /
+    `_get_variant_conversion_fixed_values()`），缺失组合自己调 `_create_product_variant()` 补；
+    带按需属性的产品不做价格分离。**残留边界**：① 建产品时带按需属性仍然拒绝（原生会建出 0 变体，
+    见 L1 约束 18）；② 纯按需且 0 变体的产品本模块不介入（没有既有变体可保，属性改动原样交给原生 ——
+    这类产品的变体由订单创建，`_get_variant_conversion_combinations()` 在没有既有变体时返回空集）。
 
 **扩展点**
 
