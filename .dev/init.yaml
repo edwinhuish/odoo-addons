@@ -39,7 +39,7 @@ addons:
   - product_image
   - product_dimension
   - product_reference
-  - product_variant_conversion
+  - product_variant
   - sale_order_no
   - sale_product_hover
   - web_image_paste
