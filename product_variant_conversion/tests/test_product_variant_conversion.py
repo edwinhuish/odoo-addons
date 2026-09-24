@@ -1271,3 +1271,21 @@ class TestProductVariantConversion(TransactionCase):
         self.assertEqual(len(new_variants), 2)
         self.assertEqual(len(anchors), len(originals))
         self.assertTrue(product.message_ids)
+
+    def test_adding_two_attributes_at_once_is_logged_with_both_names(self):
+        """一次保存同时加两个属性：chatter 记录必须能处理「两条属性」的多记录集。
+
+        回归用例：`_log_variant_conversion()` 早期写成 `added_attributes.display_name`
+        （多记录集取单值 → `ValueError: Expected singleton`），而它在转换的最后一步，
+        一旦抛错就让整单回滚 —— 一次只加一个属性时不会触发，所以漏了。
+        """
+        product = self._create_product()
+        commands = (self._set_commands(product, self.color, self.color.value_ids)
+                    + self._set_commands(product, self.size, self.size.value_ids))
+        preview = self._preview(product, commands)
+        self.assertTrue(preview["required"])
+        self._confirm(product, commands, self._payload(self._default_rows(preview)))
+        self.assertEqual(product.product_variant_count, 4)
+        chatter = " ".join(product.message_ids.mapped("body"))
+        self.assertIn(self.color.display_name, chatter)
+        self.assertIn(self.size.display_name, chatter)

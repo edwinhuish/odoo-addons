@@ -1068,7 +1068,12 @@ class ProductTemplate(models.Model):
         return
 
     def _log_variant_conversion(self, originals, new_variants, added_attributes):
-        """在产品 chatter 里留一条转换记录：台账之外，业务侧一眼可见（T-020）。"""
+        """在产品 chatter 里留一条转换记录：台账之外，业务侧一眼可见（T-020）。
+
+        注意 ``added_attributes`` 可能是**两个以上**属性（一次保存里同时加 Color 与 Size），
+        取值必须走 ``mapped("display_name")`` —— 对多记录集取 ``.display_name`` 会直接抛
+        ``ValueError: Expected singleton``，而这一步在转换的最后、会连累整单回滚（见 AGENTS.md → L2 P3 陷阱 5）。
+        """
         if "mail.thread" not in self.env or not hasattr(self, "message_post"):
             return
         self.message_post(body=_(
@@ -1076,7 +1081,7 @@ class ProductTemplate(models.Model):
             "(added attributes: %(attributes)s).",
             kept=len(originals),
             created=len(new_variants),
-            attributes=added_attributes.display_name or "-",
+            attributes=", ".join(added_attributes.mapped("display_name")) or "-",
         ))
 
     def _get_variant_conversion_bool_parameter(self, name, default=True):

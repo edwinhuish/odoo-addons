@@ -3,6 +3,51 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.5.3.2] - 2026-09-24（修：一次加两个属性时 chatter 记录抛 Expected singleton，整单回滚）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z）｜ 影响文件：`models/product_template.py` /
+> `tests/test_product_variant_conversion.py` / `__manifest__.py` / `AGENTS.md` / `README.md`（无 i18n、无数据、无迁移）
+
+### 问题（目标环境上报）
+
+一次保存里**同时加两个属性**（例如 `Color` + `Size`）时，转换的最后一步
+`_log_variant_conversion()` 抛 `ValueError: Expected singleton: product.attribute(2, 1)`
+（`models/product_template.py` 里 `added_attributes.display_name` —— 对**多记录集**取单值），
+报错发生在转换内部，**整单回滚**：用户看到「Odoo Server Error」，属性与变体都没落库。
+
+一次只加一个属性时 `added_attributes` 是单条记录，不会触发 —— 这正是原来 44 项测试没覆盖到的原因。
+
+### 变更
+
+1. `_log_variant_conversion()` 改为 `", ".join(added_attributes.mapped("display_name")) or "-"`
+   （空记录集仍显示 `-`，即「只追加取值、没加新属性」的场景），并就地写下这条坑的说明。
+2. 新增回归用例 `test_adding_two_attributes_at_once_is_logged_with_both_names`：一次加两个属性 →
+   4 条变体、chatter 里两个属性名都在。**已实测该用例在旧代码上会复现同一条 `Expected singleton`**。
+3. 测试 44 → **45 项**。
+
+### 影响
+
+- 一次加多个属性的保存（此前**必然失败**）：现在能正常完成
+- 一次加一个属性、只追加取值、建产品：行为不变（`-` 与单属性名照旧）
+- 无数据结构变化、无迁移；无需改 po（`msgid` 未变）
+
+### 文档
+
+- 模块 `AGENTS.md`（L2 P3 新增陷阱 5：多记录集不能取 `.display_name` / `.id` 这类单值属性）、
+  `README.md`（测试数与验证清单）、本条目
+- 根 `README.md` 模块一览表版本
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant_conversion` | 45 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,stock,sale_management` | 45 项 0 failed / 0 error ✓（合计 705 项全绿） |
+| 新用例在**旧代码**上的表现 | 复现 `ValueError: Expected singleton: product.attribute(1, 2)` ✓（证明用例有效） |
+| 目标环境 | 加两个属性的保存复验**待验证**（`-u` 后重做一次即可，之前失败的那次没有写入任何数据） |
+
+---
+
 ## [19.0.5.3.1] - 2026-09-23（按需生成属性：报错点名 + 建产品时就拦住，不留「有属性、没变体」的产品）
 
 > 修订日期：2026-09-23 ｜ 类型：修复（+z）｜ 影响文件：`models/product_template.py` /

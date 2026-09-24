@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.5.3.1`（19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
+- 当前版本：`19.0.5.3.2`（19.0.5.3.2：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -173,7 +173,7 @@
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
 | `views/product_variant_conversion_views.xml` | 转换台账的列表 / 详情视图与动作 |
 | `security/ir.model.access.csv` | 两个模型的访问规则（`base.group_user` 与 `product.group_product_variant`） |
-| `tests/test_product_variant_conversion.py` | 44 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、按需生成属性的「建产品 / 改属性」两处拦截与文案、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter、加取值时的来源映射与尺寸落到对应变体、装了 `product_dimension` 时的尺寸继承、装了 `product_reference` 时的共享参考号交接） |
+| `tests/test_product_variant_conversion.py` | 45 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、按需生成属性的「建产品 / 改属性」两处拦截与文案、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter（含**一次加两个属性**的 chatter 回归）、加取值时的来源映射与尺寸落到对应变体、装了 `product_dimension` 时的尺寸继承、装了 `product_reference` 时的共享参考号交接） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目 |
 | `README.md` | 用户可见功能、字段表、归属怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
@@ -310,6 +310,16 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 **陷阱 4：`product.product` 通过 `_inherits` 继承 `product.template` 的字段**
 - 现象：给 `product.template` 加的字段会同时出现在 `field_product_product__…` 上（导出 po 时能看到两条引用）。
 - 正确做法：正常现象，别去「修」；给模板加字段时注意不要与变体上已有字段语义冲突。
+
+**陷阱 5：多记录集不能取 `.display_name` / `.id` 这类「单值」属性**（`19.0.5.3.2` 实测踩过）
+- 现象：目标环境一次加两个属性时 `web_save` 报
+  `ValueError: Expected singleton: product.attribute(2, 1)`，栈指向 `_log_variant_conversion()`。
+- 根因：`added_attributes` 是**属性记录集**（一次加 Color + Size 就是两条），
+  对多记录集取 `.display_name`（或 `.id`）会 `ensure_one()` 失败；它在转换的最后一步，抛错即**整单回滚**。
+  一次只加一个属性时是单条记录，所以 44 项测试都没碰到 —— **凡「个数可变」的记录集，取值一律走 `mapped()` / 循环**。
+- 正确做法：`", ".join(recordset.mapped("display_name")) or "-"`（空记录集要保留兜底值，
+  本模块「只追加取值、不加新属性」时 `added_attributes` 就是空的）。
+- 排查口径：`grep -rn "\.display_name\|\.id\b" models/`，逐个确认接收方是 `ensure_one()` 的记录还是记录集。
 
 ### P4：保存拦截与弹窗（改 `static/src/**` 或 `write()` 时必读）
 
