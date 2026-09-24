@@ -16,6 +16,7 @@
     -->
     <t t-name="product_variant.VariantMappingPanel">
         <div class="o_variant_mapping_panel mt-3 w-100">
+            <h5 class="o_variant_mapping_title border-bottom pb-1 mb-2" t-esc="panelTitle"/>
             <div class="text-muted" t-esc="introLabel"/>
             <div t-if="unassignedCount" class="alert alert-warning mt-2 mb-1" t-esc="unassignedHint"/>
             <div t-if="unassignedCount" class="text-muted small" t-esc="unassignedLabel"/>
@@ -51,7 +52,7 @@
 
             <div t-if="store.newCount" class="text-muted mt-2" t-esc="newVariantsLabel"/>
             <div t-if="pendingCount" class="text-muted mt-2" t-esc="pendingHint"/>
-            <div class="form-check mt-2">
+            <div class="o_variant_mapping_actions form-check mt-3">
                 <input class="form-check-input" type="checkbox" id="variant_mapping_share_vendor_prices"
                        t-att-checked="store.shareVendorPrices"
                        t-att-disabled="!isEditable"
@@ -59,6 +60,19 @@
                 <label class="form-check-label" for="variant_mapping_share_vendor_prices"
                        t-esc="shareVendorPricesLabel"/>
             </div>
+
+            <!-- 映射改过（尚未保存）时才出现：显式的保存 / 丢弃，避免依赖 Odoo 的
+                 自动保存把映射悄悄写进去（见模块 AGENTS.md → L2 P4 陷阱 20） -->
+            <div t-if="mappingDirty" class="o_variant_mapping_unsaved d-flex align-items-center gap-2 mt-2">
+                <span class="badge text-bg-warning" t-esc="unsavedLabel"/>
+                <button type="button" class="btn btn-primary btn-sm"
+                        t-att-disabled="!isEditable"
+                        t-on-click="onSaveManually" t-esc="saveManuallyLabel"/>
+                <button type="button" class="btn btn-secondary btn-sm"
+                        t-att-disabled="!isEditable"
+                        t-on-click="onDiscardChanges" t-esc="discardChangesLabel"/>
+            </div>
+            <div t-if="mappingDirty" class="text-muted small mt-1" t-esc="dirtyHint"/>
         </div>
     </t>
 

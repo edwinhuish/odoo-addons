@@ -348,6 +348,41 @@ export function buildVariantOptions(variants, rows) {
     }));
 }
 
+/** 纯函数：分配关系的稳定签名（与键的插入顺序无关，只认「哪一行占哪条变体」）。 */
+function assignmentSignature(assignment) {
+    return Object.keys(assignment || {})
+        .filter((key) => assignment[key])
+        .sort()
+        .map((key) => `${key}:${assignment[key]}`)
+        .join("|");
+}
+
+/**
+ * 纯函数：映射相对「未修改前」（``store.baseline``）有没有改动。
+ *
+ * 这是「要不要显示 Save manually / Discard all changes」的判据：只有用户真的改了分配
+ * （或改了「共享供应商价格」），才认为有未保存的映射改动。
+ * 面板第一次算完时会先建立基线（``snapshotMappingBaseline()``），所以默认分配不算改动。
+ */
+export function mappingDiffersFromBaseline(store) {
+    const baseline = store.baseline;
+    if (!baseline) {
+        return false;
+    }
+    return (
+        assignmentSignature(store.assignment) !== assignmentSignature(baseline.assignment) ||
+        Boolean(store.shareVendorPrices) !== Boolean(baseline.shareVendorPrices)
+    );
+}
+
+/** 纯函数：把当前映射记为新基线（面板首次算完 / 保存成功后调用）。 */
+export function snapshotMappingBaseline(store) {
+    store.baseline = {
+        assignment: { ...(store.assignment || {}) },
+        shareVendorPrices: Boolean(store.shareVendorPrices),
+    };
+}
+
 /** 纯函数：把映射表整理成服务端认的归属载荷（``mapping`` 里每条就是一个组合）。 */
 export function buildMappingPayload(rows, shareVendorPrices) {
     return {
@@ -366,19 +401,65 @@ export function buildMappingPayload(rows, shareVendorPrices) {
  * 保存钩子（``FormController.onWillSaveRecord``）与面板共享同一份数据 —— 无论面板
  * 当前有没有挂载，「用户怎么分配的」都不会丢；快照也只取一次。
  */
+/** 空的映射表状态（``resId`` 用来识别「换了产品记录」）。 */
+function emptyMappingStore(resId) {
+    return {
+        resId: resId || false,
+        rows: [],
+        unassigned: [],
+        assignment: {},
+        cleared: {},
+        shareVendorPrices: false,
+        signature: undefined,
+        snapshot: null,
+        baseline: null,       // 「未修改前」的分配（Discard all changes 恢复到这里）
+        dirty: false,         // 映射相对基线改过没有（决定 Save manually / Discard all changes 的出现）
+    };
+}
+
 export function getMappingStore(model) {
     if (!model.variantMapping) {
-        model.variantMapping = {
-            rows: [],
-            unassigned: [],
-            assignment: {},
-            cleared: {},
-            shareVendorPrices: false,
-            signature: undefined,
-            snapshot: null,
-        };
+        model.variantMapping = emptyMappingStore(model.root?.resId);
     }
     return model.variantMapping;
+}
+
+/** 换产品记录时把上一份映射（含基线、脏标记）整个丢掉。 */
+export function resetMappingStore(model, resId) {
+    model.variantMapping = emptyMappingStore(resId);
+    model.bus?.trigger("FIELD_IS_DIRTY", false);
+    return model.variantMapping;
+}
+
+/**
+ * 把「映射有没有未保存改动」同步给表单状态指示器。
+ *
+ * Odoo 的 ``FormStatusIndicator`` 监听 ``model.bus`` 上的 ``FIELD_IS_DIRTY`` 事件
+ * （``web/static/src/views/form/form_status_indicator/form_status_indicator.js``），
+ * 收到 true 就显示 **Save manually** / **Discard all changes** 两个按钮。
+ * 映射改动只存在于本模块的 store 里（不是 record 的字段改动），所以必须主动广播 ——
+ * 这也是「不让 Odoo 自动保存悄悄提交映射」的前提：record 不脏，自动保存路径就不会带它
+ * （见 AGENTS.md → L2 P4 陷阱 20）。
+ */
+export function setMappingDirty(model, dirty) {
+    const store = getMappingStore(model);
+    if (store.dirty === dirty) {
+        return;
+    }
+    store.dirty = dirty;
+    model.bus?.trigger("FIELD_IS_DIRTY", dirty);
+}
+
+/** 丢掉尚未保存的映射改动，回到基线（原生 Discard all changes 会调用它）。 */
+export function discardMappingChanges(model) {
+    const store = getMappingStore(model);
+    const baseline = store.baseline;
+    store.assignment = { ...((baseline && baseline.assignment) || {}) };
+    store.cleared = {};
+    store.shareVendorPrices = Boolean(baseline && baseline.shareVendorPrices);
+    store.dirty = false;
+    model.bus?.trigger("FIELD_IS_DIRTY", false);
+    model.variantMappingPanel?.refreshRows();
 }
 
 /** 「属性 ↔ 变体」映射表：产品表单「属性与变体」页、属性行下方的常驻面板。 */
@@ -388,6 +469,10 @@ export class VariantMappingPanel extends Component {
 
     setup() {
         this.orm = useService("orm");
+        // 切换产品记录时 model 是复用的：先把上一份映射（含基线）清掉，免得串记录
+        if (getMappingStore(this.props.record.model).resId !== this.props.record.resId) {
+            resetMappingStore(this.props.record.model, this.props.record.resId);
+        }
         this.store = useState(getMappingStore(this.props.record.model));
         // 保存钩子要用同一个实例重算（用户可能在本页改完就走保存）
         this.props.record.model.variantMappingPanel = this;
@@ -502,6 +587,21 @@ export class VariantMappingPanel extends Component {
         this.store.axes = result.axes;
         this.store.newCount = result.new_count;
         this.store.pendingCount = result.pending_count || 0;
+        this.syncDirty();
+    }
+
+    /**
+     * 重算「映射有没有未保存的改动」并广播给表单状态指示器。
+     *
+     * 第一次算完先建立基线（默认分配不算改动），之后分配一变就变成「有改动」，
+     * 于是右上角（以及面板下方）出现 Save manually / Discard all changes。
+     */
+    syncDirty() {
+        if (!this.store.baseline) {
+            snapshotMappingBaseline(this.store);
+        }
+        this.store.dirty = mappingDiffersFromBaseline(this.store);
+        setMappingDirty(this.props.record.model, this.store.dirty);
     }
 
     /** 交给服务端落库的归属载荷（保存钩子把它塞进本次保存的 ``changes``）。 */
@@ -515,6 +615,33 @@ export class VariantMappingPanel extends Component {
 
     get isEditable() {
         return this.props.record.isInEdition;
+    }
+
+    /** 面板标题（原来只有一句说明，看不出这一块是干什么的）。 */
+    get panelTitle() {
+        return _t("Variants Mapping");
+    }
+
+    get mappingDirty() {
+        return Boolean(this.store.dirty);
+    }
+
+    get unsavedLabel() {
+        return _t("Unsaved mapping changes");
+    }
+
+    get dirtyHint() {
+        return _t(
+            "Use Save manually to store the mapping, or Discard all changes to roll the attribute lines and the mapping back to the last saved state."
+        );
+    }
+
+    get saveManuallyLabel() {
+        return _t("Save manually");
+    }
+
+    get discardChangesLabel() {
+        return _t("Discard all changes");
     }
 
     get axisLabels() {
@@ -628,6 +755,17 @@ export class VariantMappingPanel extends Component {
 
     onToggleShareVendorPrices(ev) {
         this.store.shareVendorPrices = ev.target.checked;
+        this.syncDirty();
+    }
+
+    /** 面板里的「保存」：走表单自己的保存（含保存前钩子里的映射校验）。 */
+    onSaveManually() {
+        this.props.record.model.variantMappingController?.saveButtonClicked();
+    }
+
+    /** 面板里的「丢弃」：走表单自己的丢弃（映射改动由 form patch 一并回滚）。 */
+    onDiscardChanges() {
+        this.props.record.model.variantMappingController?.discard();
     }
 }
 

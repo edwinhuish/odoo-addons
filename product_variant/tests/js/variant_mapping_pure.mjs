@@ -32,11 +32,14 @@ const {
     buildCombinationRows,
     buildVariantOptions,
     computeVariantMapping,
+    mappingDiffersFromBaseline,
     mergeAttributeLines,
     rowMatchesVariant,
+    snapshotMappingBaseline,
 } = new Function(
     `${pure}; return { applyValueCommands, buildMappingPayload, buildCombinationRows, buildVariantOptions, ` +
-        `computeVariantMapping, mergeAttributeLines, rowMatchesVariant };`
+        `computeVariantMapping, mappingDiffersFromBaseline, mergeAttributeLines, rowMatchesVariant, ` +
+        `snapshotMappingBaseline };`
 )();
 
 const check = (label, fn) => {
@@ -262,6 +265,23 @@ check("已被别的行选走的变体在那一行禁用：只能先让出来再�
         assignment: { [rowB.key]: 901 },
     });
     assert.equal(buildVariantOptions(variants, freed.rows).find((o) => o.id === 900).taken_by, false);
+});
+
+check("映射改过才显示保存/丢弃：默认分配不算改动，动过才显示", () => {
+    const store = { assignment: {}, shareVendorPrices: false };
+    assert.equal(mappingDiffersFromBaseline(store), false, "还没建立基线时不算改动");
+    snapshotMappingBaseline(store);
+    assert.equal(mappingDiffersFromBaseline(store), false, "刚记完基线：没有改动");
+
+    const rowA = base().rows.find((row) => rowMatchesVariant(row, variants[0]));
+    store.assignment[rowA.key] = 900;
+    assert.equal(mappingDiffersFromBaseline(store), true, "挑了一条变体 → 有未保存改动");
+
+    delete store.assignment[rowA.key];
+    assert.equal(mappingDiffersFromBaseline(store), false, "清回基线 → 又没有改动了");
+
+    store.shareVendorPrices = true;
+    assert.equal(mappingDiffersFromBaseline(store), true, "勾选框也属于映射状态");
 });
 
 console.log("all good");

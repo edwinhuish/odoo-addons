@@ -31,6 +31,36 @@ msgstr "有 %(count)s 个组合现在不会创建：它们落在「按需生成�
 #. module: product_variant
 #. odoo-javascript
 #: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Variants Mapping"
+msgstr "变体映射"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Unsaved mapping changes"
+msgstr "映射有未保存的改动"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Use Save manually to store the mapping, or Discard all changes to roll the attribute lines and the mapping back to the last saved state."
+msgstr "点「Save manually」保存映射，或点「Discard all changes」把属性行与映射一起回滚到最后一次保存的状态。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Save manually"
+msgstr "手动保存"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Discard all changes"
+msgstr "放弃所有更改"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
 msgid "Already kept by another combination — set that one back to (new variant) first if you want to move it here"
 msgstr "已被另一个组合占用 —— 想挪到这一行，请先把占着它的那一行改回「(new variant)」"
 
