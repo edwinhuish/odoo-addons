@@ -550,3 +550,142 @@ task test -- product_image,stock,sale_management,purchase --test-tags=/product_i
 | 4 | `product.tmpl_id` 约束触发字段不含 `product_id` 时，改变体归属的记录不触发名称唯一校验 | `models/product_image.py` | `@api.constrains("name", "product_tmpl_id", "product_id")`；按 `product_id` / `product_tmpl_id` 分支查重 | 新约束必须包含所有归属字段；旧约束方法名 `_check_name_unique_per_template` 已改名，勿引用旧名 |
 | 5 | 变体主图是计算字段（无变体专属主图回退模板主图）；单活动变体时原生 inverse 把主图写**模板** | 不涉及改动（原生行为） | 选 A：完全跟随原生 `image_1920`（`_set_template_field`），无任何 patch | 若用户日后要求「单变体也强制写变体专属主图」，属偏离原生设计，需单独评审后动 `_set_*` 或新增写入口 |
 | 6 | 约束 / help / 字段文案英文变更后 po 不同步会出现孤儿条目与漏译 | `i18n/zh_CN.po` | 旧 msgid 替换为新、新字段条目补齐（见上文 i18n 注意事项） | 改英文源文本 → 同步 po → 升版本 → `-u` 升级 + 双语言验证（模块 i18n 约束 4） |
+
+---
+
+## 开发复盘与关键经验（T-038，`19.0.2.6.5`）
+
+> **需求**：产品列表勾选「Images」列后必须能看到产品图片（**仅主图**），且库存 / 销售 / 采购三处「产品」
+> 页面都要生效、显示 / 隐藏切换正常、数据绑定无误。
+>
+> **时间**：2026-09-23 实现与验证（17:0x ~ 17:20，+0800），同日 17:30 提交。
+> **提交**：`9748eeb fix(product_image): 产品列表 Images 列改显主图缩略`（11 个文件）。
+> **落点**：模块 [`CHANGELOG.md`](CHANGELOG.md) → `[19.0.2.6.5]`（逐版本变更）、[`README.md`](README.md)
+> →「功能概述 / 视图 / 验证清单 / 执行流程 / 异常情况与处理 / 后续维护」（使用者视角）；
+> 阶段汇总见根 [`STAGE_REPORT_2026-09-24.md`](../STAGE_REPORT_2026-09-24.md) → 第 7 节。
+
+### 1. 操作时间线（可追溯）
+
+容器日志打印的时间是 UTC（`09:1x`），本机（+0800）对应 `17:1x`；提交时间以 `git` 为准。
+
+| 时间（+0800） | 操作 | 产出 / 结论 |
+|---|---|---|
+| 17:0x | 全仓盘点：产品列表列、`widget="image"` 用法、各模块职责 | 唯一给产品模板列表加列的是本模块，且那列绑的是 `image_gallery_count`（**整数计数**）→ 现象定位 |
+| 17:0x | 容器内查 Odoo 19 源码：三处入口的视图链路 | 库存 = 默认列表视图；销售 = `account.product_template_list_view_sellable_inherit`；采购 = `account.product_template_list_view_purchasable_inherit`；三者同为 `product.product_template_tree_view` 的后代 |
+| 17:0x | 查官方列表里的图片列写法（`product.tag` / `res.partner` / `hr.employee` / `res.company` / `fleet`） | 统一为 `widget="image"` + `options="{'size': [0, N]}"`（宽 0 = 按比例自适应），默认显示 / 隐藏由 `optional` 控制 |
+| 17:0x | 读 `odoo/addons/base/models/image_mixin.py` | `image_1920` 是存储字段，`image_128` 是 `related="image_1920"` + `store=True` 的缩略 → 用它当列即「主图缩略」，天然不含图库补充图 |
+| 17:0x | 读 `web/static/src/views/fields/image/image_field.js` 的 `extractProps` | 确认 `options.size` = `[width, height]`（0 视为不设）、`readonly` 时不渲染上传 / 清除入口、binary 字段在列表里取到的是 size 串（`isBinarySize`）→ 走 `/web/image` URL |
+| 17:1x | 改列定义 / 同步 po 列标题译文 / 升版本 | `views/product_template_views.xml`、`i18n/zh_CN.po`、`__manifest__.py`（`19.0.2.6.5`） |
+| 17:1x | 新增回归用例（7 项，本模块首个 `tests/`） | `tests/__init__.py` + `tests/test_product_list_image_column.py` |
+| 17:13 | `task test -- product_image` | 7 项（3 项页面用例按配置 skip）0 failed / 0 error |
+| 17:14 | `task test -- product_image,stock,sale_management,purchase --test-tags=/product_image` | **7 项全部执行（无 skip）**，0 failed / 0 error |
+| 17:15 | `task update -- product_image`（dev 库） | 升级无报错、无视图告警 |
+| 17:16 | dev 库 shell 实测三个动作**实际使用**的列表视图 arch | 三处均为 `('Images', 'image', 'hide', '1')` |
+| 17:17 | 复核 zh_CN 列标题（`view.with_context(lang="zh_CN").arch`） | **发现 `-u` 没有覆盖库里已有译文**：仍是「图片数」→ 追加迁移 |
+| 17:18 | 新增 `migrations/19.0.2.6.5/post-migration.py`；把 dev 库已装版本退回 `19.0.2.6.4` 后**真跑一次升级** | 日志 `Running upgrade [19.0.2.6.5>] post-migration`；zh_CN →「图片」、en_US 仍为 `Images` |
+| 17:20 | 模块与根文档同步 + `task check` | 通过（未新增结构性问题） |
+| 17:30 | 提交 | `9748eeb`（11 个文件，+319 / -16） |
+
+### 2. 根因
+
+原来的「Images」列**不是图片列，而是图库计数列**：
+
+```xml
+<field name="image_gallery_count" string="Images" optional="hide" readonly="1"/>
+```
+
+`image_gallery_count`（`models/product_template.py`）是由 `image_gallery_ids` 长度算出的 `Integer`，
+由默认整数控件渲染 → 勾选该列只能看到数字；且它**不含主图**（只统计 `product.image.gallery` 的补充图），
+没有补充图的产品恒为 `0`，语义与列名完全不符。仓库里也没有别处提供「列表图片列」，所以只能改这一处。
+
+### 3. 三处入口的视图链路（改动只需继承基础视图的原因）
+
+| 页面 | 动作（xmlid） | 列表视图 | 与基础视图的关系 |
+|---|---|---|---|
+| 库存 / 产品 | `stock.product_template_action_product` | 未指定 `view_id` → 模型默认列表视图 = `product.product_template_tree_view` | 本身 |
+| 销售 / 产品 | `sale.product_template_action` | `account.product_template_list_view_sellable_inherit` | → `product.product_template_list_view_sellable`（primary 继承）→ `product.product_template_tree_view` |
+| 采购 / 产品 | `purchase.product_normal_action_puchased` | `account.product_template_list_view_purchasable_inherit` | → `product.product_template_list_view_purchasable`（primary 继承）→ `product.product_template_tree_view` |
+
+销售 / 采购用的是 `account` 的 **primary 继承视图**（`mode=primary` + `inherit_id`），但 Odoo 的
+`ir.ui.view._get_combined_archs()` 会沿 `inherit_id` 上溯到根并收集**根的全部子视图**，因此继承基础视图
+`product.product_template_tree_view` 的新列会出现在这三条链路的合成 arch 里（本模块 `inherit_id` 一直指向它）。
+
+### 4. 改动清单
+
+| 文件 | 变更 | 原因 |
+|---|---|---|
+| `views/product_template_views.xml` | 列表列改为 `<field name="image_128" string="Images" widget="image" options="{'size': [0, 48]}" optional="hide" readonly="1"/>`（仍在 `default_code` 之后） | 原列是整数计数、只显示数字；改绑主图缩略 |
+| `i18n/zh_CN.po` | 列标题术语 `Images` 的 `msgstr`：「图片数」→「图片」 | 列语义变了，标题必须跟着变 |
+| `migrations/19.0.2.6.5/post-migration.py`（新增） | 对该视图 `arch_db` 定向设置 `{"zh_CN": {"Images": "图片"}}`；未装 zh_CN 直接跳过 | po 导入不覆盖已有译文，只跑 `-u` 会留着旧标题 |
+| `tests/__init__.py` + `tests/test_product_list_image_column.py`（新增） | 7 项用例：列定义 / 只读可选 / 仅主图数据绑定 / 三个动作实际使用的列表视图 | 三处入口、显示隐藏、数据绑定都要有回归 |
+| `__manifest__.py` | `19.0.2.6.4` → `19.0.2.6.5` | 修复类（+z） |
+| `README.md` / `CHANGELOG.md` / `AGENTS.md` | 功能说明、版本条目、L1 约束 12、本节复盘 | 模块「变更记录规范」 |
+| 根 `README.md` / `TODO.md` | 模块一览版本与状态；`T-038` 归档 | 同上 |
+
+### 5. 影响范围
+
+- **只影响 `product.template` 的列表视图**：`product.product`（变体）列表、看板、表单、图库独立视图均不变。
+- 生效页面：库存 / 销售 / 采购三处「产品」；未装 `stock` / `sale` / `purchase` 的库只影响产品默认列表视图
+  （本模块 `depends` 仍只有 `product`，不新增任何依赖）。
+- **无字段 / 数据结构 / 权限变化**：`image_gallery_count` 字段与 `Image Count` 标签保留（导出 / 分组 /
+  自建视图仍可用），只是不再作为产品列表的列。
+- 每次列表读取多取一个 `image_128`；列表里 binary 字段返回的是 **size 串**（非 base64），图片由
+  `/web/image` 按需拉取（与官方 `res.partner.avatar_128` / `hr.employee.avatar_128` 列同款做法）。
+- 中文列标题在**升级时由迁移刷新一次**；英文标题不变。
+
+### 6. 备选方案与取舍（记录被否决的做法）
+
+| 备选 | 为什么不选 |
+|---|---|
+| 计数列保留 + 另加一列图片（两列并存） | 需求是「Images 列要显示图片」；两列会出现语义重复的列，且英文 `Images` 词条与新列共用容易混 |
+| 把计数列改名 `Image Count` 保留在列表 | 计数已无 UI 价值（字段仍在，可自建视图用），多一列让产品列表更宽 |
+| 用 `image_1920` / `image_512` 当列 | 列表只需 48px 缩略；大尺寸字段要多传数据、行高难控。`image_128` 是官方缩略口径 |
+| 列标题改成 `Product Images`（复用已有译文，绕开旧译文） | 会改变用户看到的英文列名，且与「勾选 Images 列」的说法不符；旧译文用迁移解决更彻底 |
+| 不加迁移，只在文档里让用户升级后跑 `task i18n -- zh_CN product_image` | 静默失败风险高：只跑 `-u` 的库中文列标题会一直是「图片数」，看起来像没修好 |
+| 用 `column_invisible="1"` 让该列默认不显示 | 与需求相反（要能勾选显示）；`column_invisible` 的列连数据都不取，无法切换 |
+
+### 7. 坑点与解法
+
+1. **「po 不覆盖库里已有译文」不只适用于应用列表元数据**（根 `AGENTS.md` 4.8 第 9 条）——**视图术语同样适用**。
+   实测：改了 `msgstr` 后 `-u`，dev 库里 `arch_db` 的 zh_CN 仍是旧值。只改 `msgstr` 时要么写定向刷新迁移，
+   要么升级后跑 `task i18n -- zh_CN <模块>`。
+2. **定向改视图术语要用 `update_field_translations`，且参数形状取决于 `field.translate`**：`arch_db` 是
+   `xml_translate`（callable）→ 传 `{lang: {源术语: 新译文}}`；若按「`translate=True`」的 `{lang: 整段值}`
+   去传会无效 / 报错。
+3. **迁移里必须先判断目标语言是否已安装**：`update_field_translations` 对未激活语言直接抛 `UserError`，
+   若不加判断，**没装 zh_CN 的库升级会失败**。另外要 `if not version: return`（全新安装不需要迁移）。
+4. **三处入口不要分别继承**：销售 / 采购的列表视图是 `account` 的 primary 继承视图，但都挂在
+   `product.product_template_tree_view` 之下 —— 只继承基础视图即可覆盖三处，且以后新增入口自动生效。
+5. **测试里别硬编码「页面用的那个视图 xmlid」**：用 `action.view_ids` 里 `view_mode == 'list'` 的那条
+   （动作没指定就传 `None` 走默认解析），断言跟着 Odoo 的解析走，页面换视图时用例才会跟着动。
+6. **`optional="hide"` ≠ `column_invisible="1"`**：前者「默认隐藏、可勾选」，后者「彻底不渲染且不取数」。
+   要「显示 / 隐藏切换」就不能用后者（用例已把这条钉住）。
+7. 迁移跑过一次后，`ir_module_module.latest_version` 就等于新版本，再 `-u` **不会**重跑迁移；
+   验证迁移要把已装版本退回上一版再升级（本轮即这样实测）。
+
+### 8. 验证记录
+
+| 验证 | 结果 |
+|---|---|
+| `task test -- product_image` | 7 项（3 项页面用例按配置 skip），0 failed / 0 error |
+| `task test -- product_image,stock,sale_management,purchase --test-tags=/product_image` | 7 项全部执行（无 skip），0 failed / 0 error |
+| dev 库三个动作实际使用的列表视图 arch | 均为 `('Images', 'image', 'hide', '1')` |
+| dev 库真跑升级（已装版本退回 `19.0.2.6.4` 再 `-u`） | 迁移 `[19.0.2.6.5>] post-migration` 执行；zh_CN 列标题「图片数」→「图片」，en_US 仍 `Images` |
+| `task check` | 通过（未新增结构性问题） |
+
+### 9. 后续建议
+
+- 若日后要在产品列表同时看「补充图数量」，建议**另开一列**（`string="Image Count"`）或放进搜索 / 分组，
+  不要再把「图片」和「计数」压在同一列上（这正是本次缺陷的来源）。
+- 根 `AGENTS.md` 4.7 目前把「已有译文不会被 `-u` 覆盖」只写在 4.8 第 9 条（针对应用列表元数据）；
+  建议提升为 4.7 的通用提醒 —— 本轮的真实坑就是视图术语也遵循同一规则。
+- 「无主图时回退显示图库首张」当前**明确不做**（与 L1 约束 12「仅主图」冲突）；若业务上确需要，
+  属口径变更，需先确认语义再动，并同步改 `tests/test_product_list_image_column.py` 与 README 验证清单。
+
+### 10. 风险提示
+
+- **不要把该列改回 `image_gallery_count` 或任何图库字段**（L1 约束 12）；「仅主图」是用例钉住的契约。
+- 列上的 `readonly="1"` 必须保留：去掉只读会在列表里出现上传 / 清除入口，误触即改主图。
+- 不要删 `options="{'size': [0, 48]}"`：删掉后图片按原始尺寸（最大 128px）显示，列表行会明显变高。
+- 目标环境仍需界面复验（三处列表勾选 / 取消勾选、有主图 / 无主图 / 仅有补充图三种产品、中英各一遍 + 强刷浏览器），
+  清单见模块 [`README.md`](README.md) →「验证清单 / 执行流程」与 `CHANGELOG.md` → `[19.0.2.6.5]` →「遗留」。
