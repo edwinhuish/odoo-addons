@@ -1,0 +1,975 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+# 	* product_variant
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-21 00:00+0000\n"
+"PO-Revision-Date: 2026-09-21 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: \n"
+"Plural-Forms: \n"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_product__variant_conversion_count
+#: model:ir.model.fields,field_description:product_variant.field_product_template__variant_conversion_count
+msgid "# Variant Conversions"
+msgstr "转换次数"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid ""
+"%(count)s combinations do not exist yet and will be created as new variants"
+msgstr "还有 %(count)s 个组合现在还不存在，将作为新变体创建"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "%(count)s variants still have no combination"
+msgstr "还有 %(count)s 条变体没有组合"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_conversion_form_patch.js:0
+msgid ""
+"%(count)s variants still have no combination: pick the combination each of "
+"them keeps in the mapping table below the attribute lines, then save again."
+msgstr "还有 %(count)s 条变体没有组合：请在属性行下方的映射表里给每条变体指定它保留的组合，然后再保存"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "%(label)s — %(count)s on hand"
+msgstr "%(label)s — 在手 %(count)s"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "A combo product cannot be converted into a multi-variant product."
+msgstr "组合产品不能转换为多变体产品。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "Add at least one attribute before converting the product."
+msgstr "转换前请至少添加一个属性。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__added_attribute_ids
+msgid "Added Attributes"
+msgstr "新增属性"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Apply the vendor prices of these variants to all variants"
+msgstr "把这些变体的供应商价格应用到全部变体"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Attribute %(attribute)s is configured twice on the product; keep a single "
+"attribute line before converting."
+msgstr "产品上属性 %(attribute)s 配置了两行，请先合并为一行再转换。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Attribute %(attribute)s is used twice; keep a single line per attribute."
+msgstr "属性 %(attribute)s 重复出现，每个属性只能有一行。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "Attribute %(attribute)s needs at least one value."
+msgstr "属性 %(attribute)s 至少需要一个取值。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Attribute %(attribute)s never creates variants, so it cannot be used to "
+"convert the product."
+msgstr "属性 %(attribute)s 设置为不生成变体，无法用于转换产品。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_product__variant_mapping_state
+#: model:ir.model.fields,field_description:product_variant.field_product_template__variant_mapping_state
+msgid "Attribute / Variant Mapping"
+msgstr "属性 / 变体映射"
+
+#. module: product_variant
+#: model:ir.model,name:product_variant.model_product_attribute_value
+msgid "Attribute Value"
+msgstr "属性值"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__origin_summary
+msgid "Attribute values of the original variant before the conversion."
+msgstr "原变体在转换前的属性取值。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__result_summary
+msgid "Attribute values of the resulting variant after the conversion."
+msgstr "结果变体在转换后的属性取值。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_conversion__added_attribute_ids
+msgid ""
+"Attributes that were not configured on the product before this conversion."
+msgstr "本次转换之前产品上没有配置的属性。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__result_barcode
+msgid "Barcode (After)"
+msgstr "条码（转换后）"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__result_barcode
+msgid ""
+"Barcode of the resulting variant. It belongs to the variant: the conversion "
+"never changes it."
+msgstr "结果变体的条码。条码属于变体本身，转换不会改动它。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Changing the attributes of several products at once cannot keep track of the"
+" variant ownership of %(product)s. Save the products one by one from the "
+"product form."
+msgstr "一次改多个产品的属性没法逐条记录变体归属（%(product)s）。请逐个产品在产品表单里保存。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Choose a value"
+msgstr "请选择取值"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__result_summary
+msgid "Combination After"
+msgstr "转换后的组合"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__origin_summary
+msgid "Combination Before"
+msgstr "转换前的组合"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__conversion_id
+msgid "Conversion"
+msgstr "所属转换"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_product__variant_conversion_id
+msgid ""
+"Conversion that added attributes to this product. Set on the variants that "
+"existed before the conversion and on the variants it created."
+msgstr "给本产品增加属性的那次转换。转换前既有的变体与本次新建的变体上都会记录。"
+
+#. module: product_variant
+#: model_terms:ir.ui.view,arch_db:product_variant.product_template_only_form_inherit_variant_conversion
+msgid "Conversions"
+msgstr "转换记录"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_product__variant_conversion_ids
+#: model:ir.model.fields,help:product_variant.field_product_template__variant_conversion_ids
+msgid "Conversions that added attributes to this product."
+msgstr "给本产品增加过属性的转换记录。"
+
+#. module: product_variant
+#: model_terms:ir.ui.view,arch_db:product_variant.product_variant_conversion_view_form
+#: model_terms:ir.ui.view,arch_db:product_variant.product_variant_conversion_view_list
+msgid "Converted By"
+msgstr "转换人"
+
+#. module: product_variant
+#: model_terms:ir.ui.view,arch_db:product_variant.product_variant_conversion_view_form
+#: model_terms:ir.ui.view,arch_db:product_variant.product_variant_conversion_view_list
+msgid "Converted On"
+msgstr "转换时间"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__result_standard_price
+msgid "Cost (After)"
+msgstr "成本（转换后）"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__result_standard_price
+msgid ""
+"Cost of the resulting variant. It belongs to the variant: the conversion "
+"never changes it."
+msgstr "结果变体的成本。成本属于变体本身，转换不会改动它。"
+
+#. module: product_variant
+#: model_terms:ir.ui.view,arch_db:product_variant.product_search_form_inherit_variant_lineage
+msgid "Created By A Conversion"
+msgstr "由转换产生"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__create_uid
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__create_uid
+msgid "Created by"
+msgstr ""
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__create_date
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__create_date
+msgid "Created on"
+msgstr ""
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_product__variant_origin_id
+#: model_terms:ir.ui.view,arch_db:product_variant.product_search_form_inherit_variant_lineage
+msgid "Derived From"
+msgstr "来源变体"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_attribute_value__display_name
+#: model:ir.model.fields,field_description:product_variant.field_product_product__display_name
+#: model:ir.model.fields,field_description:product_variant.field_product_template__display_name
+#: model:ir.model.fields,field_description:product_variant.field_product_template_attribute_line__display_name
+#: model:ir.model.fields,field_description:product_variant.field_product_template_attribute_value__display_name
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__display_name
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__display_name
+msgid "Display Name"
+msgstr ""
+
+#. module: product_variant
+#: model_terms:ir.actions.act_window,help:product_variant.product_variant_conversion_action
+msgid ""
+"Every conversion is recorded when attributes are added to a product from its"
+" own form."
+msgstr "每次从产品表单给产品增加属性时都会留下转换记录。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid ""
+"Every existing variant and the combination it keeps. A variant that has no "
+"value on an attribute becomes unmapped and blocks the save until you pick "
+"one."
+msgstr "每条既有变体与它当前带的组合。某个属性上没有取值的变体会变成未映射，并阻止保存，直到你为它选好取值。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Every existing variant must keep a combination: %(variants)s has no "
+"combination. Save the product form again to get the ownership dialog."
+msgstr "每条既有变体都必须保留一个组合：%(variants)s 还没有组合。请在产品表单里再保存一次以弹出归属确认框。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_attribute_value__id
+#: model:ir.model.fields,field_description:product_variant.field_product_product__id
+#: model:ir.model.fields,field_description:product_variant.field_product_template__id
+#: model:ir.model.fields,field_description:product_variant.field_product_template_attribute_line__id
+#: model:ir.model.fields,field_description:product_variant.field_product_template_attribute_value__id
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__id
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__id
+msgid "ID"
+msgstr ""
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__result_default_code
+msgid ""
+"Internal reference of the resulting variant. It belongs to the variant: the "
+"conversion never changes it."
+msgstr "结果变体的内部参考号。参考号属于变体本身，转换不会改动它。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__write_uid
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__write_uid
+msgid "Last Updated by"
+msgstr ""
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__write_date
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__write_date
+msgid "Last Updated on"
+msgstr ""
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Mapped"
+msgstr "已映射"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__new_variant_count
+msgid "New Variants"
+msgstr "新增变体数"
+
+#. module: product_variant
+#: model_terms:ir.actions.act_window,help:product_variant.product_variant_conversion_action
+msgid "No variant conversion recorded yet"
+msgstr "还没有转换记录"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_product__variant_conversion_count
+#: model:ir.model.fields,help:product_variant.field_product_template__variant_conversion_count
+msgid "Number of conversions applied to this product."
+msgstr "本产品经历的转换次数。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_conversion__new_variant_count
+msgid ""
+"Number of variants created by the conversion; every variant that existed "
+"before is kept as is."
+msgstr "本次转换新建的变体数；转换前的每条变体都原样保留。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_conversion__product_variant_count_before
+msgid "Number of variants the product had before the conversion."
+msgstr "转换前产品的变体数。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_conversion__product_variant_count_after
+msgid "Number of variants the product had once the conversion was applied."
+msgstr "转换后产品的变体数。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_conversion__lineage_ids
+msgid ""
+"One line per variant that took part in the conversion: which variant it was "
+"before and which combination it carries now."
+msgstr "每条参与转换的变体一行：转换前是哪条记录、转换后占哪个组合。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"One of the original variants of %(product)s disappeared during the "
+"conversion; nothing has been changed."
+msgstr "转换过程中 %(product)s 的某条原变体消失了，本次转换未做任何改动。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__is_kept
+msgid "Original Record Kept"
+msgstr "原记录保留"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__origin_variant_id
+msgid "Original Variant"
+msgstr "原变体"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_product__variant_origin_id
+msgid ""
+"Original variant this variant was created from during a conversion: the "
+"record that kept the stock, the orders and the invoices. Empty for the "
+"variants that existed before the conversion (they are the origins "
+"themselves) and for manually created ones."
+msgstr "该变体在转换中派生自哪条原变体，也就是当时保留库存、订单与发票的那条记录。转换前就存在的变体（它们本身就是来源）与手工新建的变体上为空。"
+
+#. module: product_variant
+#: model:ir.model,name:product_variant.model_product_template_attribute_line
+msgid "Product Template Attribute Line"
+msgstr "产品模板属性行"
+
+#. module: product_variant
+#: model:ir.model,name:product_variant.model_product_template_attribute_value
+msgid "Product Template Attribute Value"
+msgstr "产品模板属性值"
+
+#. module: product_variant
+#: model:ir.model,name:product_variant.model_product_product
+msgid "Product Variant"
+msgstr "产品变体"
+
+#. module: product_variant
+#: model:ir.model,name:product_variant.model_product_variant_lineage
+msgid "Product Variant Lineage"
+msgstr "产品变体谱系"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__result_default_code
+msgid "Reference (After)"
+msgstr "内部参考号（转换后）"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_attribute_guards.py:0
+msgid ""
+"Removing the attribute %(attribute)s from %(product)s would affect %(count)s"
+" active variants, for example %(variant)s: they carry its values and keep "
+"the stock, the orders and the invoices. Archive or delete those variants "
+"first, then remove the attribute."
+msgstr "从 %(product)s 移除属性 %(attribute)s 会影响 %(count)s 个在用变体（例如 %(variant)s）：它们携带该属性的取值，并保存着库存、订单与发票。请先归档或删除这些变体，再移除该属性。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_attribute_guards.py:0
+msgid ""
+"Removing the value %(value)s of %(attribute)s from %(product)s would affect "
+"%(count)s active variants: they carry it and keep the stock, the orders and "
+"the invoices. Archive or delete those variants first, then remove the value."
+msgstr "从 %(product)s 移除属性 %(attribute)s 的取值 %(value)s 会影响 %(count)s 个在用变体：它们携带该取值，并保存着库存、订单与发票。请先归档或删除这些变体，再移除该取值。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__result_variant_id
+msgid "Resulting Variant"
+msgstr "结果变体"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__is_kept
+msgid ""
+"Set when the resulting variant is the very same product variant record as "
+"the original one: no record was created nor deleted for this combination."
+msgstr "当结果变体就是原来那条变体记录时置位：这个组合没有新建也没有删除任何记录。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_variant_mapping.py:0
+msgid ""
+"Some variants of %(product)s have no combination after this attribute "
+"change: pick the combination each of them keeps in the mapping table below "
+"the attribute lines, then save again."
+msgstr "这次属性改动之后，%(product)s 有变体没有组合：请在属性行下方的映射表里给每条变体指定它保留的组合，然后再保存。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template_prices.py:0
+msgid ""
+"Spreading the price data of %(product)s over its variants would change the "
+"prices available on %(variant)s; nothing has been changed."
+msgstr "把 %(product)s 的价格数据拆到各变体后，%(variant)s 上可用的价格会发生变化；未做任何改动。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template_prices.py:0
+msgid ""
+"Spreading the price data of %(product)s over its variants would lose vendor "
+"prices on %(variant)s; nothing has been changed."
+msgstr "把 %(product)s 的价格数据拆到各变体会丢失 %(variant)s 上的供应商价格；未做任何改动。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/xml/variant_mapping_panel.xml:0
+msgid "Status"
+msgstr "状态"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_product__variant_mapping_state
+#: model:ir.model.fields,help:product_variant.field_product_template__variant_mapping_state
+msgid ""
+"Technical field that feeds the mapping table shown under the attribute lines"
+" of the product form: one row per existing variant, with the combination it "
+"carries. It is computed on the fly and never stored."
+msgstr "产品表单属性行下方那张映射表用的技术字段：每条既有变体一行，显示它带的组合。它随算随用，不落库。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_product__variant_conversion_mapping
+#: model:ir.model.fields,help:product_variant.field_product_template__variant_conversion_mapping
+msgid ""
+"Technical field used by the product form. When an attribute change creates "
+"new variants, the form asks for the variant ownership and sends it here, "
+"together with the attribute change itself. It is cleared as soon as the "
+"conversion has been applied."
+msgstr "产品表单使用的技术字段：属性变更会新增变体时，表单先问归属映射、再把归属与属性变更一起提交到这里；转换应用完即刻清空。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The attribute %(attributes)s of %(product)s creates its variants on demand: "
+"Odoo itself creates those variants from the orders, so a product saved with "
+"such an attribute gets no variant at all (the first one is created the first"
+" time it is ordered). Create the product without that attribute and add it "
+"to the product afterwards — the conversion then keeps the existing variants "
+"— or set its Variant Creation to Instantly before saving."
+msgstr ""
+"属性 %(attributes)s 的变体生成方式是「按需生成」：这类变体由 Odoo 按订单创建，"
+"所以建产品时带上它会一条变体都没有（第一次下单时才创建第一条）。"
+"请先不带这个属性把产品建好、保存，再把该属性加到产品上（届时本模块的转换会保住既有变体）；"
+"或者把它的变体生成方式改成「立即」再一起保存。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_attribute_guards.py:0
+msgid ""
+"The attribute value %(value)s is used on the products %(products)s. Deleting"
+" it would break those products' variants (they would lose the value from "
+"their combination). Remove it from the products' attribute lines — or "
+"archive or delete the variants that use it — first."
+msgstr "属性取值 %(value)s 正被这些产品使用：%(products)s。删除它会破坏这些产品的变体（变体的属性组合会丢失该取值）。请先从产品的属性行移除它——或先归档、删除用到它的变体。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The combination %(values)s of %(product)s could not be created; nothing has "
+"been changed."
+msgstr "组合 %(values)s（%(product)s）创建失败；未做任何改动。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The form sent an ownership for variant %(variant)s, which is not a variant "
+"of %(product)s."
+msgstr "表单为变体 %(variant)s 指定了归属，但它不是 %(product)s 的变体。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "The form sent unknown attribute values for variant %(variant)s."
+msgstr "表单为变体 %(variant)s 提交了不存在的属性取值。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template_prices.py:0
+msgid ""
+"The new variant %(variant)s of %(product)s would not be priced like the "
+"variant it derives from; nothing has been changed."
+msgstr "%(product)s 的新变体 %(variant)s 的售价与其来源变体不一致；未做任何改动。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The original variant of %(product)s that should carry %(values)s does not; "
+"nothing has been changed."
+msgstr "%(product)s 中本应携带 %(values)s 的原变体没有带上该组合，本次转换未做任何改动。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The original variants %(first)s and %(second)s would both become %(values)s;"
+" give every original variant its own combination."
+msgstr "原变体 %(first)s 与 %(second)s 都被指定成了 %(values)s；请让每条原变体各占一个组合。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The product %(product)s has %(count)s archived variants. Restore or delete "
+"them first: the conversion works on the variants that are in use and must "
+"not silently reactivate older ones."
+msgstr "产品 %(product)s 有 %(count)s 条已归档变体。请先恢复或删除它们：转换只作用于在用的变体，不应悄悄把旧变体重新激活。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The product %(product)s has %(count)s variants instead of the expected "
+"%(expected)s; nothing has been changed."
+msgstr "产品 %(product)s 的变体数为 %(count)s，与预期 %(expected)s 不符，本次转换未做任何改动。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "The product %(product)s has no variant to keep."
+msgstr "产品 %(product)s 没有任何可保留的变体。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_attribute_guards.py:0
+msgid ""
+"The value %(value)s of %(attribute)s is still carried by %(count)s active "
+"variants of %(product)s, for example %(variant)s. Deleting it would delete "
+"or archive those variants together with their stock, orders and invoices. "
+"Archive or delete those variants first, then remove the value."
+msgstr "%(product)s 有 %(count)s 个在用变体仍携带属性 %(attribute)s 的取值 %(value)s（例如 %(variant)s）。删除它会连带删除或归档这些变体及其库存、订单与发票。请先归档或删除这些变体，再移除该取值。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The value %(values)s of %(product)s has been archived in the attribute "
+"settings while %(count)s variants still carry it: the conversion cannot keep"
+" those combinations. Restore the value in the attribute settings, or archive"
+" or delete those variants first."
+msgstr "%(product)s 的取值 %(values)s 已在属性设置中归档，但仍有 %(count)s 个变体携带它：转换无法保留这些组合。请在属性设置中恢复该取值，或先归档、删除这些变体。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The value %(values)s of this product has been archived in the attribute "
+"settings while %(count)s variants still carry it: the conversion cannot keep"
+" those combinations. Restore the value in the attribute settings, or archive"
+" or delete those variants first."
+msgstr "本产品的取值 %(values)s 已在属性设置中归档，但仍有 %(count)s 个变体携带它：转换无法保留这些组合。请在属性设置中恢复该取值，或先归档、删除这些变体。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The values chosen for the original variant %(variant)s (%(values)s) are "
+"excluded by the attribute configuration of this product; choose another "
+"combination."
+msgstr "为原变体 %(variant)s 指定的取值组合（%(values)s）被本产品的属性配置排除，请另选一个组合。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"The variant ownership sent by the form could not be read. Reload the page "
+"and save again."
+msgstr "读不出表单提交的变体归属。请重新加载页面后再保存一次。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"This attribute change removes values and would archive or delete %(count)s "
+"existing variants of %(product)s, which carry their own stock, orders and "
+"invoices. Nothing has been changed. Archive or delete those variants first "
+"if you really want to drop them."
+msgstr ""
+"这次属性变更删掉了取值，会让 %(product)s 的 %(count)s "
+"条既有变体（它们各自带着库存、订单与发票）被归档或删除。本次未做任何改动；确实要删这些变体，请先把它们归档或删除。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"This attribute change removes values and would archive or delete %(count)s "
+"existing variants, which carry their own stock, orders and invoices. Archive"
+" or delete those variants first if you really want to drop them."
+msgstr ""
+"这次属性变更删掉了取值，会让 %(count)s 条既有变体（它们各自带着库存、订单与发票）被归档或删除。确实要删这些变体，请先把它们归档或删除。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"This attribute change would leave %(expected)s variants out of the "
+"%(existing)s variants of %(product)s: some of them would be archived or "
+"deleted. Nothing has been changed. Archive or delete the variants you do not"
+" need first."
+msgstr ""
+"这次属性变更会让 %(product)s 的 %(existing)s 条变体只剩 %(expected)s "
+"条：其中一部分会被归档或删除。本次未做任何改动；不需要的变体请先自行归档或删除。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"This attribute change would leave %(expected)s variants out of the "
+"%(existing)s variants of this product: some of them would be archived or "
+"deleted. Archive or delete the variants you do not need first."
+msgstr ""
+"这次属性变更会让本产品的 %(existing)s 条变体只剩 %(expected)s 条：其中一部分会被归档或删除。不需要的变体请先自行归档或删除。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"This configuration would create %(count)s combinations, above the limit of "
+"%(limit)s set by the system parameter product.dynamic_variant_limit. Reduce "
+"the number of values."
+msgstr "该配置将产生 %(count)s 个组合，超过系统参数 product.dynamic_variant_limit 设定的上限 %(limit)s。请减少属性取值数量。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"This configuration would create %(count)s variants, above the limit of "
+"%(limit)s set by the system parameter product.dynamic_variant_limit. Reduce "
+"the number of values."
+msgstr ""
+"当前配置会生成 %(count)s 个变体，超过系统参数 product.dynamic_variant_limit 设定的上限 "
+"%(limit)s，请减少取值。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"This configuration would keep only %(count)s variants out of the "
+"%(existing)s variants of %(product)s: the attribute configuration of the "
+"product excludes some combinations. Adjust the attribute values first."
+msgstr ""
+"当前配置只会保留 %(product)s 现有 %(existing)s 条变体中的 %(count)s "
+"条：本产品的属性配置排除了部分组合，请先调整属性取值。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid ""
+"This product creates some variants on demand: the other values of those "
+"attributes are not created now — Odoo creates them when they are ordered. "
+"Only the combinations listed here are created."
+msgstr "本产品有「按需生成」的属性：这些属性的其它取值不会现在建变体（下单时才由 Odoo 创建），本次只会建出下面列出的组合。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Unmapped"
+msgstr "未映射"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Value %(value)s is not one of the values kept for attribute %(attribute)s."
+msgstr "取值 %(value)s 不属于属性 %(attribute)s 在本次转换中保留的取值。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Value %(value)s of attribute %(attribute)s is archived; only active "
+"attribute values generate variants."
+msgstr "属性 %(attribute)s 的取值 %(value)s 已归档，只有启用中的取值才会生成变体。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Value %(value)s of attribute %(attribute)s is not handled by this "
+"conversion."
+msgstr "取值 %(value)s（属性 %(attribute)s）不在本次转换处理的属性范围内。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Value %(values)s of attribute %(attribute)s cannot be removed from here: "
+"this wizard only adds values, so that no existing variant is ever deleted. "
+"Remove it from the attribute line of the product form if you really need to."
+msgstr ""
+"不能在这里删除属性 %(attribute)s 的取值 "
+"%(values)s：本向导只做新增，绝不删除既有变体。确实需要删除时，请到产品表单的属性行里操作。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__added_value_ids
+msgid "Values Added"
+msgstr "新增取值"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__added_value_ids
+msgid ""
+"Values that the resulting variant carries and the original variant did not: "
+"what the conversion added for this variant."
+msgstr "结果变体带上、而原变体没有的取值，也就是本次转换为它新增了什么。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/xml/variant_mapping_panel.xml:0
+msgid "Variant"
+msgstr "变体"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Variant %(variant)s has no value for attribute %(attribute)s; choose which "
+"value it gets."
+msgstr "变体 %(variant)s 在属性 %(attribute)s 上没有取值，请指定它获得哪一个。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "Variant %(variant)s is not a variant of %(product)s."
+msgstr "变体 %(variant)s 不属于产品 %(product)s。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Variant %(variant)s must get exactly one value of attribute %(attribute)s."
+msgstr "变体 %(variant)s 在属性 %(attribute)s 上必须有且只有一个取值。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Variant %(variant)s was given two combinations; keep one combination per "
+"existing variant."
+msgstr "变体 %(variant)s 被指定了两个组合：每条既有变体只能保留一个组合。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Variant %(variant)s would get several values of attribute %(attribute)s; "
+"keep one value per attribute."
+msgstr "变体 %(variant)s 在属性 %(attribute)s 上被指定了多个取值；每个属性只能有一个取值。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_product__variant_conversion_id
+#: model_terms:ir.ui.view,arch_db:product_variant.product_search_form_inherit_variant_lineage
+#: model_terms:ir.ui.view,arch_db:product_variant.product_variant_conversion_view_form
+msgid "Variant Conversion"
+msgstr "所属转换"
+
+#. module: product_variant
+#: model:ir.model,name:product_variant.model_product_variant_conversion
+msgid "Variant Conversion Log"
+msgstr "变体转换记录"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_product__variant_conversion_mapping
+#: model:ir.model.fields,field_description:product_variant.field_product_template__variant_conversion_mapping
+msgid "Variant Conversion Mapping"
+msgstr "变体归属映射"
+
+#. module: product_variant
+#: model:ir.actions.act_window,name:product_variant.product_variant_conversion_action
+#: model:ir.model.fields,field_description:product_variant.field_product_product__variant_conversion_ids
+#: model:ir.model.fields,field_description:product_variant.field_product_template__variant_conversion_ids
+#: model_terms:ir.ui.view,arch_db:product_variant.product_variant_conversion_view_list
+msgid "Variant Conversions"
+msgstr "变体转换记录"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__inherit_variant_data
+msgid "Variant Data Inherited"
+msgstr "已继承变体数据"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_product__lineage_ids
+#: model:ir.model.fields,field_description:product_variant.field_product_template__lineage_ids
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__lineage_ids
+#: model_terms:ir.ui.view,arch_db:product_variant.product_normal_form_inherit_variant_lineage
+#: model_terms:ir.ui.view,arch_db:product_variant.product_variant_conversion_view_form
+msgid "Variant Lineage"
+msgstr "变体谱系"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__separate_variant_prices
+msgid "Variant Prices Separated"
+msgstr "已按变体分离价格"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid ""
+"Variant conversion: %(kept)s existing variants kept, %(created)s new "
+"variants created (added attributes: %(attributes)s)."
+msgstr "变体转换：保留 %(kept)s 个既有变体，新建 %(created)s 个变体（新增属性：%(attributes)s）。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__origin_variant_id
+msgid ""
+"Variant that carried the stock, the orders and the invoices before the "
+"conversion. Left empty when the conversion could not point at a single "
+"original variant."
+msgstr "转换前承载库存、订单与发票的那条变体。转换无法唯一确定来源时留空。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_lineage__result_variant_id
+msgid "Variant that exists after the conversion for this combination."
+msgstr "该组合在转换后对应的变体记录。"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__product_variant_count_after
+msgid "Variants After"
+msgstr "转换后变体数"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__product_variant_count_before
+msgid "Variants Before"
+msgstr "转换前变体数"
+
+#. module: product_variant
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__share_vendor_prices
+msgid "Vendor Prices Shared"
+msgstr "供应商价格已共享"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_conversion__inherit_variant_data
+msgid ""
+"Whether the variants created by this conversion inherited the cost, the "
+"volume and the weight of the variant they derive from. Configure it with the"
+" system parameter product_variant.inherit_variant_data."
+msgstr "本次转换新建的变体是否继承了其来源变体的成本、体积与重量。可关闭：把系统参数 product_variant.inherit_variant_data 设为 0。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_conversion__separate_variant_prices
+msgid ""
+"Whether the vendor prices and the pricelist rules of this product were "
+"spread over its variants, so that every variant can be priced on its own "
+"(changing one variant does not touch the others). Configure it with the "
+"system parameter product_variant.separate_variant_prices."
+msgstr "本产品的供应商价格与价格表规则是否已按变体分离（每条变体各持一份，改一个变体不影响别的变体）。可关闭：把系统参数 product_variant.separate_variant_prices 设为 0。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_variant_conversion__share_vendor_prices
+msgid ""
+"Whether the vendor prices of the original variants were shared with all the "
+"variants of the product."
+msgstr "是否把原变体的供应商价格共享给产品的全部变体。"
+
+#. module: product_variant
+#: model:ir.model.fields,help:product_variant.field_product_product__lineage_ids
+#: model:ir.model.fields,help:product_variant.field_product_template__lineage_ids
+msgid "Which variant derives from which original variant, per conversion."
+msgstr "每次转换中，哪条变体派生自哪条原变体。"
+
+#. module: product_variant
+#: model_terms:ir.ui.view,arch_db:product_variant.product_template_search_inherit_variant_lineage
+msgid "With Converted Variants"
+msgstr "含转换产生的变体"
+
+#. module: product_variant
+#: model:ir.model,name:product_variant.model_product_template
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_conversion__product_tmpl_id
+#: model:ir.model.fields,field_description:product_variant.field_product_variant_lineage__product_tmpl_id
+#: model:ir.module.category,name:base.module_category_inventory_product
+msgid "Product"
+msgstr "产品"
+
+#. module: base
+#: model:ir.module.module,shortdesc:base.module_product_variant
+msgid "Product Variants"
+msgstr "产品变体"
+
+#. module: base
+#: model:ir.module.module,summary:base.module_product_variant
+msgid ""
+"Change the attributes of a product without losing a single variant: the "
+"Attributes & Variants tab shows the attribute-to-variant mapping, flags the "
+"variants that lost their combination as unmapped and holds the save until "
+"each of them is mapped again"
+msgstr "改产品的属性而不丢任何一条变体：「属性与变体」页显示属性与变体的映射关系，把失去组合的变体标为未映射，并在每条变体都重新映射之前拦住保存"
+
+#. module: base
+#: model:ir.module.module,description:base.module_product_variant
+msgid ""
+"\n"
+"Safe attribute changes for foreign trade SOHO scenarios: add or extend the attributes of a product and keep every existing variant.\n"
+"\n"
+"Source language of this module is English (en_US); a Simplified Chinese translation ships in i18n/zh_CN.po.\n"
+"\n"
+"Odoo warns on the product form that adding or deleting attributes deletes and recreates the existing variants and loses their customizations. This module gives the safe path, without adding any button to the product form:\n"
+"\n"
+"- The \"Attributes & Variants\" tab gets a mapping table below the attribute lines: one row per existing variant, with the combination it carries and its status;\n"
+"- As soon as an attribute change leaves a variant without a combination, that variant becomes unmapped and the table shows which value is missing, so that the user can pick it right there;\n"
+"- The save is held back while a variant is unmapped: the user maps every variant from the tab and saves again. Nothing is written in the meantime, so no variant is ever archived or deleted silently;\n"
+"- A change that would drop variants altogether (removing a value or an attribute) is refused: those variants cannot be mapped to any combination, so the tab tells what to do with them first;\n"
+"- Every existing product.product record is kept, same id: stock quants, stock move lines, lots, sales order lines, purchase order lines, invoice lines, vendor prices and reordering rules keep pointing to it;\n"
+"- The variant level data of the product (its references, its barcode, its images) is left exactly as it is: the module only maps the existing variants to their resulting combination, it never rewrites what a variant carries;\n"
+"- The mapping is recorded: a conversion log and one lineage row per variant (which record was kept, which variant derives from which original one, which values were added), plus searchable fields on the product variant (Variant Conversion, Derived From) shown on the variant form, the variant list and the variant search;\n"
+"- The conversion runs inside a savepoint with pre and post checks: if anything is not as expected, nothing at all is written.\n"
+msgstr ""
+"\n"
+"外贸 SOHO 场景下「改产品属性 / 加取值」而不丢变体的安全方案。\n"
+"\n"
+"本模块源语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
+"\n"
+"Odoo 在产品表单上就提示：增删属性会删除并重建既有变体，可能丢失其自定义内容。\n"
+"本模块给出安全路径，而且不在产品表单上加任何按钮：\n"
+"\n"
+"- 「属性与变体」页在属性行下方多出一张映射表：每条既有变体一行，显示它现在带的组合与状态；\n"
+"- 一旦某次属性改动让变体失去了组合，该变体立刻变成未映射，表里直接指出缺哪个属性的取值，可就地选择；\n"
+"- 有变体未映射时保存被拦住：用户在表里把每条变体映射好再保存。这期间一个字都不写库，绝不静默归档或删除变体；\n"
+"- 会直接丢掉变体的改动（删取值 / 删属性）仍然被拒绝：那些变体没有任何组合可映射，表会提示先怎么处理它们；\n"
+"- 每条既有 product.product 记录都保留（id 不变）：库存量记录、库存移动明细、批次、销售订单行、采购订单行、发票行、供应商价格与补货规则都仍指向它；\n"
+"- 产品的变体级数据（参考号、条码、图片）原样保留：模块只把既有变体映射到改动后的组合，绝不改写变体上带着的内容；\n"
+"- 映射会被显式记录：转换台账 + 每个变体一条谱系行（哪条记录被保留、哪条派生自哪条、新增了哪些取值），并在变体上留下可搜索的「所属转换」「来源变体」字段，显示在变体表单、变体列表与变体搜索里；\n"
+"- 整个转换在保存点内执行，并有前置与后置校验：任何不符合预期的情况都完全不写库。\n"

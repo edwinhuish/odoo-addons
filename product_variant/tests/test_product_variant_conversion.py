@@ -11,9 +11,9 @@
 
 跑法（本地开发环境）：
 
-    task test -- product_variant_conversion --test-tags=/product_variant_conversion
+    task test -- product_variant --test-tags=/product_variant_conversion
     # 连库存 / 销售一起验证（把 stock、sale_management 一起装上）：
-    task test -- product_variant_conversion,stock,sale_management --test-tags=/product_variant_conversion
+    task test -- product_variant,stock,sale_management --test-tags=/product_variant_conversion
 """
 
 import json
@@ -705,7 +705,7 @@ class TestProductVariantConversion(TransactionCase):
     def test_new_variants_inherit_variant_dimensions_when_installed(self):
         """装了 product_dimension 时：新变体的尺寸（单位 + 长宽高）也随谱系继承。
 
-        跑法：`task test -- product_variant_conversion,product_dimension --test-tags=/product_variant_conversion`
+        跑法：`task test -- product_variant,product_dimension --test-tags=/product_variant_conversion`
         （本模块不硬依赖 product_dimension，未安装时这条用例自动跳过）。
         """
         if "dimension_unit" not in self.env["product.product"]._fields:
@@ -778,7 +778,7 @@ class TestProductVariantConversion(TransactionCase):
     def test_adding_a_value_inherits_dimensions_from_the_right_variant(self):
         """承接上一条：新变体继承的是它**对应**那条原变体的尺寸与体积（装了 product_dimension 时）。
 
-        跑法：`task test -- product_variant_conversion,product_dimension --test-tags=/product_variant_conversion`
+        跑法：`task test -- product_variant,product_dimension --test-tags=/product_variant_conversion`
         （本模块不硬依赖 product_dimension，未安装时这条用例自动跳过。）
         """
         if "dimension_unit" not in self.env["product.product"]._fields:
@@ -826,7 +826,7 @@ class TestProductVariantConversion(TransactionCase):
     def test_variant_data_inheritance_can_be_switched_off(self):
         """系统参数关掉后新变体不再继承：保持 Odoo 默认的空 / 0，台账记为未继承。"""
         self.env["ir.config_parameter"].sudo().set_param(
-            "product_variant_conversion.inherit_variant_data", "0")
+            "product_variant.inherit_variant_data", "0")
         product = self._create_product(attribute=self.color, values=self.color.value_ids)
         red = self._variant_of(product, self.color_red)
         red.write({"standard_price": 10.0, "volume": 0.1, "weight": 1.0})
@@ -999,7 +999,7 @@ class TestProductVariantConversion(TransactionCase):
     def test_price_separation_can_be_switched_off(self):
         """系统参数关掉后保持原样：模板级记录仍是模板级（所有变体共用），台账记为未分离。"""
         self.env["ir.config_parameter"].sudo().set_param(
-            "product_variant_conversion.separate_variant_prices", "0")
+            "product_variant.separate_variant_prices", "0")
         product = self._create_product()
         original = product.product_variant_id
         vendor = self.env["res.partner"].create({"name": "Test Vendor T-024c"})

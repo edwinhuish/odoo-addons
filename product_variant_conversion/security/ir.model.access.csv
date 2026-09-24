@@ -1,5 +1,0 @@
-id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_product_variant_conversion_user,product.variant.conversion.user,product_variant_conversion.model_product_variant_conversion,base.group_user,1,1,1,1
-access_product_variant_lineage_user,product.variant.lineage.user,product_variant_conversion.model_product_variant_lineage,base.group_user,1,1,1,1
-access_product_variant_conversion_variant_manager,product.variant.conversion.variant.manager,product_variant_conversion.model_product_variant_conversion,product.group_product_variant,1,1,1,1
-access_product_variant_lineage_variant_manager,product.variant.lineage.variant.manager,product_variant_conversion.model_product_variant_lineage,product.group_product_variant,1,1,1,1

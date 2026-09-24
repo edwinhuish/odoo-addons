@@ -18,7 +18,7 @@ class ProductTemplate(models.Model):
     def _get_variant_conversion_separate_variant_prices(self):
         """是否把价格数据（供应商价格 / 价格表规则）按变体分离，默认开启。
 
-        系统参数 ``product_variant_conversion.separate_variant_prices``。
+        系统参数 ``product_variant.separate_variant_prices``。
 
         关闭时模板级的价格记录保持模板级（对所有变体生效）—— **改一条会影响全部变体**，
         这正是默认开启的原因：变体的价格要能各自独立地改。

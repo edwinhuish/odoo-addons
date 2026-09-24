@@ -89,7 +89,7 @@ class ProductTemplate(models.Model):
         """打开该产品的转换台账列表。"""
         self.ensure_one()
         action = self.env["ir.actions.actions"]._for_xml_id(
-            "product_variant_conversion.product_variant_conversion_action")
+            "product_variant.product_variant_conversion_action")
         action["domain"] = [("product_tmpl_id", "=", self.id)]
         action["context"] = {"default_product_tmpl_id": self.id}
         return action
@@ -192,10 +192,11 @@ class ProductTemplate(models.Model):
                     vals["variant_conversion_mapping"] = False
                 return super().write(vals)
         elif not mapping_payload:
-            raise UserError(_(
-                "This attribute change creates new variants of %(product)s: every existing variant has to be told which combination it keeps, so the save is held back until the ownership is confirmed from the product form. Save again from the form to get the dialog; if it does not show up, reload the page (Ctrl+F5) so that the module's assets are up to date.",
-                product=self.display_name,
-            ))
+            # 还有变体没有组合（映射表里处于「未映射」）：保存不放行。
+            # 正常路径是用户在「属性与变体」页下方的映射表里逐条选好，由表单把映射
+            # 随本次保存一起提交；走到这里说明没带映射（例如前端资源没生效），
+            # 此时一个字都不写库，让用户回表单里补 —— 见 product_variant_mapping.py
+            raise UserError(self._get_variant_mapping_blocked_message())
         # ① 先把用户那组属性命令写进去：create_product_product=False → 只写配置（属性行 + ptav），
         #    一条变体都不碰（原生写法在这一步就已经把既有变体删掉了）
         self.with_context(create_product_product=False).write({
@@ -1224,18 +1225,25 @@ class ProductTemplate(models.Model):
         ))
 
     def _get_variant_conversion_bool_parameter(self, name, default=True):
-        """读 ``product_variant_conversion.<name>`` 系统参数（布尔），缺省按 ``default``。
+        """读 ``product_variant.<name>`` 系统参数（布尔），缺省按 ``default``。
 
         关闭可写 ``0`` / ``false`` / ``no`` / ``off``（空值按 default 处理）。
+
+        旧模块名时期（``product_variant_conversion.<name>``）设过的值仍然生效：
+        新参数没设过时回退读旧名，这样改模块名不会让已有的开关静默失效。
         """
-        raw = self.env["ir.config_parameter"].sudo().get_param(
-            "product_variant_conversion.%s" % name, "1" if default else "0")
+        params = self.env["ir.config_parameter"].sudo()
+        raw = params.get_param("product_variant.%s" % name, "")
+        if not str(raw).strip():
+            raw = params.get_param("product_variant_conversion.%s" % name, "")
+        if not str(raw).strip():
+            raw = "1" if default else "0"
         return str(raw).strip().lower() not in ("0", "false", "no", "off", "")
 
     def _get_variant_conversion_inherit_variant_data(self):
         """新变体是否按谱系继承变体级数据（成本 / 体积 / 重量），默认开启。
 
-        系统参数 ``product_variant_conversion.inherit_variant_data``：留空或 ``1`` / ``true`` 为开启，
+        系统参数 ``product_variant.inherit_variant_data``：留空或 ``1`` / ``true`` 为开启，
         ``0`` / ``false`` / ``no`` / ``off`` 为关闭（关闭时新变体保持 Odoo 默认的空 / 0，
         由用户自己填）。
 

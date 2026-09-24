@@ -8,13 +8,13 @@
 ## 模块定位
 
 - 模块名：产品变体转换
-- 技术目录：`product_variant_conversion`
+- 技术目录：`product_variant`
 - 新建模型：`product.variant.conversion`（转换台账）、`product.variant.lineage`（变体谱系）；**没有向导模型**（入口是保存拦截，不是按钮）
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
-- 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
-- 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.6.1.0`（19.0.6.1.0：**归属弹窗交互优化** —— 所有下拉选项都可选，选中已被别的组合占用的既有变体时两行**自动互换**（纯函数 `applyOwnershipSelection()`）；19.0.6.0.0：**`T-039` 支持「按需生成变体」的属性** —— 只展开「立即」轴、按需轴按既有变体现带取值钉住、缺失组合自己用 `_create_product_variant()` 补、带按需属性的产品不做价格分离；建产品时带按需属性仍然拦住；`19.0.5.3.2`：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
-- 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
+- 自定义组件（前端模块）：`VariantMappingPanel`（「属性 ↔ 变体」映射表，field widget）+ `FormController.onWillSaveRecord` 补丁
+- 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给映射表补在手数量，运行时判断是否存在）
+- 当前版本：`19.0.7.0.0`（19.0.7.0.0：**模块改名 `product_variant` + 「属性 ↔ 变体」映射表** —— 改属性时属性行下方常驻一张映射表，缺取值的变体显示成**未映射**，还有未映射的变体就不放行保存；归属弹窗随之删除；**已装库必须走「原地改名」三条 SQL**（见 `README.md`），卸载重装会清空台账 / 谱系；19.0.6.1.0：**归属弹窗交互优化** —— 所有下拉选项都可选，选中已被别的组合占用的既有变体时两行**自动互换**（纯函数 `applyOwnershipSelection()`）；19.0.6.0.0：**`T-039` 支持「按需生成变体」的属性** —— 只展开「立即」轴、按需轴按既有变体现带取值钉住、缺失组合自己用 `_create_product_variant()` 补、带按需属性的产品不做价格分离；建产品时带按需属性仍然拦住；`19.0.5.3.2`：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
+- 命名说明：技术名用**名词短语** `product_variant`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
 - ⚠ **不要再改技术名**：Odoo 视改名为不同模块，装过的库必须「先卸载旧名、再安装新名」；
@@ -37,7 +37,7 @@
 
 3. **`write()` 的三种结局必须区分清楚**
    - ① 既有变体一条不少、也不新增变体 → 原样 `super().write(vals)`；
-   - ② 会新增变体（组合数 > 既有变体数）→ 没有归属映射就**拦住保存**（抛错，由前端弹窗接管），有映射就先安全转换再落库；
+   - ② 会新增变体（组合数 > 既有变体数）→ 还有**未映射**的变体就**拦住保存**（抛错，由前端映射表接管），都映射好了就先安全转换再落库；
    - ③ 会丢变体（`lost_variant_ids` 非空，或组合数 < 既有变体数）→ **直接拒绝**，绝不静默删除
    - 违反后果：把 ② 判成 ③ 会让主场景（加属性）永远弹不出确认框；把 ③ 判成 ①/② 会真删变体
 
@@ -67,7 +67,7 @@
    - 违反后果：删取值会让 Odoo 归档 / 删除对应 ptav 并牵动变体，把删除风险重新引入
 
 9. **归属与属性变更必须同一次写库**
-   - 弹窗确认的归属通过技术字段 `variant_conversion_mapping` 与用户那组属性命令一起提交；
+   - 映射表确认的归属通过技术字段 `variant_conversion_mapping` 与用户那组属性命令一起提交；
      `write()` 先写配置、再做安全转换、最后写其余字段，失败整单回滚；技术字段写完即清空
    - 违反后果：出现「属性改了但归属没落库」或反之的半成品状态；技术字段残留还会污染下一次保存
 
@@ -83,7 +83,7 @@
 12. **依赖最小化：只能依赖 `product`**
     - 需要 `stock` / `sale` / `purchase` / `account` 的信息时，一律用 `model_name in self.env` +
       `check_access_rights("read", raise_exception=False)` 降级；测试里 `is_storable`（stock 提供）也要先判断字段是否存在
-    - 违反后果：只装库存的库装不上本模块，或弹窗/台账因权限不足直接报错
+    - 违反后果：只装库存的库装不上本模块，或映射表 / 台账因权限不足直接报错
 
 13. **转换逻辑只能有一处实现**
     - 核心逻辑留在 `product.template._convert_to_multi_variant()`，`write()` 只做判定与编排；
@@ -99,7 +99,7 @@
       来源为空时跳过该变体，保持空值、不做猜测
     - **禁止**复制内部参考号（本仓库 `product_reference` 的 L1 约束是「多变体产品不共用参考号」）与条码
       （`product.product._check_barcode_uniqueness()` 的唯一性约束会让写入直接报错、整单回滚）
-    - 开关是系统参数 `product_variant_conversion.inherit_variant_data`（默认开启）；台账 `inherit_variant_data` 要如实记录
+    - 开关是系统参数 `product_variant.inherit_variant_data`（默认开启）；台账 `inherit_variant_data` 要如实记录
     - 违反后果：参考号在多变体间共用，与 `product_reference` 的既定规则打架；复制条码直接 ValidationError
 
 16. **价格数据默认按变体分离：改一个变体的价格不得牵动别的变体**
@@ -110,7 +110,7 @@
     - 两道保险必须保留：① 变体在同一「价格表 + 数量门槛」上已有自己的规则时，模板规则不再拆过去（避免静默改价）；
       ② `_check_variant_price_separation()` 断言分离前后「供应商价格只多不少、原有变体**实际售价**一分未变、
       新变体售价与其来源一致」，不符即整单回滚
-    - 开关：系统参数 `product_variant_conversion.separate_variant_prices`（默认开启）；台账 `separate_variant_prices` 如实记录
+    - 开关：系统参数 `product_variant.separate_variant_prices`（默认开启）；台账 `separate_variant_prices` 如实记录
     - 违反后果：拆规则时静默改价（卖价变了却没人知道）；或所有变体共用一条价格记录，改一处影响全部
 
 17. **属性主数据与属性行的直接写路径必须过「丢变体」守卫**（`models/product_attribute_guards.py`）
@@ -129,9 +129,9 @@
       （`if not tmpl_id.has_dynamic_attributes()`），所以走 `_create_variant_conversion_missing_variants()`
       → `_create_product_variant()`（销售配置器同款入口）；**不要**自己拼 `product.product.create()`
     - 原生会丢变体时必须自己锚定：`needs_anchoring`（某条既有变体缺某个**多取值**属性行的取值）→
-      不能走「原生保存」，走转换、用默认归属锚定（无新变体 → 不弹窗）；否则原生会把它当组合不完整删掉
+      不能走「原生保存」，走转换、用默认归属锚定（无新变体 → 映射表不阻断）；否则原生会把它当组合不完整删掉
     - **不做价格分离**：带按需属性的产品保持模板级价格（分离会拆走模板级记录并删除，之后订单期新建的
-      变体会取不到价），台账 `separate_variant_prices` 记否，弹窗也不显示勾选框
+      变体会取不到价），台账 `separate_variant_prices` 记否，映射表也不显示勾选框
     - `create()`：**仍然拦住**带按需属性的产品 —— 原生会建出「有属性、没变体」的产品。
       文案由 `_get_variant_conversion_dynamic_message()` 一处提供（`#. odoo-python`），必须点名属性并给
       **能走通**的出路：「先不带该属性建产品、保存，再把属性加到产品上（届时转换会保住既有变体）」；
@@ -147,13 +147,13 @@
 
 1. **源语言是英文（`en_US`）**：Python / XML / JS 里一律写英文；中文只能出现在 `i18n/zh_CN.po` 的 `msgstr` 里。
 2. **可翻译入口正确**：见根 `AGENTS.md` 4.2「可翻译入口对照表」（`model:` / `model_terms:` / `code:` 三类键名）；前端术语走 `code:addons/<module>/static/src/js/<file>.js:0` 与 `code:addons/<module>/static/src/xml/<file>.xml:0`。
-3. **禁止拼接句子**：占位符统一 `%(name)s`。弹窗里夹在元素中的句子（如「还差 N 条」）**必须在 JS 侧用 `_t()` 拼好再 `t-esc`**，否则模板会把句子切成碎片；
+3. **禁止拼接句子**：占位符统一 `%(name)s`。映射表里夹在元素中的句子（如「还差 N 条」）**必须在 JS 侧用 `_t()` 拼好再 `t-esc`**，否则模板会把句子切成碎片；
    唯一允许的拼接是「属性: 取值」这类数据标签。
 4. **`<span>` / `<option>` 等内联元素整块成术语**：见 L2 P2 陷阱 1；选项文案与提示句一律用 JS getter + `_t()`，不要写成模板里的文本节点。
 5. **收尾动作**：改英文源文本 → 同步 `i18n/zh_CN.po` → 提升版本 → `-u` 升级 + 强刷浏览器，中英文各验一遍。
 6. **代码注释保持中文**，不为 i18n 改英文。
 7. **应用列表（Apps）元数据必须有中文**：改 `__manifest__.py` 的 `name` / `summary` / `description` 后，必须同步
-   `model:ir.module.module,shortdesc|summary|description:base.module_product_variant_conversion` 三条
+   `model:ir.module.module,shortdesc|summary|description:base.module_product_variant` 三条
    （`description` 条的 `msgid` 必须等于 `textwrap.dedent(manifest["description"])`）；分类沿用官方的 `Inventory/Product`，
    自定义段 `base.module_category_inventory_product` 的「产品」译文与其它产品类模块**合并成同一条 `msgid`**。
    见根 `AGENTS.md` 4.8。
@@ -170,17 +170,19 @@
 | `models/product_product.py` | 变体上的可搜索来源字段 `variant_conversion_id` / `variant_origin_id` |
 | `models/product_template_prices.py` | 价格数据按变体分离的实现（供应商价格 / 价格表规则的拆分、继承与守恒断言），从 `product_template.py` 拆出 |
 | `models/product_attribute_guards.py` | T-017：属性主数据与属性行直接写路径的「丢变体」守卫（ptav / PAV / line 三个模型） |
-| `models/product_variant_conversion.py` | 转换台账与变体谱系两个模型 |
-| `static/src/js/variant_conversion_form_patch.js` | patch `FormController.onWillSaveRecord`：保存前检测、拦保存、弹窗、把归属放进本次 `changes` |
-| `static/src/js/variant_conversion_dialog.js` | 归属确认弹窗组件（逐组合选「由谁继续承载」+ **重复选择自动互换** + 供应商价格勾选框 + 文案 getter；载荷构造 / 未分配计数 / 互换都是纯函数，便于以后上 Hoot 单测） |
-| `static/src/xml/variant_conversion_dialog.xml` | 弹窗模板 `product_variant_conversion.VariantConversionDialog` |
+| `models/product_variant.py` | 转换台账与变体谱系两个模型 |
+| `models/product_variant_mapping.py` | 「属性 ↔ 变体」映射：初始状态字段 `variant_mapping_state`、预览 RPC `get_variant_mapping_preview()`、未映射判据 `_get_variant_mapping_rows()` |
+| `static/src/js/variant_mapping_panel.js` | 映射表面板（field widget `variant_mapping_panel`）：逐变体逐轴渲染、属性行一改就防抖刷新、状态存在 `model.variantMapping` 上；载荷构造 / 未映射计数 / 属性行签名都是纯函数 |
+| `static/src/xml/variant_mapping_panel.xml` | 映射表模板 `product_variant.VariantMappingPanel` |
+| `static/src/js/variant_conversion_form_patch.js` | patch `FormController.onWillSaveRecord`：保存前问映射状态；会丢变体 / 还有未映射的变体就提示并拦住；都映射好了就把归属放进本次 `changes` |
 | `views/product_template_views.xml` | 产品表单的技术字段（不可见）、`Conversions` 智能按钮；产品搜索筛选。**刻意不加谱系页**：谱系明细在台账详情页里看，避免产品详情页多出页签 |
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
 | `views/product_variant_conversion_views.xml` | 转换台账的列表 / 详情视图与动作 |
 | `security/ir.model.access.csv` | 两个模型的访问规则（`base.group_user` 与 `product.group_product_variant`） |
 | `tests/test_product_variant_conversion.py` | 47 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、按需生成属性的「只展开『立即』轴 / 按需轴钉住既有取值 / 建产品时拦截」、**订单期自建变体不接管（边界）**、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter（含**一次加两个属性**的 chatter 回归）、加取值时的来源映射与尺寸落到对应变体、装了 `product_dimension` 时的尺寸继承、装了 `product_reference` 时的共享参考号交接） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目 |
-| `README.md` | 用户可见功能、字段表、归属怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
+| `tests/test_product_variant_mapping.py` | 8 项映射表自动化测试（当前配置全部已映射 / 加属性后变未映射 / 选值后恢复 / 未映射阻止保存 / 单取值轴自动补 / 按需轴自动补 / blocked 走不通 / 初始状态字段是合法 JSON） |
+| `README.md` | 用户可见功能、字段表、映射怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
 | `AGENTS.md` | 本文件：核心约束、i18n 规则、文件职责、踩坑档案、变更规范 |
 
@@ -212,7 +214,7 @@
    —— 即绕过「删掉最后一个变体时连带删模板」的逻辑。**不要**在转换流程里带这个上下文去删变体。
 4. `_create_variant_ids()` 里的 `single_value_lines` 分支：只有 1 个取值的属性行会被自动写到所有变体上
    （Odoo 保证「加单取值属性不重建变体」的机制）。因此「只加一个取值的属性」是一次合法转换：
-   变体数不变、没有新变体，但每条既有变体都会带上这个取值 —— 也正是判断「需不需要弹窗」的依据
+   变体数不变、没有新变体，但每条既有变体都会带上这个取值 —— 也正是判断「需不需要映射」的依据
    （组合数变多才需要确认归属）。
 
 **为什么不能拿「原生写法」当判据**：原生写法在「加属性 / 加取值」时本来就会把既有变体删掉重建
@@ -237,7 +239,7 @@ if "attribute_line_ids" not in vals or not self.env.context.get("create_product_
 affected = self._analyze_variant_conversion_write(vals["attribute_line_ids"])
 if 会丢变体:  raise UserError(...)
 if 不新增变体:  return super().write(vals)
-if 没有归属映射:  raise UserError(...)     # 前端弹窗接管
+if 还有未映射的变体:  raise UserError(...)   # 前端映射表接管
 self.with_context(create_product_product=False).write({"attribute_line_ids": ...})  # ① 先写配置
 self._convert_to_multi_variant(..., previous_attribute_lines=..., added_attributes=...)  # ② 再安全转换
 return super().write(其余字段)              # ③ 其余字段照常落库
@@ -260,7 +262,7 @@ return super().write(其余字段)              # ③ 其余字段照常落库
 - 现象：`<span class="text-muted">Adds variants…</span>` 抽取出的术语是**含标签的整段 XML**，按纯文本写的 `msgid` 对不上，界面永远显示英文。
 - 根因：`span` / `b` / `i` / `kbd` / `code` / `option` / `select` 等在 `odoo/tools/translate.py` 的 `TRANSLATED_ELEMENTS` 里，
   该元素及其内容会被当成**一个**术语；`div` / `p` / `th` / `td` 不在其中，文本节点才是独立术语（带 `t-*` 属性的元素也会退化成独立文本节点）。
-- 正确做法：说明性文字放在 `div` / `p` 里；弹窗里的选项文案、提示句一律用 JS getter + `_t()`（再 `t-esc`），不要写成模板文本节点。
+- 正确做法：说明性文字放在 `div` / `p` 里；映射表里的选项文案、提示句一律用 JS getter + `_t()`（再 `t-esc`），不要写成模板文本节点。
 
 **陷阱 2：句子被元素切碎**
 - 现象：「还差 N 条」写成 `还有 <t t-esc="n"/> 条没指定` 会变成三个术语碎片。
@@ -286,7 +288,7 @@ return super().write(其余字段)              # ③ 其余字段照常落库
 ```bash
 # 1) 用官方 CLI 导出术语骨架（含 #: 引用，msgid 与源码逐字符一致；JS _t 与模板文本都会带上）
 docker compose -f .dev/compose.yml run --rm -T odoo \
-    odoo i18n export -d dev -l pot -o /mnt/extra-addons/product_variant_conversion/_export.po product_variant_conversion
+    odoo i18n export -d dev -l pot -o /mnt/extra-addons/product_variant/_export.po product_variant
 # 2) 核对 _export.po：新增 / 改过措辞的条目补译文，然后按 msgid 合并回 i18n/zh_CN.po
 #    （元数据三条要单独手写，导出向导不会带出来，见根 AGENTS.md 4.8）
 ```
@@ -294,7 +296,7 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 预期结果：只有 `Created by` / `Created on` / `Display Name` / `ID` / `Last Updated by` / `Last Updated on`
 （标准审计字段标签，界面上不显示）不需要译文。
 
-**每次改完必须跑**：`task check` → `task update` → `task i18n -- zh_CN product_variant_conversion`（确认 po 能正常导入）→ 强刷浏览器。
+**每次改完必须跑**：`task check` → `task update` → `task i18n -- zh_CN product_variant`（确认 po 能正常导入）→ 强刷浏览器。
 
 ### P3：Odoo 19 的字段与命名坑（新增字段 / 模型时必读）
 
@@ -326,9 +328,9 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   本模块「只追加取值、不加新属性」时 `added_attributes` 就是空的）。
 - 排查口径：`grep -rn "\.display_name\|\.id\b" models/`，逐个确认接收方是 `ensure_one()` 的记录还是记录集。
 
-### P4：保存拦截与弹窗（改 `static/src/**` 或 `write()` 时必读）
+### P4：保存拦截与映射表（改 `static/src/**` 或 `write()` 时必读）
 
-**触发条件**：改保存拦截、弹窗、归属载荷格式时。
+**触发条件**：改保存拦截、映射表、归属载荷格式时。
 
 **机制（已核实 Odoo 19 源码）**：
 
@@ -342,51 +344,56 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 
 **本模块的用法**：
 
-- 只在 `record.resModel === "product.template"`、有 `resId`、且本次 `changes` 里含 `attribute_line_ids`、
-  且尚未带 `variant_conversion_mapping` 时介入；
-- 调 `orm.call("product.template", "get_variant_conversion_preview", [[resId], changes.attribute_line_ids])`
-  （把服务端原本要写的那组命令原样过去，服务端在保存点里试写 + 回滚后给出结论）；
-- `preview.blocked` → 提示并 `return false`；`preview.required` → 弹窗并 `return false`；
-- 弹窗里换选项是**互换**而不是「占用」（`19.0.6.1.0`）：所有选项都可选，选中已被别的组合占用的既有变体时
-  与占用行对调（纯函数 `applyOwnershipSelection()`），任意时刻都满足「每条既有变体只被一行占用」，
-  因此 `countUnassigned() == 0` 就等价于「载荷合法」。**不要**退回「把已占用选项置灰」的写法 ——
-  那样用户换归属得先腾位置再选，两步且看不出原因。
-- 弹窗确认后：`await record.update({variant_conversion_mapping: JSON.stringify(payload)})` 再 `this.model.save()`
-  → 第二次保存因为 `changes.variant_conversion_mapping` 已存在而直接放行，服务端走安全转换。
+- 只在 `record.resModel === "product.template"`、有 `resId`、且本次 `changes` 里含 `attribute_line_ids` 时介入；
+- 调 `orm.call("product.template", "get_variant_mapping_preview", [[resId], changes.attribute_line_ids, selection])`
+  （把服务端原本要写的那组命令原样过去，服务端在保存点里试写 + 回滚后给出结论；`selection` 是映射表里用户
+  已选的取值 `{变体 id: {属性 id: 取值 id}}`，面板没挂载时为 `{}`）；
+- `preview.blocked` → 提示并 `return false`；`preview.unmapped_count > 0` → 提示还差几条并 `return false`；
+  都映射好了 → 把归属塞进 `changes.variant_conversion_mapping` 后放行（`preview.required` 时）；
+- 映射表的状态放在 **`model.variantMapping`**（`getMappingStore(model)`）而不是组件里：面板挂在「属性与变体」
+  页里，切到别的页签会卸载；存在 model 上，保存钩子与面板共享同一份数据，切页签不丢选择。
 
 **陷阱 1：递归**
 - 服务端的 `_analyze_variant_conversion_write()` 与 `_convert_to_multi_variant()` 都会用
   `with_context(create_product_product=False)` 写 `attribute_line_ids`，而 `write()` 的第一道判断必须把这种写入放行，
   否则会无限递归（实测 `RecursionError`，且栈里全是 `sql_db.py` 的 savepoint，很难看出根因）。
 
-**陷阱 2：弹窗取消必须真的不保存**
-- 「先弹窗、保存照做」是错的：钩子必须返回 `false`（本次保存不执行），把「保存」这个动作交给用户确认后的第二次保存；
-  弹窗的 `onConfirm` 才去 `record.update(...) + this.model.save()`。取消 / 直接关掉弹窗时什么都不做即可（表单保持 dirty）。
+**陷阱 2：还有未映射变体时必须真的不保存**
+- 「先提示、保存照做」是错的：钩子必须返回 `false`（本次保存不执行），把「保存」这个动作交给用户在映射表里
+  挑完之后的第二次保存。挑取值只改面板状态（在 `model.variantMapping` 上），不写库；表单一直保持 dirty，
+  挑完再点保存才真正落库。
 
-**陷阱 3：字段必须在视图里存在**
-- `record.update({variant_conversion_mapping: ...})` 要求该字段在表单视图的 activeFields 里
-  → `views/product_template_views.xml` 里以 `invisible="1"` 登记；否则 OWL 侧会当作未知字段。
+**陷阱 3：塞进 `changes` 的字段服务端要认**
+- 钩子直接给 `changes.variant_conversion_mapping` 赋值（不经 `record.update()`），所以不依赖该字段在视图里
+  是否可编辑；但**服务端 `write()` 必须处理它**。视图里仍以 `invisible="1" force_save="1"` 登记，
+  排查时 `changes` 里能直接看到它。
 
 **陷阱 4：`assets` 新增文件必须 `-u`**
 - 本模块的三个前端文件登记在 `__manifest__.py` 的 `assets.web.assets_backend`；新增 / 改文件名后必须
-  `-u`（或重启进程）+ 强刷浏览器，否则前端钩子不会生效（表现就是「点了保存但没弹窗，只报错误提示」）。
+  `-u`（或重启进程）+ 强刷浏览器，否则前端钩子不会生效（表现就是「点了保存但没有映射表，只报错误提示」）。
 
 **陷阱 5：保存入口不是 `this.model.save()`（实测踩过）**
 - 现象：弹窗点确认后控制台报 `Uncaught Promise > this.model.save is not a function`。
 - 根因：`RelationalModel` 上**没有** `save`。保存入口在 **Record** 上（`this.model.root.save(options)`），
   控制器层还有 `FormController.save(params)`（内部 `record.save({ onError: this.onSaveError, ...params })`，
   并尊重 `props.saveRecord` / `props.onSave`）。
-- 正确做法：在 `onWillSaveRecord` 的弹窗回调里用 `await this.save()`（`this` 是 FormController）；
+- 正确做法：在映射表 / 钩子的回调里用 `await this.save()`（`this` 是 FormController）；
   **不要**用 `this.model.save()`，也不要直接 `this.model.root.save()`（会绕过控制器的错误处理）。
 - 参考：`web/static/src/views/form/form_controller.js` 里 `save()` / `create()` / `saveButtonClicked()`
   统一走 `this.model.root.save({ onError })`。
 
 **陷阱 6：承载前端回传数据的技术字段必须 `force_save="1"`**
-- 现象：弹窗确认后保存又被拦一次、弹窗反复出现，且没有任何报错。
+- 现象：映射表挑完后保存又被拦一次、提示反复出现，且没有任何报错。
 - 根因：`Record._getChanges()` 对「在 activeFields 里、但 `_isReadonly(fieldName)` 为真且没标 `forceSave`」
   的字段直接 `continue`，该字段不会进 `changes`，也就不会随 `webSave` 提交。
 - 正确做法：`variant_conversion_mapping` 在视图里写 `invisible="1" force_save="1"`（模型字段本身保持可写）。
   改这个字段的属性（尤其加 `readonly`）前，先确认 `changes` 里还能看到它。
+
+**陷阱 7：映射表字段必须 `readonly="0"`**
+- 现象：映射表渲染出来了，但每个下拉都是禁用的，用户补不了映射。
+- 根因：`variant_mapping_state` 是非存储的 compute 字段，表单把它当只读 → 面板的 `props.readonly` 为真。
+- 正确做法：视图里显式写 `readonly="0"`（Odoo 的视图修饰符解析认 `'0'` 为假：
+  `base/models/ir_ui_view.py` 里 `node.get('readonly') not in ('1', 'True')` 那一路）。
 
 ### P5：业务场景、数据流与一致性边界（评估完整性 / 排障时读）
 
@@ -397,9 +404,9 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 
 | 场景 | 结局 | 处理 | 测试 |
 |------|------|------|------|
-| 单变体加多取值属性（1→N） | required | 弹窗确认归属 | ✅ |
-| 多变体加新属性（N→N×M，主场景） | required | 弹窗确认归属 | ✅ |
-| 给已有属性追加取值 | required | 弹窗确认归属 | ✅ |
+| 单变体加多取值属性（1→N） | required | 映射表逐条指定组合 | ✅ |
+| 多变体加新属性（N→N×M，主场景） | required | 映射表逐条指定组合 | ✅ |
+| 给已有属性追加取值 | required | 映射表逐条指定组合 | ✅ |
 | 加单取值属性 / 加 no_variant 属性 / 重提同配置 | 不涉及变体 | 原样 `super().write()` | ✅ |
 | 删取值 / 删属性行 | blocked | 拒绝保存 | ✅ |
 | 组合数变少（改动后被排除规则过滤） | blocked | 拒绝保存 | — |
@@ -414,7 +421,7 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 **同步规则（写文档 / 排障时别搞错）**
 
 - 库存：**完全不动**（`stock.quant` / `move.line` / `move` / `lot` / `orderpoint` 都留在各自那条原记录上）。
-- **原产品资料不需要「转移」**：弹窗里被指定承载某个组合的那条变体，**就是原 `product.product` 记录本身**（id 不变），
+- **原产品资料不需要「转移」**：映射表里被指定承载某个组合的那条变体，**就是原 `product.product` 记录本身**（id 不变），
   所以参考号 / 条码 / 按变体的供应商价格（`supplierinfo.product_id`）/ 按变体的价格表规则
   （`pricelist.item.applied_on = 0_product_variant`）/ 补货规则（`orderpoint.product_id`）本来就在它身上，
   一个字段都不搬；已指向该变体的记录不动，模板级的记录保持模板级（对所有变体生效）。
@@ -423,7 +430,7 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 - **价格数据默认按变体分离**（系统参数 `separate_variant_prices`，默认开启）：本产品模板级的供应商价格 /
   价格表规则拆成每条变体一份（数值不变）并删除原记录；新变体从谱系来源继承；同一「价格表 + 数量门槛」上
   变体已有规则时不覆盖（避免静默改价）；分离前后由 `_check_variant_price_separation()` 断言兜底。
-  弹窗勾选框**默认不勾选**，勾上时供应商价格退回模板级共享（`_share_vendor_prices_with_variants()`：
+  映射表勾选框**默认不勾选**，勾上时供应商价格退回模板级共享（`_share_vendor_prices_with_variants()`：
   所有变体取同一批数值；价格表规则仍按变体分离）。
 - 模板级字段（`list_price`、`taxes_id`、`uom_id`）天然覆盖全部变体；ptav 级（`price_extra`）随取值走。
 - **按需生成产品的「订单期变体」完全在本模块之外**（`19.0.5.3.2` 核实，`T-039` 后依然成立）：配置器 →
@@ -447,11 +454,11 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
     那是 `product_reference` 自己的两层约定（单变体产品两处同值、多变体产品只写产品级），
     与本模块无关（见该模块 AGENTS.md L1.3）。历史：`19.0.5.1.0`～`19.0.5.2.1` 曾把原变体编号
     「上移」成产品编号并清空变体编号，`19.0.5.3.0` 按「模块间彻底解耦」的要求移除；
-  - **新变体的继承策略**（`19.0.3.2.0` 起默认开启，系统参数 `product_variant_conversion.inherit_variant_data`）：
+  - **新变体的继承策略**（`19.0.3.2.0` 起默认开启，系统参数 `product_variant.inherit_variant_data`）：
     按谱系来源（`variant_origin_id`）复制 `standard_price` / `volume` / `weight`；**`default_code` 与 `barcode` 刻意不复制**
     （参考号受 `product_reference` 的 L1 约束「多变体不共用」约束、条码有 `_check_barcode_uniqueness()` 唯一性约束）；
     `product.pricelist.item` 与 `stock.warehouse.orderpoint` 也不继承（规则各自带适用条件，盲目复制会产生重复规则）；
-    `supplierinfo` → 仍由弹窗勾选框决定（一刀切共享，见下方 ⚠）。
+    `supplierinfo` → 仍由映射表勾选框决定（一刀切共享，见下方 ⚠）。
     来源为空时跳过、保持空值，不猜测。
   - **来源怎么定**（`19.0.5.0.0` 起）：`_find_variant_conversion_origin()` 只拿**转换前就存在的取值**
     （`_get_variant_conversion_origin_key()`，按各变体转换前的组合拍快照）去比 —— 新变体在老属性轴上保留的取值
@@ -505,8 +512,8 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 5. **组合枚举无前置上限**：`_get_variant_conversion_combinations()` 在 `product.dynamic_variant_limit` 检查之前就枚举全部组合，超大配置会先枚举再拒绝。
 6. **试写在加锁之前**：`_analyze_variant_conversion_write()` 不带 `FOR UPDATE`，并发下分析结果可能过期 ——
    由 `_check_variant_conversion_anchors()` 与后置断言兜住（拒绝并整单回滚），不会写坏数据，但报错会指向「组合被排除 / 变体数不符」。
-7. **弹窗未展示在手数量**：预览已返回 `variants[].on_hand`，模板只渲染了 `label`。
-8. **前端无自动化测试**：28 项都是服务端测试，弹窗与钩子靠手工验证（见 `README.md` →「验证清单」）。
+7. ~~展示在手数量~~ **已交付**（`19.0.7.0.0`）：映射表里每条变体后面附「在手 N」（未装 `stock` 时不显示）。
+8. **前端无自动化测试**：55 项都是服务端测试，映射表与钩子靠手工验证（见 `README.md` →「验证清单」）。
 9. **有代码无测试的服务端分支**（多记录写入、归档变体、dynamic 属性已于 `19.0.4.0.0` 补测）：combo 产品（构造合法组合产品需要先配 combo choice）、组合被排除规则过滤（排除规则本身会先让原生收编变体，难以构造）、无 `stock` / 无读权限时的降级。
 10. ~~「按需生成」属性只做到「拦住 + 讲清楚」，没做到「支持」~~ **已解决**（`T-039`，`19.0.6.0.0`）：
     只展开 `always` 的属性轴、按需轴按既有变体现带取值钉住（`_split_variant_conversion_lines()` /
@@ -520,7 +527,7 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 | 想扩展什么 | 在哪扩 |
 |-----------|--------|
 | 默认归属规则 | override `_get_variant_conversion_default_mapping()` |
-| 弹窗里的新选项 | `variant_conversion_dialog.js` 加选项 → `_parse_variant_conversion_mapping()` 解析 → `write()` 落地（现有 `share_vendor_prices` 就是范例） |
+| 映射表里的新选项 | `variant_mapping_panel.js` 加选项 → 进 `buildMappingPayload()` → `_parse_variant_conversion_mapping()` 解析 → `write()` 落地（现有 `share_vendor_prices` 就是范例） |
 | 转换后的数据补全（成本 / 参考号 / 图片 / 价格表规则） | 目前**没有正式钩子**，只能插在 `_create_variant_conversion_lineage()` 之后；`T-020` 要补 |
 | 批量转换 | 新增独立入口（列表按钮 / 服务器动作），逐产品调用 `_convert_to_multi_variant()`，**各自包一个保存点** |
 | 拦截「属性主数据」路径 | 在 `product.template.attribute.value` 上加同样的判定（`T-017`） |
@@ -544,7 +551,7 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 属于另一个风险等级的功能，要做就得先回答：被删取值的库存与单据往哪条变体上挪？想不清楚就不要做。
 当前设计给用户的路是「先归档 / 删除不想要的变体，再改属性配置」。
 
-### 想在弹窗里加选项（例如同时调整价格表规则）
+### 想在映射表里加选项（例如同时调整价格表规则）
 
 - 前端：在 `variant_conversion_dialog.js` 加字段 + 在载荷里带出去（参考 `share_vendor_prices`）；
 - 服务端：在 `_parse_variant_conversion_mapping()` 里解析并返回，`write()` 负责落地。
@@ -560,7 +567,7 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 
 ## 调试建议
 
-- **点保存没弹窗、只报错**：前端资源没生效（没 `-u` 或没强刷浏览器），按报错提示强刷一次；报错文案就是这条线索。
+- **点保存没映射表、只报错**：前端资源没生效（没 `-u` 或没强刷浏览器），按报错提示强刷一次；报错文案就是这条线索。
 - **弹出了归属框但默认归属很奇怪**：默认归属来自 `_get_variant_conversion_default_mapping()`（已有属性保持原取值、新加属性取第一个取值）；确认预览里的 `combinations` 是否与 `_get_variant_conversion_combinations()` 的输出一致。
 - **报「属性重复 / 取值不能删除 / 会删变体」**：都是 `write()` 的前置校验，报错不改库；按提示先处理变体再改属性。
 - **报「变体数不符 / 原变体不见了 / 没带上该组合」**：后置断言触发，整单已回滚。重点看产品的属性排除配置
@@ -568,7 +575,7 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 - **`RecursionError`**：`write()` 的第一道判断丢了 `create_product_product` 放行分支，见 P4 陷阱 1。
 - **谱系里 `variant_origin_id` 全是空**：`_convert_to_multi_variant()` 没拿到 `previous_attribute_lines`
   （改动前快照），来源判定用了改动后的属性轴，见 P1「维护提醒」。
-- **中文界面还是英文**：先 `task i18n -- zh_CN product_variant_conversion` 强制刷新译文（元数据条目 `noupdate=True`），
+- **中文界面还是英文**：先 `task i18n -- zh_CN product_variant` 强制刷新译文（元数据条目 `noupdate=True`），
   再强刷浏览器；后端字段标签刷新页面即可。
 - **预览里的在手数量是 0**：没装 `stock`，或当前用户没有 `stock.quant` 的读权限（设计如此）。
 

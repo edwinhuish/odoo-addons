@@ -59,14 +59,14 @@ class ProductVariantConversion(models.Model):
         readonly=True,
         help="Whether the variants created by this conversion inherited the cost, the volume and the weight of the "
              "variant they derive from. Configure it with the system parameter "
-             "product_variant_conversion.inherit_variant_data.",
+             "product_variant.inherit_variant_data.",
     )
     separate_variant_prices = fields.Boolean(
         string="Variant Prices Separated",
         readonly=True,
         help="Whether the vendor prices and the pricelist rules of this product were spread over its variants, so "
              "that every variant can be priced on its own (changing one variant does not touch the others). "
-             "Configure it with the system parameter product_variant_conversion.separate_variant_prices.",
+             "Configure it with the system parameter product_variant.separate_variant_prices.",
     )
     lineage_ids = fields.One2many(
         comodel_name="product.variant.lineage",

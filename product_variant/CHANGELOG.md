@@ -3,6 +3,64 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.7.0.0] - 2026-09-24（模块改名 `product_variant` + 「属性 ↔ 变体」映射表）
+
+> 修订日期：2026-09-24 ｜ 类型：架构/破坏性（+x，已装库需原地改名）+ 交互重构 ｜ 影响文件：
+> 模块目录改名、`models/product_variant_mapping.py`（新增）、
+> `static/src/js/variant_mapping_panel.js` / `static/src/xml/variant_mapping_panel.xml`（新增）、
+> `static/src/js/variant_conversion_form_patch.js`、`views/product_template_views.xml`、
+> `models/product_template.py`（保存拦截文案）、`i18n/zh_CN.po`、`__manifest__.py`、
+> `README.md` / `AGENTS.md` / 本文件
+> 删除：`static/src/js/variant_conversion_dialog.js`、`static/src/xml/variant_conversion_dialog.xml`
+
+### 变更目标
+
+1. 模块技术名 `product_variant_conversion` → `product_variant`（业务域名，为后续变体相关功能留位）。
+2. 归属确认从「保存时弹一次模态框」改成「属性与变体页下方的常驻映射表」：改了属性立刻显示每条变体带哪个
+   组合，缺取值的变体标记**未映射**，还有未映射的变体就**不放行保存**。
+
+### 变更
+
+1. **模块改名**（只改技术名）：目录、`__manifest__.py`（显示名「产品变体」/ 版本 / 资源路径）、
+   OWL 模板注册名、系统参数前缀（新参数没设时回退读旧名，已设过的开关不失效）、全部文档与 po 引用。
+   **模型名 `product.variant.conversion` / `product.variant.lineage`、所有字段与列名、视图 / 动作 /
+   权限的 xmlid 一律不动** → 已装库原地改名即可，数据不丢（升级步骤见 `README.md`）。
+2. **映射表**（`models/product_variant_mapping.py`）：
+   - 新增 `get_variant_mapping_preview(attribute_line_ids, selection)`：复用现有「只写配置、不碰变体」的
+     试写，返回每条既有变体在**这次改动之后**带哪个组合（`rows`）、未映射条数（`unmapped_count`）、
+     本次会新建的组合，以及「会丢变体」的 blocked 提示（判定与文案沿用现有预览，不分叉）；
+   - 新增非存储计算字段 `variant_mapping_state`：表单打开时就把当前（已保存的）映射交给前端，省一次 RPC。
+3. **未映射判据**：某属性轴有多个取值、而这条变体在该轴上没有取值（既不是自己带着的、也不是用户刚选的）
+   → 未映射。单取值轴与「按需生成」轴由 Odoo 自己补取值，不算未映射（行里标 `fixed`）。
+4. **前端**：新增 field widget `variant_mapping_panel`（挂在属性行下方，`readonly="0"` 保证下拉可编辑）；
+   属性行一改就防抖 300ms 问一次服务端；映射状态存在 `model.variantMapping` 上（切页签不丢选择）；
+   保存钩子据此决定放行还是拦住，放行时把归属写进 `changes.variant_conversion_mapping`。
+5. **弹窗删除**：`variant_conversion_dialog.js` / `.xml` 不再需要，「供应商价格共享」勾选框移到映射表下方。
+6. **保存拦截文案**：改为「还有变体没有组合：请在属性行下方的映射表里给每条变体指定它保留的组合，然后再保存」。
+
+### 影响
+
+- 交互：从「点保存 → 弹窗确认 → 保存」变成「改属性 → 映射表里挑 → 保存」；未映射时保存被拦住
+  （服务端同判据兜底，前端资源没生效时直接报错）
+- 载荷格式（`variant_conversion_mapping`）与服务端转换逻辑不变；无数据结构变化、无迁移脚本
+- 已装库必须走「原地改名」三条 SQL（见 `README.md`）；**卸载重装会清空台账 / 谱系 / 变体来源字段**
+
+### 文档
+
+- 模块 `README.md`（全文按新交互更新 + 新增「从 `product_variant_conversion` 改名升级」章节）、
+  `AGENTS.md`（文件职责、约束、验证清单）、本条目
+- 根 `README.md` / `AGENTS.md` / `TODO.md` 模块名与版本（`TODO.md` 归档为 `T-042`）
+
+### 验证记录
+
+| 跑法 | 结果 |
+|------|------|
+| `task test -- product_variant --test-tags=/product_variant` | 55 项全部通过（0 failed / 0 error） |
+| 新增映射测试 8 项（当前配置 / 加属性后未映射 / 选值后恢复 / 未映射阻止保存 / 单取值自动补 / 按需自动补 / blocked / 初始状态字段） | 全部通过 |
+| dev 库原地改名三条 SQL + `-u product_variant` | 升级无报错，模块 `installed` 19.0.7.0.0 |
+| `task check`（仓库自检） | 无失败项（重复 msgid 已修；仅余测试断言里的既有中文告警） |
+| 前端映射表（面板渲染 / 下拉 / 保存拦截） | **待目标环境验证**（无浏览器自动化） |
+
 ## [19.0.6.1.0] - 2026-09-24（归属弹窗：所有选项可选，重复选择自动互换）
 
 > 修订日期：2026-09-24 ｜ 类型：交互优化（+y）｜ 影响文件：
@@ -43,8 +101,8 @@
 |------|------|
 | 纯函数一次性验证（node，6 组用例 + 「无重复占用」不变量） | Black/White 示例互换、两行互换、选「新变体」不影响别人、三行抢占、重复选自身、单行均可通过 ✓ |
 | `node --check` | 语法通过 ✓ |
-| `task test -- product_variant_conversion` 等四组配置 | 47 项 0 failed / 0 error ✓（服务端未动，用回归确认） |
-| `task update -- product_variant_conversion` | 升级无报错，前端资源已登记在 `assets` ✓ |
+| `task test -- product_variant` 等四组配置 | 47 项 0 failed / 0 error ✓（服务端未动，用回归确认） |
+| `task update -- product_variant` | 升级无报错，前端资源已登记在 `assets` ✓ |
 | 目标环境 | 弹窗交互（选项全可选 / 互换后两行显示同步 / 中英文提示）**待验证**（前端改动，需 `-u` + 强刷浏览器） |
 
 ---
@@ -115,10 +173,10 @@
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion` | 47 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,stock,sale_management` | 47 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,product_dimension` | 47 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,product_reference,product_card_view,sale_management` | 57 项 0 failed / 0 error ✓ |
+| `task test -- product_variant` | 47 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,stock,sale_management` | 47 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,product_dimension` | 47 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,product_reference,product_card_view,sale_management` | 57 项 0 failed / 0 error ✓ |
 | shell 实测（按需产品加「立即」属性） | 计划组合 4 条（未展开未被使用的按需取值）、既有变体原记录保留、新增 2 条带来源字段、台账 1 / 谱系 4、`separate_variant_prices=False` ✓ |
 | shell 实测（加多取值按需属性） | 预览 `required=False`、原变体记录存活并锚定到第一个取值（原生原本会删掉它）✓ |
 | 目标环境 | 导入产品加属性、弹窗提示与中文文案**待验证** |
@@ -177,10 +235,10 @@
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion` | 46 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,stock,sale_management` | 46 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,product_dimension` | 46 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,product_reference,product_card_view,sale_management` | 56 项 0 failed / 0 error ✓ |
+| `task test -- product_variant` | 46 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,stock,sale_management` | 46 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,product_dimension` | 46 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,product_reference,product_card_view,sale_management` | 56 项 0 failed / 0 error ✓ |
 | 新用例在**旧代码**上的表现 | 复现 `ValueError: Expected singleton: product.attribute(1, 2)` ✓（证明用例有效） |
 | 订单期创建变体（shell 实测） | 变体正常创建；`variant_conversion_id` / `variant_origin_id` 为空、谱系 0 行、台账 0 条、成本 / 体积 / 重量保持 0 ✓（与文档一致） |
 | 目标环境 | 加两个属性的保存复验**待验证**（`-u` 后重做一次即可，之前失败的那次没有写入任何数据） |
@@ -243,10 +301,10 @@
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion` | 44 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,stock,sale_management` | 44 项 0 failed / 0 error ✓（含依赖模块回归） |
-| `task test -- product_variant_conversion,product_dimension` | 44 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,product_reference,product_card_view,sale_management` | 54 项 0 failed / 0 error ✓（另两个模块用 `create` 带属性行建产品，验证没有误伤） |
+| `task test -- product_variant` | 44 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,stock,sale_management` | 44 项 0 failed / 0 error ✓（含依赖模块回归） |
+| `task test -- product_variant,product_dimension` | 44 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,product_reference,product_card_view,sale_management` | 54 项 0 failed / 0 error ✓（另两个模块用 `create` 带属性行建产品，验证没有误伤） |
 | 目标环境 | 中英文报错文案与「建产品被拦」的界面表现**待验证** |
 
 ---
@@ -254,7 +312,7 @@
 ## [19.0.5.3.0] - 2026-09-23（彻底与 product_reference 解耦：转换不再改变体编号、不再交接参考号）
 
 > 修订日期：2026-09-23 ｜ 类型：行为调整（+y）｜ 影响文件：`models/product_template.py` /
-> `models/product_variant_conversion.py` / `tests/test_product_variant_conversion.py` /
+> `models/product_variant.py` / `tests/test_product_variant_conversion.py` /
 > `i18n/zh_CN.po` / `__manifest__.py` / `AGENTS.md` / `README.md`
 
 ### 优化目标
@@ -306,8 +364,8 @@
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion`（未装 `product_reference`） | 42 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,product_reference` | 48 项 0 failed / 0 error（含参考号「原样不动」用例）✓ |
+| `task test -- product_variant`（未装 `product_reference`） | 42 项 0 failed / 0 error ✓ |
+| `task test -- product_variant,product_reference` | 48 项 0 failed / 0 error（含参考号「原样不动」用例）✓ |
 | 三模块同装 + `stock` | 见该组合的回归记录 ✓ |
 | 目标环境 | 弹窗交互与界面复验**待验证** |
 
@@ -366,8 +424,8 @@
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion`（未装 `product_reference`） | 46 项 0 failed / 0 error（新用例走「没装」分支）✓ |
-| `task test -- product_variant_conversion,product_reference,product_card_view`（三模块同装） | 54 项 0 failed / 0 error（含另两个模块的用例）✓ |
+| `task test -- product_variant`（未装 `product_reference`） | 46 项 0 failed / 0 error（新用例走「没装」分支）✓ |
+| `task test -- product_variant,product_reference,product_card_view`（三模块同装） | 54 项 0 failed / 0 error（含另两个模块的用例）✓ |
 
 ---
 
@@ -412,16 +470,16 @@
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion,product_reference` | 45 项 0 failed / 0 error（含 `test_single_variant_reference_moves_to_the_product_base_reference` 与 `test_variant_reference_wins_over_a_leftover_base_reference`）✓ |
-| `task test -- product_variant_conversion`（未装 `product_reference`） | 45 项 0 failed / 0 error，两条用例按预期 skip ✓ |
-| `… -- product_variant_conversion,product_dimension`、`… ,stock,sale_management` | 目标环境待验证（本地未跑该组合） |
+| `task test -- product_variant,product_reference` | 45 项 0 failed / 0 error（含 `test_single_variant_reference_moves_to_the_product_base_reference` 与 `test_variant_reference_wins_over_a_leftover_base_reference`）✓ |
+| `task test -- product_variant`（未装 `product_reference`） | 45 项 0 failed / 0 error，两条用例按预期 skip ✓ |
+| `… -- product_variant,product_dimension`、`… ,stock,sale_management` | 目标环境待验证（本地未跑该组合） |
 
 ---
 
 ## [19.0.5.1.0] - 2026-09-22（单变体的内部参考号升级为产品母型号）
 
 > 修订日期：2026-09-22 ｜ 类型：功能新增（+y）｜ 影响文件：`models/product_template.py` /
-> `models/product_variant_conversion.py` / `tests/test_product_variant_conversion.py` /
+> `models/product_variant.py` / `tests/test_product_variant_conversion.py` /
 > `i18n/zh_CN.po` / `__manifest__.py`
 >
 > ⚠ **本条的第 2 点已被 `19.0.5.2.0` 替换**：上移不再要求「母型号已同值」，
@@ -461,9 +519,9 @@
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion,product_reference` | 45 项 0 failed / **0 error**（含两条新用例：母型号迁移、母型号为空时先存后清）✓ |
-| `task test -- product_variant_conversion`（未装 `product_reference`） | 45 项 0 failed / 0 error，两条新用例按预期 skip ✓ |
-| `task test -- product_variant_conversion,product_reference,stock,sale_management` | 目标环境待验证（本地未跑全套可选模块组合） |
+| `task test -- product_variant,product_reference` | 45 项 0 failed / **0 error**（含两条新用例：母型号迁移、母型号为空时先存后清）✓ |
+| `task test -- product_variant`（未装 `product_reference`） | 45 项 0 failed / 0 error，两条新用例按预期 skip ✓ |
+| `task test -- product_variant,product_reference,stock,sale_management` | 目标环境待验证（本地未跑全套可选模块组合） |
 
 ---
 
@@ -506,10 +564,10 @@
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion`（只装 `product`） | 43 项 0 failed / **0 error**（修复前 33 error）✓ |
-| `… -- product_variant_conversion,product_dimension` | 43 项 0 failed（含尺寸落到对应变体的新用例）✓ |
-| `… -- product_variant_conversion,product_reference` | 43 项 0 failed（走参考号交接分支）✓ |
-| `… -- product_variant_conversion,stock,sale_management` | 43 项 0 failed ✓ |
+| `task test -- product_variant`（只装 `product`） | 43 项 0 failed / **0 error**（修复前 33 error）✓ |
+| `… -- product_variant,product_dimension` | 43 项 0 failed（含尺寸落到对应变体的新用例）✓ |
+| `… -- product_variant,product_reference` | 43 项 0 failed（走参考号交接分支）✓ |
+| `… -- product_variant,stock,sale_management` | 43 项 0 failed ✓ |
 
 ---
 
@@ -549,7 +607,7 @@
 | 项 | 结果 |
 |----|------|
 | 开发库实测（单变体、产品级 `CUST-SHARED` + 变体级 `VAR-OWN` → 转换） | 原变体 = `['CUST-SHARED', 'VAR-OWN']`；新变体为空；产品级为空；源产品索引 `False` ✓ |
-| 自动化测试 | `task test -- product_variant_conversion,product_reference,sale_management --test-tags=/product_variant_conversion` → **41 项 0 failed**（含新增 2 项：正常交接、同码时保守保留）✓ |
+| 自动化测试 | `task test -- product_variant,product_reference,sale_management --test-tags=/product_variant_conversion` → **41 项 0 failed**（含新增 2 项：正常交接、同码时保守保留）✓ |
 
 ---
 
@@ -644,7 +702,7 @@
 
 ### 变更
 
-- **默认把价格数据按变体分离**（新增系统参数 `product_variant_conversion.separate_variant_prices`，默认开启）：
+- **默认把价格数据按变体分离**（新增系统参数 `product_variant.separate_variant_prices`，默认开启）：
   - 本产品**模板级**的供应商价格（`supplierinfo.product_id` 为空）与价格表规则（`applied_on = '1_product'`）
     **按变体各复制一份（数值不变）后删除原记录** → 从此每条变体一份、各自可改；
   - **新变体**从谱系来源（`Derived From`）继承一份；来源没有就留空；
@@ -711,7 +769,7 @@
 - **新变体按谱系继承变体级数据**：`_apply_variant_data_inheritance()` 把新变体的
   **成本 `standard_price` / 体积 `volume` / 重量 `weight`** 从它的谱系来源（`Derived From`，即 `variant_origin_id`）复制过来，
   在转换第 ⑦ 步（写完谱系之后）执行；来源为空时跳过该变体，保持空值、不做猜测。
-- **可配置**：系统参数 `product_variant_conversion.inherit_variant_data`，默认开启；
+- **可配置**：系统参数 `product_variant.inherit_variant_data`，默认开启；
   设为 `0` / `false` / `no` / `off` 则新变体保持 Odoo 默认的空 / 0。
 - **刻意不继承**（各有硬约束，详见 README →「新变体继承策略」）：
   - 内部参考号 `default_code`：本仓库 `product_reference` 的 L1 约束「多变体产品不共用参考号」；
@@ -910,15 +968,15 @@
 
 ### 执行流程
 
-1. 升级：`odoo -d <db> -u product_variant_conversion --stop-after-init`
+1. 升级：`odoo -d <db> -u product_variant --stop-after-init`
 2. 打开有变体的产品 → 「属性与变体」页 → **Add Attributes To Variants**
 3. 加属性 / 加取值 → 在 **Variant Ownership** 表里核对或修改每条既有变体转换后占有的取值 → **Convert**
 4. 核对：产品表单 `Conversions` 智能按钮看台账，`Variant Lineage` 页看归属；变体列表按 `Derived From` 排序或搜索
-5. 本地可复跑：`task test -- product_variant_conversion,stock,sale_management --test-tags=/product_variant_conversion`
+5. 本地可复跑：`task test -- product_variant,stock,sale_management --test-tags=/product_variant_conversion`
 
 ### 变更
 
-- **模块技术名由 `product_variant_convert` 改为 `product_variant_conversion`**（交付前定名调整，目录 / xmlid 前缀 / 五个模型名 / 关系表名 / po 引用 / 文档全部同步）：
+- **模块技术名由 `product_variant_convert` 改为 `product_variant`**（交付前定名调整，目录 / xmlid 前缀 / 五个模型名 / 关系表名 / po 引用 / 文档全部同步）：
   - 原名词性与家族不一致（仓库模块都是名词短语：`product_reference` / `product_packing` / `product_card_view`…），且 `convert` 没说「转成什么」——Odoo 19 里还有 `product.combo`，容易被读成「把变体转成组合产品」（本模块恰恰明确拒绝 combo 产品）
   - 新名与显示名（`Product Variant Conversion`）、与模块内部命名天然对齐（模型 `product.variant.conversion`、字段 `variant_conversion_id`、界面 `Variant Conversion` / `Variant Conversions`、动作 `product_variant_conversion_action`）
   - 向导模型一并统一为 `product.variant.conversion.wizard` / `.line` / `.variant.line`（原 `product.variant.convert.*`）
@@ -942,7 +1000,7 @@
 ### 影响
 
 - **不涉及任何数据库结构变更迁移**：新增的 2 个模型由 Odoo 正常建表；向导字段与向导模型名的变化都发生在瞬态模型上（无历史数据），**无需迁移脚本**
-- **改名影响**：本模块从未在目标环境交付过，改名只需在开发库 `odoo module uninstall product_variant_convert` 后安装 `product_variant_conversion`（本地已实测：旧模块的表与数据随卸载一并清理，无残留表）。若某个库已经装过旧名模块，必须按「先卸载旧名、再安装新名」处理——Odoo 视改名为不同模块
+- **改名影响**：本模块从未在目标环境交付过，改名只需在开发库 `odoo module uninstall product_variant_convert` 后安装 `product_variant`（本地已实测：旧模块的表与数据随卸载一并清理，无残留表）。若某个库已经装过旧名模块，必须按「先卸载旧名、再安装新名」处理——Odoo 视改名为不同模块
 - 不改动任何官方模型字段与视图节点，只新增按钮 / 智能按钮 / 页签 / 可选列 / 搜索项、2 个新模型与 2 个变体字段
 - 已按 `19.0.1.0.0` / 旧名版本转换过的产品不受影响：转换结果与新版本读的是同一批数据（变体的实际取值组合、台账与谱系行），不依赖向导字段名
 - 依赖仍只有 `product`；新增的 UI 元素在 `stock` / `sale` / `purchase` / `account` 未安装时同样可用
@@ -962,8 +1020,8 @@
 - 验收环境：本地开发库（`dev`，Odoo 19 官方镜像；自动化测试库额外装了 `stock` / `sale_management`）
 - 验收结果：本地 12 项自动化测试全部通过（0 failed / 0 error），i18n 85 条 `msgid` 与 Odoo 术语抽取结果逐条对齐
 
-  - [x] `-i product_variant_conversion` 安装无报错
-  - [x] `-u product_variant_conversion` 升级无报错，安全规则与两个视图加载成功
+  - [x] `-i product_variant` 安装无报错
+  - [x] `-u product_variant` 升级无报错，安全规则与两个视图加载成功
   - [x] 单变体产品转换后原变体记录 id 不变，并成为指定的默认变体
   - [x] 两个属性时生成全部组合，原变体占用户指定的那一组
   - [x] 已有单取值属性行可追加取值，只新增变体
@@ -976,15 +1034,15 @@
 
 ### 执行流程
 
-1. 安装：`odoo -d <db> -i product_variant_conversion --stop-after-init`
+1. 安装：`odoo -d <db> -i product_variant --stop-after-init`
 2. 打开只有 1 个变体的产品 → 「属性与变体」页 → **Convert to Multi-Variant**
 3. 填属性与取值，逐属性指定「Original Variant Value」（原变体取值）→ **Convert**
 4. 核对：变体列表中新旧变体齐备；默认变体上仍能看到原有的在手数量与订单行
-5. 本地可复跑：`task test -- product_variant_conversion,stock,sale_management --test-tags=/product_variant_conversion`
+5. 本地可复跑：`task test -- product_variant,stock,sale_management --test-tags=/product_variant_conversion`
 
 ### 变更
 
-- 初始版本，新建模块 `product_variant_conversion`（产品变体转换）
+- 初始版本，新建模块 `product_variant`（产品变体转换）
 - 在 `product.template` 上新增转换入口与核心实现 `_convert_to_multi_variant()`：
   - 带 `create_product_product=False` 上下文写 `attribute_line_ids`，只生成 `product.template.attribute.value`，不触发 `_create_variant_ids()`（不新建、不删除任何变体）
   - 把用户指定的「默认组合」锚定到原变体的 `product_template_attribute_value_ids` 上，再调用 `_create_variant_ids()`：原变体因组合匹配而被复用，缺失组合才新建
