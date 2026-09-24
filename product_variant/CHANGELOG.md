@@ -3,6 +3,57 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.13.0.1] - 2026-09-24（文案：面板标题改为 `Variants Mapping` / 「变体映射」）
+
+> 修订日期：2026-09-24 ｜ 类型：修复/文案（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`i18n/zh_CN.po`、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更
+
+1. 面板标题由 `Attributes and variants mapping` 改为 **`Variants Mapping`**（中文 `变体映射`），
+   po 里同一条目直接改写 `msgid` / `msgstr`。
+2. 标题文案与字段 widget 的 `displayName`（`Attribute / Variant Mapping`，只出现在字段设置里）刻意不同：
+   前者是用户看到的页内标题，后者是开发者视角的字段说明。
+
+### 影响
+
+- 纯文案；需 `-u` + 强刷浏览器。`msgid` 变了，中文界面会按新条目显示（旧条目留在库里成为孤儿，无副作用）。
+
+## [19.0.13.0.0] - 2026-09-24（映射表面板：标题、显式保存/丢弃、未映射不放行）
+
+> 修订日期：2026-09-24 ｜ 类型：功能（+y） ｜ 影响文件：
+> `views/product_template_views.xml`、`static/src/js/variant_mapping_panel.js`、
+> `static/src/js/variant_conversion_form_patch.js`、`static/src/xml/variant_mapping_panel.xml`、
+> `tests/js/variant_mapping_pure.mjs`、`i18n/zh_CN.po`、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更
+
+1. **面板布局 + 标题**：新增标题 `Attributes and variants mapping`（带下划线分隔），说明、警示、
+   映射表、新变体 / 等待创建提示、勾选框、未保存操作区分层排列。
+2. **移除原生警告**：`product.product_template_only_form_view` 里那句
+   `<p class="opacity-50 oe_edit_only">``Warning``: adding or deleting attributes will delete and
+   recreate existing variants...</p>` 已不成立（本模块不删变体、一律按归属复用），用 xpath 整段删除。
+3. **未映射不放行**：所有既有变体必须各占一行；存在未映射变体时保存被拦（前端提示 + 服务端兜底），
+   且**不会**被 Odoo 的自动保存绕过去（见下）。
+4. **显式保存 / 丢弃**：映射一发生改动，面板下方出现 **Save manually** / **Discard all changes**
+   两个按钮（文案与 Odoo 原生状态指示器一致），同时通过 `FIELD_IS_DIRTY` 让原生状态指示器也出现；
+   点 **Discard all changes** 会把属性行与映射一起回滚到最后一次保存的状态。
+5. **规避自动保存**：映射改动只存在于本模块的 store（不是 record 的字段改动），
+   因此 `beforeLeave()` / `beforeVisibilityChange()` 这些自动保存路径不会带上它 ——
+   映射只由用户显式保存（或属性行改动触发的正常保存）落库。又因为 `Record._save()` 在
+   「没有 changes」时会直接早退（不调用 `onWillSaveRecord`），`FormController.save()` 里补了
+   一次纯映射写入，保证只改映射时点 **Save manually** 也能落库。
+6. 测试：离线自测 15 项（新增「映射改过才显示保存/丢弃」）。
+
+### 影响
+
+- 前端 + 视图 arch（删除原生警告节点）；字段 / RPC / 数据结构未动。需 `-u` + 强刷浏览器。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 20（纯前端的「脏」要自己广播给状态指示器，别把状态塞进 record）；
+  `README.md` 补面板行为说明。
+
 ## [19.0.12.0.1] - 2026-09-24（修复：Variant 下拉里已被别的行占用的变体要禁用）
 
 > 修订日期：2026-09-24 ｜ 类型：修复/体验（+z） ｜ 影响文件：
