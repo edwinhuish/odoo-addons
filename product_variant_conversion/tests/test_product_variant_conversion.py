@@ -1228,6 +1228,42 @@ class TestProductVariantConversion(TransactionCase):
         # 沙盒模式下 Odoo 自己不建变体，交给调用方（产品导入会在随后为每一行建变体）
         self.assertEqual(product.product_variant_count, 0)
 
+    def test_variants_created_on_demand_are_neither_blocked_nor_adopted(self):
+        """按需生成的产品在**订单期**被 Odoo 建出变体：本模块不拦、也不接管（边界用例）。
+
+        订单期的入口是配置器 → ``sale.order.line`` → ``product.template._create_product_variant()``
+        → ``product.product.create()``，全程不经过 ``product.template.write()``，所以本模块既不会拦，
+        也不会给这些变体补数据（不写台账 / 谱系 / 来源字段，也不做「按谱系继承」——
+        继承只发生在**本模块自己的转换**里，而按需生成的产品根本不走转换）。
+        把这个边界钉住，防止将来「顺手 hook 变体创建」时误伤订单流程。
+        """
+        dynamic = self._dynamic_attribute()
+        product = self.env["product.template"].with_context(
+            create_product_product=False).create({
+                "name": "Test On Demand Product",
+                "type": "consu",
+                "attribute_line_ids": self._dynamic_commands(dynamic),
+            })
+        # 沙盒上下文会留在记录集上，重新 browse 一次，让后面的写入走正常上下文
+        product = self.env["product.template"].browse(product.id)
+        self.assertEqual(product.product_variant_count, 0)
+
+        ptavs = product.valid_product_template_attribute_line_ids.product_template_value_ids._only_active()
+        variant = product._create_product_variant(ptavs[:1])
+        self.assertTrue(variant.exists())
+        self.assertEqual(product.product_variant_count, 1)
+        # 本模块不接管 Odoo 自建的变体
+        self.assertFalse(variant.variant_conversion_id)
+        self.assertFalse(variant.variant_origin_id)
+        self.assertFalse(product.variant_conversion_ids)
+        self.assertFalse(product.lineage_ids)
+        # 属性依旧改不了：产品带按需生成的属性 = 本模块的处理范围之外
+        with self.assertRaises(UserError):
+            product.write({
+                "attribute_line_ids": self._set_commands(
+                    product, self.color, self.color.value_ids),
+            })
+
     # ------------------------------------------------------------------
     # 组合数前置上限（T-018）
     # ------------------------------------------------------------------

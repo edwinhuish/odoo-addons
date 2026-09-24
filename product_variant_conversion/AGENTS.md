@@ -173,7 +173,7 @@
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
 | `views/product_variant_conversion_views.xml` | 转换台账的列表 / 详情视图与动作 |
 | `security/ir.model.access.csv` | 两个模型的访问规则（`base.group_user` 与 `product.group_product_variant`） |
-| `tests/test_product_variant_conversion.py` | 45 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、按需生成属性的「建产品 / 改属性」两处拦截与文案、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter（含**一次加两个属性**的 chatter 回归）、加取值时的来源映射与尺寸落到对应变体、装了 `product_dimension` 时的尺寸继承、装了 `product_reference` 时的共享参考号交接） |
+| `tests/test_product_variant_conversion.py` | 46 项自动化测试（拦截、预览、归属确认、拒绝删减、属性主数据拦截、按需生成属性的「建产品 / 改属性」两处拦截与文案、**订单期自建变体不接管（边界）**、台账与谱系、库存与订单行不变、字段归属审计、变体级属性保留、新变体继承与开关、原产品资料保留、价格分离与共享边界、组合上限、钩子与 chatter（含**一次加两个属性**的 chatter 回归）、加取值时的来源映射与尺寸落到对应变体、装了 `product_dimension` 时的尺寸继承、装了 `product_reference` 时的共享参考号交接） |
 | `i18n/zh_CN.po` | 简体中文译文（源语言 `en_US` 写在代码里，无需 `en_US.po`；`i18n/` 不进 `data`）；含应用列表元数据条目 |
 | `README.md` | 用户可见功能、字段表、归属怎么指定、被拒绝的情况、已有业务数据处理、验证清单 |
 | `CHANGELOG.md` | 逐版本「变更 / 影响 / 文档」记录 |
@@ -416,6 +416,12 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   弹窗勾选框**默认不勾选**，勾上时供应商价格退回模板级共享（`_share_vendor_prices_with_variants()`：
   所有变体取同一批数值；价格表规则仍按变体分离）。
 - 模板级字段（`list_price`、`taxes_id`、`uom_id`）天然覆盖全部变体；ptav 级（`price_extra`）随取值走。
+- **按需生成产品的「订单期变体」完全在本模块之外**（`19.0.5.3.2` 核实）：配置器 → `sale.order.line`
+  → `product.template._create_product_variant()` → `product.product.create()`，全程不经过 `product.template.write()`，
+  所以本模块**不拦、也不接管**：不写台账 / 谱系 / 来源字段，也不做按谱系继承（继承只发生在
+  `_apply_variant_data_inheritance()`，即**本模块自己的转换**里）。这类产品的属性改动本来就被拒（L1 约束 18），
+  所以它的变体永远由 Odoo 自己建 —— 想让它也有来源 / 继承，只能等 `T-039`。（`webhook` 式地 hook
+  `product.product.create` 会波及全库所有变体创建，风险远大于收益，**不要**顺手加。）
 - **字段归属与「单变体桥接」（T-016 核实结论，完整表见 `README.md` →「属性归属审计」）**：
   - `product.product._inherits = {'product.template': 'product_tmpl_id'}`：模板字段在变体上是**委托**关系；
   - 但 `barcode` / `standard_price` / `volume` / `weight` / `default_code` 是 `product.product` **自己声明的存储字段**，
@@ -478,6 +484,11 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
    `product.template.attribute.value.unlink()` 会 `self.ptav_product_variant_ids._unlink_or_archive()` —— **直接删 / 归档变体**；
    `product.template.attribute.line.write()` 又会自己调 `product_tmpl_id._create_variant_ids()`。
    于是「在属性主数据里删取值」「直接写属性行」这两条路**不经过本模块**，照样丢变体。
+   **`19.0.5.3.2` 实测补充**：`product.template.attribute.line.create()`（新增一行，非沙盒上下文）同样会调
+   `_create_variant_ids()` —— 对**按需生成**的产品，新加一行让既有变体的组合变得「不完整」，
+   原生会把它们**直接删掉**（实测 2 条在用变体消失）。属性行守卫目前只覆盖「`write()` 移走取值」与
+   `unlink()`，**没覆盖 `create()`**；要补的话就在 `line.create()` 里做同一套判定（沙盒 `create_product_product=False` 必须放行，
+   否则导入会被拦）。
 2. ~~成本价不继承~~ **已解决**（`19.0.3.2.0`）：新变体按谱系继承来源的成本 / 体积 / 重量，可关。
 3. ~~供应商价格共享抹平价差~~ **已解决**（`19.0.3.4.0`）：价格数据默认按变体分离并随谱系继承，共享改为需要主动勾选。
 4. **谱系行随变体级联删除**：`product.variant.lineage` 的两个变体字段都是 `ondelete='cascade'`，删变体即丢审计行（台账本身不受影响）。

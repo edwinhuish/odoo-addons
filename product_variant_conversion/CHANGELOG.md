@@ -23,7 +23,10 @@
    （空记录集仍显示 `-`，即「只追加取值、没加新属性」的场景），并就地写下这条坑的说明。
 2. 新增回归用例 `test_adding_two_attributes_at_once_is_logged_with_both_names`：一次加两个属性 →
    4 条变体、chatter 里两个属性名都在。**已实测该用例在旧代码上会复现同一条 `Expected singleton`**。
-3. 测试 44 → **45 项**。
+3. 新增边界用例 `test_variants_created_on_demand_are_neither_blocked_nor_adopted`：按需生成的产品在
+   **订单期**由 Odoo 自建变体（配置器 → `_create_product_variant()` → `product.product.create()`）时，
+   本模块**既不拦也不接管**（无来源字段 / 无台账 / 无谱系），且产品属性依旧改不了。
+4. 测试 44 → **46 项**。
 
 ### 影响
 
@@ -31,19 +34,33 @@
 - 一次加一个属性、只追加取值、建产品：行为不变（`-` 与单属性名照旧）
 - 无数据结构变化、无迁移；无需改 po（`msgid` 未变）
 
+### 已知边界的补充核实（同批交付的文档）
+
+为回答「按需生成的产品，订单期生成变体时本模块能不能正确处理」，把两件事核实清楚并写进文档：
+
+| 事实 | 结论 |
+|------|------|
+| 订单期创建变体的路径 | 配置器 → `sale.order.line` → `product.template._create_product_variant()` → `product.product.create()`，**不经过 `product.template.write()`** |
+| 本模块的介入 | **不拦、也不接管**：不写 `Variant Conversion` / `Derived From`、不写台账 / 谱系、不做按谱系继承（继承只在本模块自己的转换里）；这类产品的属性改动本来就被拒（L1 约束 18），所以它的变体永远由 Odoo 自己建 —— 要带来源 / 继承得等 `T-039` |
+| 新发现的风险 | 非沙盒上下文的 `product.template.attribute.line.create()` 会自己调 `_create_variant_ids()`：对按需生成的产品，新加一行会让既有变体组合「不完整」，原生把它们**直接删掉**（实测 2 条在用变体消失）。属性行守卫只覆盖「移走取值 / 删行」，**未覆盖「新增行」**（`T-017` 遗留） |
+
 ### 文档
 
-- 模块 `AGENTS.md`（L2 P3 新增陷阱 5：多记录集不能取 `.display_name` / `.id` 这类单值属性）、
-  `README.md`（测试数与验证清单）、本条目
-- 根 `README.md` 模块一览表版本
+- 模块 `AGENTS.md`（L2 P3 新增陷阱 5：多记录集不能取 `.display_name` / `.id` 这类单值属性；
+  L2 P5 新增「订单期变体完全在本模块之外」、缺口 1 补齐 `line.create()` 实测）、
+  `README.md`（测试数、验证清单、已知边界新增两行：订单期不接管 + 直接写属性行会绕过）、本条目
+- 根 `README.md` 模块一览表版本、`TODO.md`（`T-039` 补上这次核实的两条事实）
 
 ### 验证记录
 
 | 跑法 | 结果 |
 |------|------|
-| `task test -- product_variant_conversion` | 45 项 0 failed / 0 error ✓ |
-| `task test -- product_variant_conversion,stock,sale_management` | 45 项 0 failed / 0 error ✓（合计 705 项全绿） |
+| `task test -- product_variant_conversion` | 46 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,stock,sale_management` | 46 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,product_dimension` | 46 项 0 failed / 0 error ✓ |
+| `task test -- product_variant_conversion,product_reference,product_card_view,sale_management` | 56 项 0 failed / 0 error ✓ |
 | 新用例在**旧代码**上的表现 | 复现 `ValueError: Expected singleton: product.attribute(1, 2)` ✓（证明用例有效） |
+| 订单期创建变体（shell 实测） | 变体正常创建；`variant_conversion_id` / `variant_origin_id` 为空、谱系 0 行、台账 0 条、成本 / 体积 / 重量保持 0 ✓（与文档一致） |
 | 目标环境 | 加两个属性的保存复验**待验证**（`-u` 后重做一次即可，之前失败的那次没有写入任何数据） |
 
 ---
