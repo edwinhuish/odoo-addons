@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantMappingPanel`（「属性 ↔ 变体」映射表，field widget）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给映射表补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.7.0.0`（19.0.7.0.0：**模块改名 `product_variant` + 「属性 ↔ 变体」映射表** —— 改属性时属性行下方常驻一张映射表，缺取值的变体显示成**未映射**，还有未映射的变体就不放行保存；归属弹窗随之删除；**已装库必须走「原地改名」三条 SQL**（见 `README.md`），卸载重装会清空台账 / 谱系；19.0.6.1.0：**归属弹窗交互优化** —— 所有下拉选项都可选，选中已被别的组合占用的既有变体时两行**自动互换**（纯函数 `applyOwnershipSelection()`）；19.0.6.0.0：**`T-039` 支持「按需生成变体」的属性** —— 只展开「立即」轴、按需轴按既有变体现带取值钉住、缺失组合自己用 `_create_product_variant()` 补、带按需属性的产品不做价格分离；建产品时带按需属性仍然拦住；`19.0.5.3.2`：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
+- 当前版本：`19.0.12.0.1`（19.0.12.0.1：**Variant 下拉禁掉已被别行占用的变体** —— 「一条变体只能承载一个组合」要在**候选列表里**体现（灰显、选不了），想换位置就先把自己那行改回 `(new variant)` 让出来；不做「选到别处自动从原行让出」，见 L2 P4 陷阱 19；19.0.12.0.0：**前端穷举展示、后端按需预建** —— 映射表把「按需生成」属性的全部取值组合都列出来（用户要求「充分列举所有可能的组合」），但**预建**仍按属性规则：立即轴展开、按需轴只建被既有变体认领的取值，`(new variant)` 的行落在没被认领的按需取值上就**不会现在创建**（前端把这类行显示成灰色 + 提示 N 个组合等订单）；19.0.10.0.0：**映射表反向 —— 组合为行、为每个组合选变体** —— 行是固定组合，Variant 下拉留空=新建变体、选一条=由它保留；同一条变体只能占一行（选到别处自动让出，交换只需两下），「按需生成」属性的取值是行上的可改值（不预建其它取值），拦截条件变成「没被任何组合认领的既有变体」，见 L2 P4 陷阱 18；19.0.9.0.0：**一个组合只能被一条变体占用** —— 前端在下拉里禁掉已被占住的候选值，真重复时把那条标成未映射；与保存时的 `_check_variant_conversion_anchors()` 同口径，见 L2 P4 陷阱 18；19.0.8.0.4：**默认值不算用户选择** —— 单取值轴自动补的取值不能再写回 selection，否则该轴多出第二个取值时回不到「未映射」（轴状态带 `picked` 标记），见 L2 P4 陷阱 17；19.0.8.0.3：**子表编辑要订阅子表组件** —— `useRecordObserver` 的依赖是父 record，子行改字段不触发它；改为 patch `X2ManyField` / `ListX2ManyField` 的 `onPatched` + 保留 record observer + 面板低频本地自检兜底，见 L2 P4 陷阱 16；19.0.8.0.2：**新行必须保留 Odoo 的虚拟 id** —— 合并 `getChanges()` 命令时自己造 id 会让「选属性 / 勾取值」这两条后续命令落空，那一行永远不成为轴（单变体产品加属性就是这样「毫无反应」），见 L2 P4 陷阱 15；19.0.8.0.1：**用 `record.getChanges()` 合并快照基线来读表单编辑态** —— 原来读 `record.data` 的 x2many 内部结构，编辑中的取值是命令数组，会被读成空 → 加属性「毫无反应」，见 L2 P4 陷阱 14；19.0.8.0.0：**映射计算搬到前端** —— 面板挂载时取一次快照 `get_variant_mapping_snapshot()`，其后属性行增删 / 勾取值 / 挑映射全部由前端纯函数 `computeVariantMapping()` 在浏览器里算，**编辑期零 RPC**，保存时才把映射随表单提交；多取值轴（**含「按需生成」轴**）一律要求显式映射，见 L2 P4 陷阱 13；19.0.7.0.5：**给前端看的状态不再做成 compute** —— `variant_mapping_state` 降级为 `store=False` 的挂载点，面板挂载时自己 RPC 取；原来的 compute 会在每次 onchange 里被求值，那时表单里还有没保存的行（`NewId`），`json.dumps` 必炸，见 L2 P4 陷阱 12；19.0.7.0.4：**修「点 Add a line 就报必填缺失」** —— 产品表单会发出「新建但还没选属性」的半成品命令，预览 RPC 要清洗掉或兜住（前端 `hasIncompleteLine()` + 服务端 `_sanitize_attribute_line_commands()` / `NotNullViolation` 兜底），见 L2 P4 陷阱 11；19.0.7.0.3：**修映射表排版** —— 字段外层的 `.o_field_widget` 是 `inline-block`，不包一层块级 div 的话面板会被排到属性行**右边**并溢出表单宽度（「跑右边、看不见」），见 L2 P4 陷阱 10；19.0.7.0.2：**修映射表模板变量名** —— 模板里的 `state.blocked` / `state.rows` 必须写成组件上真实的 `store.`（OWL 模板表达式只认组件实例上的名字，`state` 不是保留字，写错只会得到 `undefined.x`，报错栈只指到模板），见 L2 P4 陷阱 9；19.0.7.0.1：**修字段 widget 注册方式** —— 字段组件必须注册成 `{ component, displayName, supportedTypes }` 描述对象，注册裸类会让 `web.Field` 拿到 `undefined` 的 `component`、渲染时崩在 `Component.name`（现象：打开产品表单 /「属性与变体」页报 `UncaughtPromiseError > OwlError` + `reading 'name'`，栈只落在 `Field.template`），见 L2 P4 陷阱 8；19.0.7.0.0：**模块改名 `product_variant` + 「属性 ↔ 变体」映射表** —— 改属性时属性行下方常驻一张映射表，缺取值的变体显示成**未映射**，还有未映射的变体就不放行保存；归属弹窗随之删除；**已装库必须走「原地改名」三条 SQL**（见 `README.md`），卸载重装会清空台账 / 谱系；19.0.6.1.0：**归属弹窗交互优化** —— 所有下拉选项都可选，选中已被别的组合占用的既有变体时两行**自动互换**（纯函数 `applyOwnershipSelection()`）；19.0.6.0.0：**`T-039` 支持「按需生成变体」的属性** —— 只展开「立即」轴、按需轴按既有变体现带取值钉住、缺失组合自己用 `_create_product_variant()` 补、带按需属性的产品不做价格分离；建产品时带按需属性仍然拦住；`19.0.5.3.2`：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
 - 命名说明：技术名用**名词短语** `product_variant`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -171,7 +171,7 @@
 | `models/product_template_prices.py` | 价格数据按变体分离的实现（供应商价格 / 价格表规则的拆分、继承与守恒断言），从 `product_template.py` 拆出 |
 | `models/product_attribute_guards.py` | T-017：属性主数据与属性行直接写路径的「丢变体」守卫（ptav / PAV / line 三个模型） |
 | `models/product_variant.py` | 转换台账与变体谱系两个模型 |
-| `models/product_variant_mapping.py` | 「属性 ↔ 变体」映射：初始状态字段 `variant_mapping_state`、预览 RPC `get_variant_mapping_preview()`、未映射判据 `_get_variant_mapping_rows()` |
+| `models/product_variant_mapping.py` | 「属性 ↔ 变体」映射：挂载点字段 `variant_mapping_state`（`store=False`，**不做 compute**）、一次性快照 RPC `get_variant_mapping_snapshot()`、服务端侧判定 `get_variant_mapping_preview()` / 未映射判据 `_get_variant_mapping_rows()` |
 | `static/src/js/variant_mapping_panel.js` | 映射表面板（field widget `variant_mapping_panel`）：逐变体逐轴渲染、属性行一改就防抖刷新、状态存在 `model.variantMapping` 上；载荷构造 / 未映射计数 / 属性行签名都是纯函数 |
 | `static/src/xml/variant_mapping_panel.xml` | 映射表模板 `product_variant.VariantMappingPanel` |
 | `static/src/js/variant_conversion_form_patch.js` | patch `FormController.onWillSaveRecord`：保存前问映射状态；会丢变体 / 还有未映射的变体就提示并拦住；都映射好了就把归属放进本次 `changes` |
@@ -391,9 +391,205 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 
 **陷阱 7：映射表字段必须 `readonly="0"`**
 - 现象：映射表渲染出来了，但每个下拉都是禁用的，用户补不了映射。
-- 根因：`variant_mapping_state` 是非存储的 compute 字段，表单把它当只读 → 面板的 `props.readonly` 为真。
+- 根因：`variant_mapping_state` 是 `store=False` 的字段（`19.0.7.0.5` 起**不做 compute**，见陷阱 12），
+  非存储字段在表单里可能被当成只读 → 面板的 `props.readonly` 为真，下拉全禁用。
+  （实测该字段现在 `readonly=False`，但视图里显式写 `readonly="0"` 最稳，防将来 Odoo 把非存储字段标只读。）
 - 正确做法：视图里显式写 `readonly="0"`（Odoo 的视图修饰符解析认 `'0'` 为假：
   `base/models/ir_ui_view.py` 里 `node.get('readonly') not in ('1', 'True')` 那一路）。
+
+**陷阱 8：字段组件必须注册成描述对象，不能注册裸类**（2026-09-24 实测踩过，整个产品表单打不开）
+- 现象：打开产品表单（或点开「属性与变体」页签）报
+  `UncaughtPromiseError > OwlError`，cause 是
+  `TypeError: Cannot read properties of undefined (reading 'name')`，栈落在 `Field.template`。
+  极易误判成「升级后没重启 / 浏览器缓存」（两者都不对：服务端 `get_views` 里字段与视图都正常，
+  arch 也有这个字段节点）。
+- 根因：`registry.category("fields").add("variant_mapping_panel", VariantMappingPanel)` 把**组件类**
+  直接注册了。`web.Field` 模板渲染的是 `field.component`（`views/fields/field.xml`：
+  `t-component="field.component"`），官方注册的是**描述对象**，所以裸类下 `field.component` 是
+  `undefined` → owl 创建子组件时读它的 `name` → 崩。注意报错栈只指到 `Field.template`，
+  **不会**提到你的组件名，很容易查错方向。
+- 正确写法（对照 `web/static/src/views/fields/char/char_field.js` 末尾）：
+
+  ```js
+  export const variantMappingPanelField = {
+      component: VariantMappingPanel,
+      displayName: _t("Attribute / Variant Mapping"),
+      supportedTypes: ["text"],   // 本组件只服务 Text 类型的字段
+  };
+  registry.category("fields").add("variant_mapping_panel", variantMappingPanelField);
+  ```
+
+- 自查：`grep -rn 'category("fields").add(' <module>/static/src/js/` —— 第二个参数必须是
+  `{ component: ... }` 对象，不能是裸标识符。
+- 顺带：改完前端资源仍然要 `-u`（或重启进程）+ Ctrl+F5 强刷，否则加载的还是旧 assets。
+
+**陷阱 9：模板表达式只能引用组件实例上真实存在的名字**（2026-09-24 实测踩过）
+- 现象：`UncaughtPromiseError > OwlError`，cause 是
+  `TypeError: Cannot read properties of undefined (reading 'blocked')`，栈落在
+  `VariantMappingPanel.template`（模板自己的函数名，好定位得多）。
+- 根因：`setup()` 里这份状态叫 `this.store`（`useState(getMappingStore(...))`），而模板里写的是
+  `state.blocked` / `state.rows` / `state.dynamic`。**`state` 在 OWL 模板里不是保留字**
+  （只有 `props` 是），它只是一个不存在的名字 → `undefined.blocked`。
+- 正确做法：模板里用 `store.xxx`；模板能直接访问的是**组件实例上的 getter / 方法 / 属性**，
+  写法与 JS 里 `this.` 后面那段完全一致。
+- 自查：改模板后把表达式里的根标识符过一遍 —— 每个都必须在组件上是
+  `get x()` / `x()` / `this.x = ...`，或者来自 `t-as` 的循环变量（`t-foreach` / `t-esc` 的
+  `<var>` 加 `_index` / `_value` / `_first` / `_last`），或 OWL 内置的 `props`。
+
+**陷阱 10：自定义字段 widget 要在视图里自己撑满一行**（2026-09-24 实测）
+- 现象：面板渲染出来了，但显示在「属性与变体」页**右侧**（与属性行并排），还被表单宽度裁掉、看不见。
+- 根因：`web.Field` 给字段套的外层 `<div class="o_field_widget">` 是 `display: inline-block`，
+  而同一页里的 `attribute_line_ids` 也是 inline-block 且宽度不是 100% → 两个字段并排，
+  面板溢出 `o_form_sheet` 的可视宽度。
+- 正确做法：视图里用一层块级 div 包住（字段本身也加 class，双保险）：
+
+  ```xml
+  <xpath expr="//page[@name='variants']/field[@name='attribute_line_ids']" position="after">
+      <div class="d-block w-100">
+          <field name="variant_mapping_state" widget="variant_mapping_panel" nolabel="1"
+                 readonly="0" class="d-block w-100"/>
+      </div>
+  </xpath>
+  ```
+
+- 判断标准：组件是**表格 / 多行块**（不是 input / 单项）就一律按「独占一行」写；改完 `-u` + 强刷。
+
+**陷阱 11：预览类 RPC 要能容忍「半成品」命令**（2026-09-24 实测踩过）
+- 现象：在产品表单「属性与变体」页点 **Add a line**（还没选属性）就弹
+  `Validation Error: Missing required value for the field 'Attribute' (attribute_id)`；
+  可复现、且与保存无关 —— 只是点了个按钮。
+- 根因：o2m 新增行时前端 `record.getChanges()` 生成的是
+  ``[0, 0, {"value_ids": [...]}]``（**没有** ``attribute_id``）。映射表的防抖刷新把它原样发给
+  ``get_variant_mapping_preview()``，服务端在 savepoint 里试写这条命令 → 必填缺失 →
+  ``psycopg2.errors.NotNullViolation`` 冒泡到 RPC 层，被转成上面那句报错。
+- 正确做法（三层都要，缺一层就漏）：
+  1. **前端**：调预览前先过滤 —— `hasIncompleteLine(commands)` 认出「新建且没有 attribute_id」的命令，
+     这种状态下*不调 RPC*，保持上一次的显示；
+  2. **服务端分析入口**：`_sanitize_attribute_line_commands()` 丢掉这类行，
+     同一次提交里正常的那几条照常参与分析；
+  3. **服务端 RPC 兜底**：`get_variant_mapping_preview()` 捕获 `NotNullViolation` 回
+     ``incomplete=True``（映射表不改状态、保存钩子 `return super.onWillSaveRecord(...)` 交回原生校验）。
+     注意**只兜** ``NotNullViolation``：Odoo 原生的解释性 `UserError`
+     （例如「不能把属性 A 改成 False」）要原样透出，吞掉用户就看不懂为什么改不了。
+- 判断标准：任何「拿表单未保存内容去服务端算一遍」的 RPC 都要先问「这些命令在**写库的那一步**一定合法吗」。
+
+**陷阱 12：给前端看的状态不要做成 compute 字段**（2026-09-24 实测踩过）
+- 现象：点 Add a line 后随便选一个属性就 500 ——
+  ``TypeError: Object of type NewId is not JSON serializable``，栈落在
+  ``_compute_variant_mapping_state``，前端收到 ``RPC_ERROR``。
+- 根因：该字段原本是 ``@api.depends("attribute_line_ids", ...)`` 的 compute。Odoo 的
+  ``onchange``（``web/models/models.py::onchange`` 里对每个变更字段做 ``has_changed``）会**求值**它，
+  而那一刻表单里还有**没保存的行**（用户刚 Add a line），这些行的 id 是 ``NewId`` ——
+  ``json.dumps`` 序列化不了。
+- 正确做法：把它降级成**纯挂载点**（``fields.Text(store=False)``，**不写 ``compute``**），面板挂载时自己
+  调预览 RPC 取初始状态、属性行变化时防抖再取。字段只负责给 widget 一个挂载位置。
+- 判断标准：**compute 会在 onchange（含未保存的虚拟记录）里被求值**，所以 compute 里不要做
+  「序列化表单内容 / 假定 o2m 已保存 / 重活」；能给前端按需 RPC 的就别做成 compute。
+  另外：写 ``json.dumps`` 之前一律先想「里面会不会混进 ``NewId``」。
+
+**陷阱 13：编辑期的计算放前端，服务端只在保存时参与**（2026-09-24 实测，用户明确要求）
+- 现象（``19.0.8.0.0`` 之前）：点 Add a line 就报 ``Missing required value for the field 'Attribute'``；
+  把某个属性的取值逐条删到空时弹 ``The attribute X must have at least one value``；
+  给产品加了有 3 个取值的属性，面板只认第一个取值、还标成「已映射」。
+- 根因：映射表每改一下就把「表单还没保存的命令」发给服务端试算。表单的中间态（空行、空取值、
+  新建行）在服务端眼里就是**非法写入**，用户一边填一边被校验拦；而「按需生成」轴又默认取了
+  第一个取值，等于悄悄替用户做了归属决定。
+- 正确做法：
+  1. **挂载时取一次快照** ``get_variant_mapping_snapshot()``（既有变体带着哪些取值 + 各属性的
+     ``create_variant``）；它只描述已保存的事实，天然不会被中间态污染；
+  2. 其后属性行增删、勾取值、挑映射全部用**前端纯函数**算（``computeVariantMapping()`` /
+     ``readColumnLines`` 的 ``readAttributeLines()``），属性行一改只做本地重算；
+  3. **保存**时才把映射结果随表单一起提交，服务端照旧做权威判定与安全转换（会丢变体、未映射）；
+  4. **每个组合都要有归属**：组合表里没被任何既有变体选走的组合 = 新建变体，没被任何组合认领的既有变体 = 拦住保存（映射表在上方点名）。
+- 判断标准：凡是「拿表单未保存内容去服务端算一遍」的设计，先问「中间态在服务端是不是合法」；
+  能用一次性快照 + 前端纯函数解决的，就别逐次 RPC。
+
+**陷阱 14：读「表单当前编辑态」要用 `getChanges()` 合并基线，别读 record 内部结构**（2026-09-24 实测踩过）
+- 现象：在表单里新加一个属性，映射表**毫无反应**（表格里没有新列）。
+- 根因：原来读 ``record.data.attribute_line_ids.records[].data.value_ids.records`` 拿「编辑中的取值」。
+  ``record.data`` 是 ``{..._values, ..._changes}`` 拼出来的，**编辑中的 o2m 子行 / m2m 取值可能是命令数组**
+  （``[[0, 0, vals]]`` / ``[[1, id, vals]]``）而不是 record 列表 —— 于是取值被读成空，
+  那一行就不成为轴（``computeVariantMapping()`` 只把「有取值的行」当轴）。
+- 正确做法：
+  1. 快照里给一份**已保存基线** ``lines``（``{id, attribute_id, value_ids}``）；
+  2. 用 ``record.getChanges({ withReadonly: true })`` 拿命令（**本地，不发请求**），
+     纯函数合并出编辑态：``mergeAttributeLines()`` 处理行级命令，``applyValueCommands()`` 处理 m2m 命令
+     —— 注意 m2m 的 **set**（``[6,0,ids]``）与**增量**（``[4,id]`` / ``[3,id]`` / ``[5]``）语义不同，
+     增量当替换会把用户原来勾的取值丢掉；
+  3. 名称 / 属性归属 / 生成方式**一律从快照字典查**（前端手里只有 id）。
+- 判断标准：凡是「从 record 里读 o2m / m2m 的当前编辑内容」，优先走 ``getChanges()``；
+  要读字段值就用公开 API，别依赖内部表示。
+- 自查：面板纯函数可以脱离浏览器验证 —— 跑 ``node product_variant/tests/js/variant_mapping_pure.mjs``
+  （它自己抽纯函数段，喂真实形状的「基线 + 命令」跑断言，见陷阱 15 的脚本）。
+
+**陷阱 15：合并 `getChanges()` 命令时，虚拟行的 id 必须原样保留**（2026-09-24 实测踩过）
+- 现象：单变体产品里加一个多取值属性（Color: Black/Red），映射表**毫无反应**（没有 Color 列）。
+- 根因：新建行时**自己造了 id**（``new-0``）。用户点 Add a line 之后，「选属性」「勾取值」在 Odoo 眼里
+  是对**同一个虚拟行**的后续更新（``[1, 0, {...}]``，用的是它自己的虚拟 id ``0``）——
+  找不到 ``new-0`` 那一行，``attribute_id`` / ``value_ids`` 永远落不到行上，那一行就不是轴。
+- 正确做法：
+  1. ``[0, first, vals]`` 的行 id 就用 **``first``**（Odoo 的虚拟 id，通常是 ``0`` 或 ``virtual_xx``），别另造；
+  2. ``[1, id, vals]`` 在基线里找不到对应行时，**当成新建的虚拟行接住并追加**，不要 ``continue``；
+  3. 自测一定覆盖「Add a line → 选属性 → 勾取值」这三步的命令序列（Add a line 只发 ``[0, id, {}]``，
+     字段值是后面两条命令才带上来的）。
+- 固化：``tests/js/variant_mapping_pure.mjs``（``node`` 直接跑，不需要 Odoo 与浏览器）。
+
+**陷阱 16：`useRecordObserver` 不会因为「子表里改字段」而触发**（2026-09-24 实测踩过）
+- 现象：在「属性与变体」页加属性、勾取值，映射表**一点都不动**（停在挂载时那一次的状态）。
+- 根因：``useRecordObserver(cb)`` 的实现是 ``effect(cb, [props.record])``
+  （``web/core/utils/reactive.js``）—— 依赖**只有 record 对象本身**；编辑表单时这个引用不变，
+  而「选属性 / 勾取值」改的是**子 record** 的字段，不保证让父 record 的 effect 重跑。
+  回调里如果**什么都不读**，就更没有其它触发点（``19.0.8.0.0`` 就把回调简化成了什么都不读）。
+- 正确做法：**订阅承载子表的那个组件** —— patch ``X2ManyField`` 与 ``ListX2ManyField``
+  （``@web/views/fields/x2many/x2many_field`` / ``list_x2many_field``），在 ``onPatched`` 里通知需要重算的
+  组件：子表每次变化它们必然重渲染。再保留 ``useRecordObserver`` 覆盖 record 级变化，
+  并在要求「必然生效」的地方加**低频本地自检**兜底（纯函数重算 + 签名去重，稳定时零开销）。
+- 包装原 ``setup`` 用 ``const originalSetup = Klass.prototype.setup;`` + ``originalSetup?.call(this)``，
+  不要假设每个类都有 ``setup``（``ListX2ManyField`` 直接继承 ``Component``）；
+  判断「是不是我的表单」用 ``props.record?.resModel`` / ``props.name``，取值时两个来源都试
+  （``props.record?.model`` 或 ``props.list?.model``）。
+- 判断标准：**别指望「父 record 的 observer」感知子表编辑**；要感知就订阅子表组件本身。
+
+**陷阱 17：「默认值 / 兜底值」不能当成「用户确认过的值」写回状态**（2026-09-24 实测踩过）
+- 现象：某属性起初只有 1 个取值（面板替 Odoo 把那个取值显示到所有变体上、算「已映射」），
+  用户随后又勾了第二个取值 → 面板**仍然**显示旧取值、仍算已映射，该回到未映射的变体一条都没进
+  未映射列表（用户实测：Length 从只有 140 变成 140+120，6 条变体全被显示成 140 且 Mapped）。
+- 根因：``buildSelectionPayload()`` 把「面板当前显示的取值」一律当「用户的选择」写回 selection，
+  包括**自动补的默认值**；下一轮重算它又被当成用户选择 ⇒ 自我固化，回不到未映射。
+- 正确做法：轴状态带 ``picked`` 标记（只有用户在控件里选过才是 true，含「选回空」），
+  只把 ``picked`` 的项写回 selection；自动补的值、变体本来就带着的值都只是「当前显示」。
+- 判断标准：「默认值 / 派生值 / 用户确认值」三者在状态里必须**分开记**，别混成一个 ``value_id``。
+
+**陷阱 18：组合归属用「组合为行、选变体」，不要用「变体为行、选属性」**（2026-09-24 两次迭代后定稿）
+- 需求：改属性后要让用户确认「每条既有变体落到哪个组合」，且**组合不能重复**、**要能交换位置**。
+- 走过的弯路：
+  1. 先是「变体为行、逐轴选值」+ 禁用会造成冲突的选项 —— 防重没问题，但**交换位置**很难受：
+     两行互相占着对方的组合时，后改的那一行没有可选值（用户实测反馈「变体下拉需要能够清空，
+     以便交换位置」）；
+  2. 定稿为「**组合为行、选变体**」：行是算出来的组合，每行的 Variant 下拉留空 = 新建变体、
+     选一条 = 由它保留；同一条变体只能占一行，**已被别的行选走的变体在这一行的下拉里禁用**
+     （要换位置先把自己那行改回 `(new variant)` 让出来，见陷阱 19），组合也天然不重复（行就是组合）。
+- 实现要点：
+  1. 行 = 各属性有效取值的笛卡尔积（**含「按需生成」的全部取值**，属性列只读）——前端**穷举展示**是为了让人看清全貌、能提前分配；
+  2. **预建仍按属性规则**：立即轴展开、按需轴只建「被既有变体认领的取值」（前端用 ``row.will_create`` 标出来，不会创建的行显示为灰色 + 提示）；带按需属性的产品仍然不做价格分离；
+  3. 默认分配：把「本来就属于这一行」的变体（在**立即**轴上取值全等）放回它的行；用户**显式清空**过的行
+     （``store.cleared``）不再自动填回；
+  4. 拦截条件从「未映射」变成「**没被任何组合认领的既有变体**」；保存载荷仍是
+     ``{mapping: [{values, origin_variant_id}]}``（组合 → 归属），与服务端契约天然一致，服务端零改动。
+- 判断标准：两个集合做配对时，**让「另一侧必须满足的约束」当行**（这里组合是算出来的、变体是要保住的），
+  另一侧用「可留空的下拉」选 —— 配对不会撞车，交换也不需要额外规则。
+
+**陷阱 19：占位类交互要「禁用」而不是「隐式抢占」**（2026-09-24 用户实测反馈）
+- 需求原话：下拉里**已选的变体应该变灰色、不能选**；要换位置只能先把其中一个改为 `(new variant)` 再换。
+- 早期做法是「选到别的行时自动从原行让出」（`19.0.6.1.0` 的归属弹窗、映射表沿用）—— 两条变体互换时
+  用户改哪一行都像是从另一行「抢走」，看不出谁让给谁，三条以上更容易改乱。
+- 正确做法：
+  1. 纯函数给出「当前被哪一行占着」：`buildVariantOptions(variants, rows)` → 每项 `taken_by`（组合 key）；
+  2. 模板里禁用：`t-att-disabled="isOptionTaken(option, row)"`，`taken_by` 存在且不是自己这一行 → 灰显，
+     并用 `title` 说明「先把那一行改回 (new variant)」；
+  3. 事件里再防御：`onSelectVariant()` 若发现目标被别行占着就直接返回（程序化赋值绕过 UI 时也不改状态）。
+- 判断标准：一对一 / 一对多的**占位**交互，让用户**显式释放**比隐式抢占好；同时别忘给「怎么换」的出路文案。
+
 
 ### P5：业务场景、数据流与一致性边界（评估完整性 / 排障时读）
 

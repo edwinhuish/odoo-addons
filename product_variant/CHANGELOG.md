@@ -3,6 +3,496 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.12.0.1] - 2026-09-24（修复：Variant 下拉里已被别的行占用的变体要禁用）
+
+> 修订日期：2026-09-24 ｜ 类型：修复/体验（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`static/src/xml/variant_mapping_panel.xml`、
+> `tests/js/variant_mapping_pure.mjs`、`i18n/zh_CN.po`、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更
+
+1. **需求**：Variant 下拉里**已经被别的行选走的变体**要灰显、选不了；要换位置只能先把占着它的那一行
+   改回 ``(new variant)`` 把它让出来，再给另一行选。
+2. **做法**：新增纯函数 ``buildVariantOptions(variants, rows)`` —— 每个选项带上 ``taken_by``
+   （占着它的组合 key）；模板里 ``t-att-disabled="isOptionTaken(option, row)"``
+   （``taken_by`` 存在且不是自己这一行 → 禁用 + ``title`` 说明怎么办）；
+   ``onSelectVariant()`` 里再防御一次（被别行占着就直接返回），免得程序化赋值绕过 UI。
+3. **为什么不做「自动让出」**（早期做法）：两个下拉互相抢时，用户改哪一行都像从另一行「抢走」，
+   看不出谁让给谁。
+4. 自测新增 1 项（``已被别的行选走的变体在那一行禁用：只能先让出来再换``，共 14 项）。
+
+### 影响
+
+- 纯前端交互 + 文案，字段、视图 arch、RPC、数据结构与**后端行为一律没动**；需 `-u` + 强刷。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 19（占位类交互：**禁止**优于**隐式抢占**）、当前版本；
+  `README.md` 里「选到别的行会自动让出、互换只需两下」的表述改为「已被占的禁用，先让出再选」。
+
+## [19.0.12.0.0] - 2026-09-24（前端穷举展示，后端保留「按需生成」）
+
+> 修订日期：2026-09-24 ｜ 类型：功能/行为（+y） ｜ 影响文件：
+> `models/product_template.py`、`static/src/js/variant_mapping_panel.js`、
+> `static/src/xml/variant_mapping_panel.xml`、`tests/test_product_variant_conversion.py`、
+> `tests/js/variant_mapping_pure.mjs`、`i18n/zh_CN.po`、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更目标（用户要求）
+
+> 前端属性组合穷举，但后端依然应该保持按需生成。当前端属性选的变体为 ``(new variant)`` 时，
+> 后端根据属性的规则按需生成（含「按需生成」属性的按需生成）。
+
+### 变更
+
+1. **后端恢复按需语义**（回滚 `19.0.11.0.0` 的全展开）：
+   - `_split_variant_conversion_lines()` / `_get_variant_conversion_fixed_values()` 恢复；
+   - `_get_variant_conversion_combinations()`：按需轴**不展开**，只钉住每条既有变体占有的取值；
+   - `_create_variant_conversion_missing_variants()`：只在带按需属性时补建「立即」轴的组合；
+   - `_check_variant_conversion_combination_cap()`：组合数估算同步回「变体数 × 立即轴乘积」。
+2. **前端保持穷举展示**（按需轴的全部取值都列出来），并新增「会不会**现在**创建」的标记：
+   - `row.will_create`：该行有既有变体认领 ⇒ 会创建；没认领 ⇒ 要求它所有的「按需」取值
+     都已被别的行认领（也就是：那个取值有变体在保留），否则**不会现在创建**；
+   - 不会创建的行显示为灰色，表下方提示「N 个组合现在不会创建…」；
+   - `new_count` 只统计「会创建的新组合」（`newVariantsLabel` 因此更准确）。
+3. 测试：3 个 `T-039` 用例回到「按需轴不预建」的期望；离线自测新增
+   `will_create` / `pending_count` 断言（13 项）。
+
+### 影响
+
+- 后端预建口径回到 `19.0.10.0.0`；前端多了「哪些组合现在不会被创建」的可见提示。
+  `-u` + 强刷浏览器。
+
+### 文档
+
+- `AGENTS.md`（当前版本 / 陷阱 18）与 `README.md`（场景表 S11、核心设计、使用前提）同步为
+  「**前端穷举展示、后端按需预建**」。
+
+## [19.0.11.0.0] - 2026-09-24（取消 T-039 特例：**所有属性一律穷举，属性列只读**）
+
+> 修订日期：2026-09-24 ｜ 类型：功能/行为变更（+y） ｜ 影响文件：
+> `models/product_template.py`、`static/src/js/variant_mapping_panel.js`、
+> `static/src/xml/variant_mapping_panel.xml`、`tests/test_product_variant_conversion.py`、
+> `tests/js/variant_mapping_pure.mjs`、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更目标（用户实测反馈）
+
+> 所有属性都不能为可选，如 Length，应该充分列举所有可能的组合。
+
+映射表里的属性列必须**只读**、组合必须**穷举**；之前为「按需生成」属性留的
+「那一列是可以改的下拉」不满足这个要求。
+
+### 变更
+
+1. **取消 `T-039` 的特例**（`dynamic` 属性不再特殊对待）：
+   - `_get_variant_conversion_combinations()`：所有属性一律参与笛卡尔积（原来对 `dynamic` 轴只钉住
+     既有变体的取值）；
+   - `_create_variant_conversion_missing_variants()`：不再只在「有按需属性」时补建 —— 统一补
+     「计划里还没有变体」的组合（不带按需属性时通常没有缺失，作为兜底）；
+   - `_check_variant_conversion_combination_cap()`：组合数估算改为「各属性有效取值数的乘积」；
+   - 删除 `_split_variant_conversion_lines()` 与 `_get_variant_conversion_fixed_values()`。
+2. **前端**：属性列全部只读、组合穷举（`buildCombinationRows()` 对所有轴做笛卡尔积）；
+   删除「按需列可改」的 `dynamicPicks` / `onSelectDynamicValue` 与相关提示、文案。
+3. **保留**：带按需属性时**不做价格分离**（Odoo 仍会在订单里为未预建的取值创建变体，
+   模板级价格要留给它们）；建产品时直接带按需属性仍被拦住（原生会建出 0 变体的产品）。
+4. 测试：三个 `T-039` 用例按新行为改写（穷举后组合数、变体数、来源字段的判定都跟着变；
+   「本次才启用的取值」派生出来的变体没有来源，这是谱系判定「按转换前已存在的取值认来源」的口径）；
+   离线自测改为「12 个组合一个不少」。
+
+### 影响
+
+- **行为变更**：带「按需生成」属性的产品，改属性时会把该属性的**全部取值组合**都建成变体
+  （不再等订单），这正是「穷举」的语义；不需要预建时请不要给属性设 `Variant Creation = On Demand`。
+- 迁移：无需迁移脚本；升级后强刷浏览器。需 `-u`。
+
+### 文档
+
+- 模块 `AGENTS.md`（当前版本 / L2 P4 陷阱 13、18）与 `README.md`（场景表 S11、核心设计、
+  使用前提与限制、导入、遗留清单）里「按需轴不展开」的表述全部改为「所有属性一律穷举」。
+
+## [19.0.10.0.0] - 2026-09-24（映射表反向：**组合为行、为每个组合选变体**）
+
+> 修订日期：2026-09-24 ｜ 类型：功能/交互（+y） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`static/src/xml/variant_mapping_panel.xml`、
+> `static/src/js/variant_conversion_form_patch.js`、`i18n/zh_CN.po`、
+> `tests/js/variant_mapping_pure.mjs`、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更目标
+
+按用户要求把映射关系**反向**：**属性组合是固定的行，用户为每个组合选择「由哪条既有变体保留」**
+（而不是给每条变体逐轴挑值）。组合天然不会重复，且 Variant 下拉可以留空 / 清空 —— 交换位置
+只需点两下。
+
+### 变更
+
+1. **行的身份 = 属性组合**：
+   - 「立即」属性（``always``）：按取值做笛卡尔积，每行一个组合；
+   - 「按需生成」属性（``dynamic``）：**不展开**取值空间（``T-039`` 保留）——它的列是**行上的可改
+     下拉**（默认取本行原本那条变体带着的取值，没有就取第一个），改它只影响这一行的组合；
+   - 全是按需属性时，行按既有变体现带的取值组合给出（不展开取值空间）。
+2. **Variant 列**（每行一个下拉）：留空 = 该组合**新建变体**；选一条既有变体 = 由它继续保留。
+   **同一条变体只能占一行**：选到别的行时自动从原行让出（交换只需两下）；清空后不再被默认分配填回
+   （``store.cleared``）。
+3. **默认分配**：打开面板时把「本来就属于这一行」的既有变体放回它的行（只比「立即」轴 ——
+   新加的按需轴既有变体肯定没有取值，不该因此判它不匹配）。
+4. **拦截条件**：没被任何组合认领的既有变体会在上方**点名**并阻止保存（原「未映射」改为「未分配」）。
+5. **保存载荷不变**：仍是 ``{mapping: [{values, origin_variant_id}], share_vendor_prices}``
+   —— 与服务端契约天然一致，**服务端零改动**（``_check_variant_conversion_anchors()`` 仍是权威）。
+6. i18n：说明文案随交互重写（po 同步：替换 5 条、删除 3 条、新增 1 条）。
+7. 离线自测按新模型重写（13 项）：组合行 / 默认分配 / 一行一变体 / 交换 / 清空 / 按需列可改 /
+   mapping 结构 / 全按需产品 / 命令合并 / 删空行。
+
+### 影响
+
+- 前端交互模型变化；视图 arch、RPC、数据结构**一律没动**。需 `-u` + 强刷浏览器。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 13（落地说明）与陷阱 18（改为「以组合为行」）已同步；
+  `README.md` 的映射表说明与验证清单同步。
+
+## [19.0.9.0.0] - 2026-09-24（映射表：一个属性组合只能被一条变体占用）
+
+> 修订日期：2026-09-24 ｜ 类型：功能（+y） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`static/src/xml/variant_mapping_panel.xml`、
+> `i18n/zh_CN.po`、`tests/js/variant_mapping_pure.mjs`、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更目标
+
+用户实测：映射表允许两条变体选到同一个属性组合，直到保存才被服务端拒绝（
+`_check_variant_conversion_anchors()`：「确认归属组合互不重复」），用户白填一遍。
+本次把「组合唯一」变成**界面上就看得见**的约束。
+
+### 变更
+
+1. **前端唯一性约束**（``applyCombinationUniqueness()``，纯函数、可用离线自测覆盖）：
+   - 已被别的变体占住的组合，在下拉里**禁用** —— 用户看得到、点不了，不会选重；
+   - 万一还是重了（历史状态、被别处改动），把重复的那条标成**未映射**并给出提示，照样拦住保存；
+   - 候选值**逐行克隆**：`options` 数组原本是所有行共享同一个引用，一行禁用会影响所有行。
+2. **提示文案**：新增「%(count)s variants are mapped to the same combination…」，`i18n/zh_CN.po` 已同步。
+3. **与服务端同口径**：服务端 `_check_variant_conversion_anchors()` 仍是权威（API 调用也拦得住），
+   前端只是把结论提前。
+4. 离线自测新增 2 项：冲突候选被禁用（且不影响本行自己的候选）/ 真重复时算未映射且先不列新组合。
+
+### 设计取舍：「固定变体选属性」还是「固定组合选变体」
+
+保持**以变体为中心**（现状）。这条流程的本质约束是「**每条既有变体都必须落到一个组合**」
+（要保住它的库存、单据、价格），以变体为中心才能把「漏选」明确暴露成**未映射**并拦住保存；
+若改成「列出所有组合、为每个组合挑一条既有变体」，组合数往往远多于既有变体数
+（示例产品 2×3×3 = 18 个组合 vs 6 条既有变体），绝大多数组合要用户点「新建」，
+还得另设一列反向核对「哪条既有变体还没被分配」——更容易漏、更费点击。
+组合重复的问题用上面的唯一性约束解决，效果与「固定组合」等价。
+
+### 影响
+
+- 前端交互 + 一条新文案；视图 arch、RPC、数据结构**一律没动**。需 `-u` + 强刷浏览器。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 18：组合归属的唯一性要在界面上可见。
+
+## [19.0.8.0.4] - 2026-09-24（修复：自动补的默认值被当成用户选择，加第二个取值后回不到未映射）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`tests/js/variant_mapping_pure.mjs`、
+> `__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **现象**（实测）：某属性起初只有 1 个取值（Length: 140）→ 面板替 Odoo 把 140 显示到所有变体上、
+   算「已映射」；用户随后又勾了 120 → 面板**仍然**显示 140、仍算已映射 —— 长度 120 的变体本该是
+   未映射，却一个都没进未映射列表。
+2. **根因**：`buildSelectionPayload()` 把「面板当前显示的取值」一律当成「用户的选择」写回 selection，
+   包括**单取值轴自动补的那个默认值**；下一轮重算它又被当成用户选择 ⇒ 自我固化，永远回不到未映射。
+3. **修复**：轴状态带 `picked` 标记 —— 只有用户在下拉里选过（含选回「Choose a value」）才是 true；
+   `buildSelectionPayload()` 只输出 `picked` 的项。于是：
+   - 自动补的值不写回 selection；
+   - 该轴出现第二个取值时，若谁都没选过 → 变体回到**未映射**（期望行为）；
+   - 变体**原本就带着**的取值仍显示且算已映射（不需要用户重选）。
+4. 离线自测新增两项：自动补的不算用户选择（该轴多出取值后回到未映射）、用户选过的在重算里保留。
+
+### 影响
+
+- 纯前端判定；**编辑期仍然零 RPC**。需 `-u` + 强刷浏览器。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 17：默认值 / 派生值 / 用户确认值必须在状态里分开记。
+
+## [19.0.8.0.3] - 2026-09-24（修复：面板不刷新 —— 属性行的变化没被通知到）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **根因**：`useRecordObserver` 的实现是 ``effect(cb, [props.record])``
+   （`web/core/utils/reactive.js`）—— 依赖**只有 record 对象本身**，而编辑表单时这个引用不变；
+   「选属性 / 勾取值」改的是**子 record** 的字段，不保证让父 record 的 effect 重跑。
+   `19.0.8.0.0` 起我又把回调简化成不读任何数据，等于把仅有的触发点也去掉了 →
+   面板停在挂载时那一次的状态（加属性、勾取值都没反应）。
+2. **修复**（三路信号，任一命中即重算，签名去重保证不重复渲染）：
+   - patch 外层 `X2ManyField` 与真正渲染行的 `ListX2ManyField`，在它们每次 `onPatched` 后通知面板
+     —— 子表被编辑时它们是必然重渲染的；包装原 `setup` 时用 `originalSetup?.call(this)`，
+     不假设每个类都有 `setup`（`ListX2ManyField` 直接继承 `Component`）；
+   - 保留 `useRecordObserver`（覆盖 record 级变化、保存后重载）；
+   - 面板挂载期间每秒本地自检一次（`recompute()` 纯本地计算 + 签名没变就直接返回，稳定时零开销），
+     作为「Odoo 内部机制再变也照常工作」的兜底。
+3. 离线纯函数自测不变（纯函数逻辑本来就对，这次修的是**触发链路**）。
+
+### 影响
+
+- 只动前端触发链路；**编辑期仍然零 RPC**（`getChanges()` 是本地操作）。需 `-u` + 强刷浏览器。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 16：`useRecordObserver` 不会因为「子表里改字段」而触发。
+
+## [19.0.8.0.2] - 2026-09-24（修复：新加的属性行不成为轴 —— 虚拟行 id 被自己造掉了）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **根因**：把 ``getChanges()`` 的命令合并到基线时，新建行自己造了 id（``new-0``）。但用户点
+   **Add a line** 之后，「选属性」「勾取值」在 Odoo 眼里是对**同一个虚拟行**的后续更新
+   （``[1, 0, {...}]``，用的是它自己的虚拟 id ``0``）—— 找不到 ``new-0`` 那一行，这些更新全被丢掉，
+   那一行永远只有 ``attribute_id: false`` → 不成为轴 → **面板毫无反应**
+   （单变体产品里加一个多取值属性就是这条路径）。
+2. **修复**：``mergeAttributeLines()`` 原样保留 Odoo 给的虚拟 id；``[1, id, vals]`` 在基线里找不到
+   对应行时，把它当作「本次新建的虚拟行」接住（而不是跳过）。
+3. **自测**（Node 抽纯函数跑真实命令序列）：单变体产品加 ``Color: Black/Red`` → 轴出现且该变体
+   **未映射**（正是应当拦住保存的情形）；逐条勾取值（增量 ``[4, id]``）→ 两个取值都在；
+   改已保存行的取值 / 删整行 → 正常。
+
+### 影响
+
+- 纯前端合并逻辑，**编辑期仍然零 RPC**。需 `-u` + 强刷浏览器。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 15：合并 ``getChanges()`` 命令时，虚拟行的 id 必须原样保留。
+
+## [19.0.8.0.1] - 2026-09-24（修复：面板读不到表单里正在编辑的属性行，加属性毫无反应）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`models/product_variant_mapping.py`、
+> `static/src/js/variant_conversion_form_patch.js`、`tests/test_product_variant_mapping.py`、
+> `__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更
+
+1. **根因**：面板原来用 ``record.data.attribute_line_ids.records[].data.value_ids.records`` 读「表单当前
+   编辑态」的取值。编辑中的 o2m 子行 / m2m 取值在 ``record.data`` 里可能是**命令数组**
+   （``[[0, 0, vals]]`` / ``[[1, id, vals]]``）而不是 record 列表，于是取值被读成空 → 用户新加的那一行
+   **不成为轴** → 面板「没有任何反应」。
+2. **修复**：不再猜内部结构，改用 Odoo 公开的 ``record.getChanges()``（**本地，不发请求**）拿属性行命令，
+   与快照里的**已保存基线** ``lines`` 合并出编辑态：
+   - ``mergeAttributeLines()``：``[0]`` 新建 / ``[1]`` 改 / ``[2]``\ ``[3]`` 删 / ``[5]`` 清空 / ``[6]`` set；
+   - ``applyValueCommands()``：m2m 的 set（``[6,0,ids]``）与增量（``[4,id]`` 关联 / ``[3,id]`` 取消 / ``[5]`` 清空）
+     分开处理 —— **增量命令不能当替换**，否则勾一个取值会丢掉原来勾的。
+3. **快照**相应带上 ``lines``（已保存的属性行基线）、``attributes``（id → 名称 + ``create_variant``）、
+   ``values``（id → 名称 + 归属属性）：前端手里只有 id，名称一律从快照查。
+4. **测试**：快照用例跟上新结构；另把面板纯函数抽出来在 Node 里跑真实数据自测 —— 加属性 → 轴出现且
+   两条变体未映射、Length 的三个取值都在下拉里、挑好后「按需生成」轴只列用到的取值、
+   勾取值走增量不丢原值、把某一行取值删空/删整行都不报错。
+
+### 影响
+
+- 纯前端 + 快照结构（本模块内部 RPC）；**编辑期仍然零 RPC**。需 `-u` + 强刷浏览器。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 14：读「表单当前编辑态」要用 ``getChanges()`` 合并基线，
+  不要读 record 内部结构。
+
+## [19.0.8.0.0] - 2026-09-24（映射表改为**纯前端计算**：编辑期零 RPC，保存才回服务端）
+
+> 修订日期：2026-09-24 ｜ 类型：功能/架构（+y） ｜ 影响文件：
+> `models/product_variant_mapping.py`、`static/src/js/variant_mapping_panel.js`、
+> `static/src/js/variant_conversion_form_patch.js`、`tests/test_product_variant_mapping.py`、
+> `__manifest__.py`、`AGENTS.md` / `README.md` / `CHANGELOG.md`
+
+### 变更目标
+
+把「增删属性 / 勾取值时的映射计算」整个搬到前端：**编辑期间不再因为表单还没写完就把数据发给后端**，
+服务端只在保存时参与（安全转换 + 权威判定）。
+
+### 变更
+
+1. **新增一次性快照 RPC** ``get_variant_mapping_snapshot()``：面板挂载时取一次，返回既有变体
+   （id / 名称 / 在手数量 / 它带的 ``{属性: 取值}``）与各属性的 ``create_variant``。它只描述
+   **已经保存的事实**，所以表单里那些没保存的行（Add a line 的空行、被删空的取值行）不会让它报错。
+2. **新增前端纯函数** ``computeVariantMapping()``（含 ``readAttributeLines()`` /
+   ``newCombinationLabels()``）：按表单**当前**的属性行 × 快照 × 用户已选，在浏览器里算
+   每条变体的组合、未映射数、本次会新建的组合；属性行一改只做**本地重算**（防抖 150ms）。
+3. **编辑期不再调 RPC**：原 ``get_variant_mapping_preview()`` 保留为服务端侧判定入口
+   （调试 / 兜底），前端不再使用。
+4. **保存钩子改为纯本地判定**：读前端算好的状态 —— 有未映射就提示并拦住保存，否则把映射随
+   ``changes`` 一起提交；「会丢变体」仍由服务端 ``write()`` 拒绝并给出解释文案。
+5. **按需轴不再自动填第一个取值**（``_get_variant_mapping_rows()``）：多取值轴一律要求显式映射，
+   **「按需生成」轴不例外**。原行为会让「加了 Length（120/140/160）」只显示 120 并算成已映射，
+   用户没法指定每条变体保留哪个取值（实测反馈）；按需轴仍然**不预建**它的其它取值（``T-039`` 不变）。
+6. 测试：按需轴用例改为「要求显式映射」、新增快照用例（63 项）。
+
+### 影响
+
+- 前端行为重构 + 新增一个 RPC；字段、视图 arch、数据结构**一律没动**，无迁移。需 `-u` + 强刷。
+- 编辑期间**零 RPC** ⇒ 表单未写完的状态（空行、空取值）不会再触发服务端校验弹窗。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 13：编辑期的计算放前端（一次性快照 + 纯函数），
+  服务端只在保存时参与。
+
+## [19.0.7.0.5] - 2026-09-24（修复：映射状态 compute 在 onchange 里崩 —— 改为前端按需取）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `models/product_variant_mapping.py`、`static/src/js/variant_mapping_panel.js`、
+> `tests/test_product_variant_mapping.py`、`i18n/zh_CN.po`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **根因**：``variant_mapping_state`` 原本是 compute 字段（``@api.depends("attribute_line_ids", ...)``）。
+   Odoo 的 ``onchange`` 会把**每个变更字段**挨个求值，于是产品表单**每次 onchange**
+   （点 Add a line 后随便选一个属性就够）都会在「表单里还有没保存的行」的上下文里跑这个 compute：
+   那些行的 id 是 ``NewId``，``json.dumps()`` 直接抛
+   ``TypeError: Object of type NewId is not JSON serializable``，整个 RPC 500。
+2. **修复**：把该字段降级为**纯挂载点**（``fields.Text(store=False)``、**不写 compute / 不写 depends**）——
+   面板挂载时自己调 ``get_variant_mapping_preview()`` 取初始状态（切回页签重新挂载走同一条路）。
+   服务端从此不再在 onchange 里为「前端展示用状态」做序列化。
+3. **前端**：``setup()`` 不再解析字段值（删掉 ``parseValue()``），改为挂载即 ``scheduleRefresh()``。
+4. **测试**：``test_panel_initial_state_comes_from_the_preview`` 校验「挂载点字段不做 compute、不落库」
+   + 初始状态来自 RPC。
+5. i18n：字段 help 文案随之改写，po 里对应 ``msgid`` / ``msgstr`` 已同步（仍然是英文源文本）。
+
+### 影响
+
+- 少一个 compute、多一次（原本靠字段省掉的）RPC；字段 ``store=False`` → **无数据库列、无迁移**。
+- 需 `-u` + 强刷浏览器。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 12：**给前端看的状态不要做成 compute 字段** —— compute 会在
+  onchange（带着未保存的虚拟记录）里被求值，序列化 ``NewId`` 必炸。
+
+## [19.0.7.0.4] - 2026-09-24（修复：在属性页点「Add a line」就报必填缺失）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `models/product_template.py`、`models/product_variant_mapping.py`、
+> `static/src/js/variant_mapping_panel.js`、`static/src/js/variant_conversion_form_patch.js`、
+> `tests/test_product_variant_mapping.py`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **根因**：点 **Add a line** 时前端生成的是一条「新建但还没选属性」的命令
+   （``[0, 0, {"value_ids": ...}]``，没有 ``attribute_id``）；映射表的防抖刷新把它原样发给
+   ``get_variant_mapping_preview()``，服务端拿去试写 → ``attribute_id`` 必填缺失 →
+   用户**一点按钮**就收到 ``Missing required value for the field 'Attribute' (attribute_id)``。
+2. **三层修复**：
+   - 前端（第一层）：新增 ``hasIncompleteLine()``，识别这类半成品命令 —— 这种状态下**不调 RPC**，
+     保持上一次的映射状态，等用户选好属性再算；
+   - 服务端（第二层）：新增 ``_sanitize_attribute_line_commands()``，分析与试写前丢掉半成品行
+     （同一次提交里正常的那几条照常参与分析）；
+   - 服务端（第三层）：``get_variant_mapping_preview()`` 兜住 ``NotNullViolation``，回
+     ``incomplete=True``（映射表不改状态、保存钩子交回原生校验）；Odoo **原生**的解释性 ``UserError``
+     （例如「清空某行的属性」）照旧透出，不被吞掉。
+3. 新增 3 项测试：半成品行不炸且不影响同批的正常命令、清空属性时原生文案不被吞。
+
+### 影响
+
+- 改动集中在前端刷新时机与 RPC 入参清洗，字段、视图 arch、数据结构**一律没动**；需 `-u` + 强刷。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 11：产品表单的命令流里有「新建但还没填必填」的半成品，
+  预览类 RPC 必须清洗或兜底，不能让用户一点按钮就看到必填报错。
+
+## [19.0.7.0.3] - 2026-09-24（修复：映射表面板被排到属性行右侧、看不见）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `views/product_template_views.xml`、`static/src/xml/variant_mapping_panel.xml`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **根因**：字段外层的 `.o_field_widget`（`web.Field` 模板套的那层 div）是 `display: inline-block`；
+   「属性与变体」页里的 `attribute_line_ids` 同样是 inline-block 且宽度不是 100%，于是面板被排到
+   它**右边**（同一行）并溢出表单可视宽度 —— 表现就是「渲染出来了，但跑到右边、看不见」。
+2. **修复**：视图里用一层 `<div class="d-block w-100">` 包住字段，字段本身也加
+   `class="d-block w-100"`，让面板独占一行、占满表单宽度；组件模板根节点补 `w-100`。
+
+### 影响
+
+- 只改视图 arch 与模板的 class：需 `-u` + 强刷浏览器；字段、RPC、数据结构**一律没动**。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 10：自定义字段 widget（表格 / 多行）必须在视图里自己撑满一行。
+
+## [19.0.7.0.2] - 2026-09-24（修复：映射表模板变量名写错，首次渲染即崩）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/xml/variant_mapping_panel.xml`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **根因**：模板里写的是 `state.blocked` / `state.rows` / `state.newCombinations` …，而组件上这份状态叫
+   **`this.store`**（`setup()` 里 `this.store = useState(getMappingStore(...))`）。OWL 模板表达式里
+   `state` 不是保留字，只是一个不存在的名字 → `undefined.blocked`。
+2. **现象**：`UncaughtPromiseError > OwlError`，cause 为
+   `TypeError: Cannot read properties of undefined (reading 'blocked')`，栈落在
+   `VariantMappingPanel.template`（`19.0.7.0.1` 修好字段注册方式后暴露出来的第二个前端错误）。
+3. **修复**：模板里 9 处 `state.` 全部改成 `store.`；顺带核对了模板引用的其余名字
+   （`introLabel` / `unmappedCount` / `axisLabels` / `variantDisplay` / `axisDisplay` / `chooseLabel` /
+   `mappedLabel` / `unmappedAxisLabel` / `newVariantsLabel` / `onDemandHint` / `shareVendorPricesLabel` /
+   `onSelectValue` / `onToggleShareVendorPrices`）都是组件上真实的 getter / 方法。
+4. **新增静态检查**（`tests/test_frontend_consistency.py`，4 项，纯文本扫描、不需要浏览器）：
+   ① 前端文件都登记进 `assets`；② 字段 widget 注册值必须是 `{component: ...}` 描述对象（陷阱 8）；
+   ③ 模板表达式里的名字都能在组件上找到（陷阱 9）；④ `t-name` 与 `static template` 一一对应。
+   已做负向验证：把 `store.` 写回 `state.`、把注册改回裸类，检查都会失败。
+
+### 影响
+
+- 纯前端模板改动，字段、视图 arch、RPC、数据结构**一律没动**，无迁移。
+- 升级（`-u product_variant`）+ 强刷浏览器后，「属性与变体」页的映射表正常渲染。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 9：模板表达式只能引用**组件实例上真实存在的名字**
+  （`state` 不是 OWL 保留字，写错只会得到 `undefined.x`，而且报错栈指到模板、不指向 `setup()`）。
+
+## [19.0.7.0.1] - 2026-09-24（修复：映射表组件注册方式导致产品表单打不开）
+
+> 修订日期：2026-09-24 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`i18n/zh_CN.po`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **根因**：`registry.category("fields").add("variant_mapping_panel", VariantMappingPanel)` 把**组件类**
+   直接注册进字段注册表。Odoo 的字段注册值是**描述对象**（`web/static/src/views/fields/char/char_field.js`
+   末尾：`registry.category("fields").add("char", charField)`），`web.Field` 模板渲染的是
+   `field.component` —— 裸类下它是 `undefined`，owl 创建子组件时读 `Component.name` 直接抛错。
+2. **现象**：打开产品表单（或点开「属性与变体」页签）报
+   `UncaughtPromiseError > OwlError`，cause 为
+   `TypeError: Cannot read properties of undefined (reading 'name')`，栈只落在 `Field.template`，
+   不指向本模块的组件，极易误判为「升级后没重启 / 浏览器缓存」（服务端 `get_views` 里字段与视图
+   其实都正常）。
+3. **修复**：改为注册描述对象
+   `{ component: VariantMappingPanel, displayName: _t("Attribute / Variant Mapping"), supportedTypes: ["text"] }`，
+   并导出为 `variantMappingPanelField`。
+4. i18n：`displayName` 的文案与字段 `string` 同字面，po 里合并成**一条** `msgid`（补
+   `code:addons/product_variant/static/src/js/variant_mapping_panel.js:0` 引用与 `#. odoo-javascript` 标记）。
+
+### 影响
+
+- 前端只改了字段注册方式，映射表的数据流、RPC、保存拦截与列 / 表结构**一律没动**，无迁移。
+- 升级（`-u product_variant`）+ 强刷浏览器后，产品表单与「属性与变体」页签恢复正常。
+
+### 文档
+
+- 模块 `AGENTS.md` → L2 P4 陷阱 8 改写为这条真实根因（原先把现象归因为「升级后未重启进程」，
+  属于误判），含自查命令 `grep -rn 'category("fields").add(' <module>/static/src/js/`。
+
 ## [19.0.7.0.0] - 2026-09-24（模块改名 `product_variant` + 「属性 ↔ 变体」映射表）
 
 > 修订日期：2026-09-24 ｜ 类型：架构/破坏性（+x，已装库需原地改名）+ 交互重构 ｜ 影响文件：
