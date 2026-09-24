@@ -65,6 +65,13 @@
 > 已完成需求不在「待办池 / 进行中」留存，仅在此留一行摘要以便追溯；
 > 完整验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
 
+- **T-040 归属弹窗交互优化：所有选项可选，重复选择自动互换** ｜ `product_variant_conversion` ｜ P2
+  - 完成日期：2026-09-24 ｜ 状态：**已交付，待目标环境复验（前端改动需 `-u` + 强刷）**
+  - 落地版本：`product_variant_conversion` `19.0.6.1.0`
+  - 做法：去掉 `t-att-disabled`（不再把「已被别的组合占用」的既有变体置灰）；新增纯函数 `applyOwnershipSelection(selection, index, variantId)` —— 选中的既有变体若已被另一行占用，就把占用行改成本行原先的选项，再给本行赋新值，于是任意时刻「每条既有变体只被一行占用」；`onSelect()` 生成新 selection 赋回 `state.selection`（OWL 响应式，两行显示同步刷新）；弹窗顶部与中文译文同步补一句说明
+  - 验收记录：模块 [`CHANGELOG.md`](product_variant_conversion/CHANGELOG.md) → `[19.0.6.1.0]`；`node` 一次性验证纯函数 6 组用例（含用户给的 Black/White 互换示例）与「无重复占用」不变量全部通过；四组配置 47 项服务端测试 0 failed（回归）
+  - 遗留：目标环境手工复验「所有选项可选 / 互换后两行显示同步 / `Confirm` 状态随互换变化 / 中英文提示」；前端逻辑仍无自动化测试（待前端纯函数上 Hoot 单测时一并补）
+
 - **T-039 支持「按需生成变体」（`create_variant == 'dynamic'`）的属性：改属性只展开「立即」轴** ｜ `product_variant_conversion` ｜ P1
   - 完成日期：2026-09-24 ｜ 状态：**已交付，待目标环境验证**
   - 落地版本：`product_variant_conversion` `19.0.6.0.0`

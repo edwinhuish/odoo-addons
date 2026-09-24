@@ -13,7 +13,7 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantConversionDialog`（归属确认弹窗）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给弹窗补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.6.0.0`（19.0.6.0.0：**`T-039` 支持「按需生成变体」的属性** —— 只展开「立即」轴、按需轴按既有变体现带取值钉住、缺失组合自己用 `_create_product_variant()` 补、带按需属性的产品不做价格分离；建产品时带按需属性仍然拦住；`19.0.5.3.2`：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
+- 当前版本：`19.0.6.1.0`（19.0.6.1.0：**归属弹窗交互优化** —— 所有下拉选项都可选，选中已被别的组合占用的既有变体时两行**自动互换**（纯函数 `applyOwnershipSelection()`）；19.0.6.0.0：**`T-039` 支持「按需生成变体」的属性** —— 只展开「立即」轴、按需轴按既有变体现带取值钉住、缺失组合自己用 `_create_product_variant()` 补、带按需属性的产品不做价格分离；建产品时带按需属性仍然拦住；`19.0.5.3.2`：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
 - 命名说明：技术名用**名词短语** `product_variant_conversion`，与显示名（`Product Variant Conversion`）、
   模型 `product.variant.conversion`、字段 `variant_conversion_id` 一致；原用名 `product_variant_convert`
   （裸动词，且容易被读成「把变体转成组合产品」，而 Odoo 19 里 `product.combo` 是另一个概念）已在交付前改掉
@@ -172,7 +172,7 @@
 | `models/product_attribute_guards.py` | T-017：属性主数据与属性行直接写路径的「丢变体」守卫（ptav / PAV / line 三个模型） |
 | `models/product_variant_conversion.py` | 转换台账与变体谱系两个模型 |
 | `static/src/js/variant_conversion_form_patch.js` | patch `FormController.onWillSaveRecord`：保存前检测、拦保存、弹窗、把归属放进本次 `changes` |
-| `static/src/js/variant_conversion_dialog.js` | 归属确认弹窗组件（逐组合选「由谁继续承载」+ 供应商价格勾选框 + 文案 getter） |
+| `static/src/js/variant_conversion_dialog.js` | 归属确认弹窗组件（逐组合选「由谁继续承载」+ **重复选择自动互换** + 供应商价格勾选框 + 文案 getter；载荷构造 / 未分配计数 / 互换都是纯函数，便于以后上 Hoot 单测） |
 | `static/src/xml/variant_conversion_dialog.xml` | 弹窗模板 `product_variant_conversion.VariantConversionDialog` |
 | `views/product_template_views.xml` | 产品表单的技术字段（不可见）、`Conversions` 智能按钮；产品搜索筛选。**刻意不加谱系页**：谱系明细在台账详情页里看，避免产品详情页多出页签 |
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
@@ -347,6 +347,10 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 - 调 `orm.call("product.template", "get_variant_conversion_preview", [[resId], changes.attribute_line_ids])`
   （把服务端原本要写的那组命令原样过去，服务端在保存点里试写 + 回滚后给出结论）；
 - `preview.blocked` → 提示并 `return false`；`preview.required` → 弹窗并 `return false`；
+- 弹窗里换选项是**互换**而不是「占用」（`19.0.6.1.0`）：所有选项都可选，选中已被别的组合占用的既有变体时
+  与占用行对调（纯函数 `applyOwnershipSelection()`），任意时刻都满足「每条既有变体只被一行占用」，
+  因此 `countUnassigned() == 0` 就等价于「载荷合法」。**不要**退回「把已占用选项置灰」的写法 ——
+  那样用户换归属得先腾位置再选，两步且看不出原因。
 - 弹窗确认后：`await record.update({variant_conversion_mapping: JSON.stringify(payload)})` 再 `this.model.save()`
   → 第二次保存因为 `changes.variant_conversion_mapping` 已存在而直接放行，服务端走安全转换。
 

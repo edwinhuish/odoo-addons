@@ -434,8 +434,10 @@ msgstr "读不出表单提交的变体归属。请重新加载页面后再保存
 msgid ""
 "This attribute change adds variants. Tell which existing variant keeps each "
 "combination: the chosen variant record keeps its stock, its orders and its "
-"invoices, and the other combinations are created as new variants."
-msgstr "这次属性变更会新增变体。请指定每个组合由哪条既有变体继续承载：被选中的那条记录保留它的库存、订单与发票，其余组合作为新变体创建。"
+"invoices, and the other combinations are created as new variants. Every "
+"option can be picked: picking a variant that another combination already "
+"uses swaps the two combinations."
+msgstr "这次属性变更会新增变体。请指定每个组合由哪条既有变体继续承载：被选中的那条记录保留它的库存、订单与发票，其余组合作为新变体创建。每个选项都可以选：选中已被别的组合占用的变体会与那个组合互换。"
 
 #. module: product_variant_conversion
 #. odoo-python

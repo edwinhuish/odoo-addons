@@ -22,6 +22,35 @@ export function countUnassigned(variants, selection) {
 }
 
 /**
+ * 纯函数：把「第 index 行」改选成 `variantId`（`false` = 新变体），必要时与占用它的那行**互换**。
+ *
+ * 弹窗里每一个下拉都能选（不为「已被别人占用」而禁用）：一旦选中某条既有变体已经占着的选项，
+ * 就把「占用者」换成当前这行原先的选项 —— 两条变体互换，任意时刻每条既有变体仍然只被一行占用，
+ * 也不会出现「重复占用」或「两边都空着」。
+ *
+ * 例：单变体产品（只有「原变体」一个候选）转成 Black / White 两个组合，默认原变体落在 Black；
+ * 用户在 White 那行也选「原变体」→ Black 拿到 White 原先的选项（新变体）、White 拿到原变体。
+ *
+ * @param {Object} selection 行号（字符串，Object.keys 的结果）→ 既有变体 id 或 false
+ * @param {Number} index 被改动的行号
+ * @param {Number|false} variantId 该行新选的既有变体 id（false = 新变体）
+ * @returns {Object} 新的 selection（不改原对象，便于比较与单测）
+ */
+export function applyOwnershipSelection(selection, index, variantId) {
+    const next = { ...selection };
+    if (variantId) {
+        const takenBy = Object.keys(next).find(
+            (otherIndex) => Number(otherIndex) !== index && next[otherIndex] === variantId
+        );
+        if (takenBy !== undefined) {
+            next[takenBy] = next[index] || false;
+        }
+    }
+    next[index] = variantId || false;
+    return next;
+}
+
+/**
  * 归属确认弹窗：列出这次属性改动后会出现哪些组合，让用户逐个指定
  * 「由哪条既有变体继续承载」（等价于「这条既有变体转换后占哪个组合」）。
  *
@@ -97,15 +126,12 @@ export class VariantConversionDialog extends Component {
         );
     }
 
-    /** 该既有变体是否已被别的组合选走（一条既有变体只能承载一个组合） */
-    isVariantUsed(index, variantId) {
-        return Object.entries(this.state.selection).some(
-            ([otherIndex, selected]) => Number(otherIndex) !== index && selected === variantId
-        );
-    }
-
+    /**
+     * 改选某一行：所有选项都允许选；选中已被别的行占用的既有变体时与该行互换（见纯函数说明）。
+     */
     onSelect(index, ev) {
-        this.state.selection[index] = Number(ev.target.value) || false;
+        const variantId = Number(ev.target.value) || false;
+        this.state.selection = applyOwnershipSelection(this.state.selection, index, variantId);
     }
 
     onToggleShareVendorPrices(ev) {

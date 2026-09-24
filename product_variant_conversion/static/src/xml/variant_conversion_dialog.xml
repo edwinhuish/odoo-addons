@@ -3,7 +3,7 @@
 
     <t t-name="product_variant_conversion.VariantConversionDialog">
         <Dialog title.translate="Variant Ownership" size="'lg'">
-            <p>This attribute change adds variants. Tell which existing variant keeps each combination: the chosen variant record keeps its stock, its orders and its invoices, and the other combinations are created as new variants.</p>
+            <p>This attribute change adds variants. Tell which existing variant keeps each combination: the chosen variant record keeps its stock, its orders and its invoices, and the other combinations are created as new variants. Every option can be picked: picking a variant that another combination already uses swaps the two combinations.</p>
             <p t-if="isOnDemand" class="text-muted" t-esc="onDemandHint"/>
             <table class="table table-sm align-middle">
                 <thead>
@@ -21,7 +21,6 @@
                                 <option t-foreach="variants" t-as="variant" t-key="variant.id"
                                         t-att-value="variant.id"
                                         t-att-selected="state.selection[combination_index] === variant.id"
-                                        t-att-disabled="this.isVariantUsed(combination_index, variant.id)"
                                         t-esc="variantDisplay(variant)"/>
                             </select>
                         </td>
