@@ -27,6 +27,7 @@ assert.ok(start > 0 && end > start, "面板文件结构变了，自测的抽取�
 
 const pure = source.slice(start, end).replace(/export function/g, "function");
 const {
+    applyDefaultAssignment,
     applyValueCommands,
     buildMappingPayload,
     buildCombinationRows,
@@ -37,9 +38,9 @@ const {
     rowMatchesVariant,
     snapshotMappingBaseline,
 } = new Function(
-    `${pure}; return { applyValueCommands, buildMappingPayload, buildCombinationRows, buildVariantOptions, ` +
-        `computeVariantMapping, mappingDiffersFromBaseline, mergeAttributeLines, rowMatchesVariant, ` +
-        `snapshotMappingBaseline };`
+    `${pure}; return { applyDefaultAssignment, applyValueCommands, buildMappingPayload, buildCombinationRows, ` +
+        `buildVariantOptions, computeVariantMapping, mappingDiffersFromBaseline, mergeAttributeLines, ` +
+        `rowMatchesVariant, snapshotMappingBaseline };`
 )();
 
 const check = (label, fn) => {
@@ -212,8 +213,37 @@ check("把某一行的取值删空 / 删整行都不炸", () => {
         snapshot,
         assignment: {},
     });
-    assert.equal(result.rows.length, 0, "没有轴就没有组合行");
-    assert.equal(result.unassigned_count, 2);
+    assert.equal(result.rows.length, 1, "没有属性时产品本身是一个空组合，也要给一行");
+    assert.equal(result.rows[0].cells.length, 0);
+    // 模拟 refreshRows 里的默认分配：空组合匹配所有变体，只会挂第一条
+    const assignment = applyDefaultAssignment(result.rows, variants, {}, {});
+    const final = computeVariantMapping({
+        lines: mergeAttributeLines(baseline, [[2, 2]]),
+        variants,
+        snapshot,
+        assignment,
+    });
+    assert.equal(final.unassigned_count, 1, "两条既有变体里只有一条能挂到空组合上");
+});
+
+check("删除唯一属性后，唯一既有变体自动复用", () => {
+    const singleVariant = [{ id: 900, label: "[HW017] Bracket", on_hand: 10, values: {} }];
+    const result = computeVariantMapping({
+        lines: [],
+        variants: singleVariant,
+        snapshot: { attributes: {}, values: {} },
+        assignment: {},
+    });
+    assert.equal(result.rows.length, 1, "空组合给一行");
+    const assignment = applyDefaultAssignment(result.rows, singleVariant, {}, {});
+    const final = computeVariantMapping({
+        lines: [],
+        variants: singleVariant,
+        snapshot: { attributes: {}, values: {} },
+        assignment,
+    });
+    assert.equal(final.rows[0].variant_id, 900, "唯一既有变体自动挂到空组合");
+    assert.equal(final.unassigned_count, 0, "没有未分配的变体");
 });
 
 check("组合行的 key 唯一，且顺序无关", () => {

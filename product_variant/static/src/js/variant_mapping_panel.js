@@ -218,11 +218,23 @@ export function buildAxes(lines, snapshot) {
  * 所有属性一视同仁（含「按需生成」的）：各属性有效取值做笛卡尔积，每行一个组合。
  * 用户要求「充分列举所有可能的组合」，所以早期那套「按需轴只钉住既有变体的取值、
  * 列可改」的特例（``T-039``）已取消。
+ *
+ * 一个有效轴都没有时（例如把唯一属性删掉），不代表「没有组合」：产品本身就是一个
+ * 空组合，要给一行让既有变体挂靠 —— 否则删除唯一属性后既有变体会变成「未分配」，
+ * 保存被拦（见 AGENTS.md → L2 P4 陷阱 21）。
  */
 export function buildCombinationRows(axes) {
     if (!axes.length) {
-        // 一个有效轴都没有（属性行被删空、或都还没勾取值）：没有组合可言
-        return [];
+        // 没有属性：产品本身就是一个组合（空组合），给一行让既有变体挂靠
+        return [
+            {
+                key: combinationKey([]),
+                cells: [],
+                variant_id: false,
+                on_hand: null,
+                is_new: true,
+            },
+        ];
     }
     const rows = [];
     const walk = (index, cells) => {
@@ -257,6 +269,36 @@ export function buildCombinationRows(axes) {
 /** 纯函数：某条既有变体是不是「本来就属于这一行的组合」（每个属性取值全等）。 */
 export function rowMatchesVariant(row, variant) {
     return row.cells.every((cell) => variant.values[cell.attribute_id] === cell.value_id);
+}
+
+/**
+ * 纯函数：把「本来就属于这一行」的既有变体自动放回它的行。
+ *
+ * 用户没有显式分配、也没有显式清空过的行，如果某条既有变体的取值组合正好等于这一行，
+ * 就把它挂上去（默认复用）。空组合行会匹配所有变体；多条变体抢一个空组合时只取第一条，
+ * 其余留在「未分配」里等用户决定。
+ *
+ * :param list rows: ``computeVariantMapping()`` 算出的组合行。
+ * :param list variants: 快照里的既有变体。
+ * :param dict assignment: 当前分配（会被修改）。
+ * :param dict cleared: 用户显式清空过的行 key（跳过）。
+ * :return: 更新后的 ``assignment``。
+ */
+export function applyDefaultAssignment(rows, variants, assignment, cleared) {
+    const taken = new Set(Object.values(assignment || {}).filter(Boolean));
+    for (const row of rows || []) {
+        if (assignment[row.key] || (cleared && cleared[row.key])) {
+            continue;
+        }
+        const match = (variants || []).find(
+            (variant) => !taken.has(variant.id) && rowMatchesVariant(row, variant)
+        );
+        if (match) {
+            assignment[row.key] = match.id;
+            taken.add(match.id);
+        }
+    }
+    return assignment;
 }
 
 /**
@@ -582,19 +624,7 @@ export class VariantMappingPanel extends Component {
             }
         }
         // 默认分配：把「本来就属于这一行」的既有变体放回它的行（用户显式清空过的行不碰）
-        const taken = new Set(Object.values(this.store.assignment).filter(Boolean));
-        for (const row of preview.rows) {
-            if (this.store.assignment[row.key] || this.store.cleared[row.key]) {
-                continue;
-            }
-            const match = variants.find(
-                (variant) => !taken.has(variant.id) && rowMatchesVariant(row, variant)
-            );
-            if (match) {
-                this.store.assignment[row.key] = match.id;
-                taken.add(match.id);
-            }
-        }
+        applyDefaultAssignment(preview.rows, variants, this.store.assignment, this.store.cleared);
         const result = computeVariantMapping({
             lines,
             variants,
