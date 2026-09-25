@@ -1,6 +1,6 @@
 {
     "name": "Product Variants",
-    "version": "19.0.13.0.4",
+    "version": "19.0.13.0.5",
     "summary": "Change the attributes of a product without losing a single variant: the Attributes & Variants tab shows the attribute-to-variant mapping, flags the variants that lost their combination as unmapped and holds the save until each of them is mapped again",
     "description": """
         Safe attribute changes for foreign trade SOHO scenarios: add or extend the attributes of a product and keep every existing variant.
@@ -32,6 +32,7 @@
             "product_variant/static/src/xml/variant_mapping_panel.xml",
             "product_variant/static/src/js/variant_mapping_panel.js",
             "product_variant/static/src/js/variant_conversion_form_patch.js",
+            "product_variant/static/src/scss/variant_mapping_panel.scss",
         ],
     },
     "installable": True,

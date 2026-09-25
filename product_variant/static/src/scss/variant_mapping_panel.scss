@@ -1,0 +1,42 @@
+// 「属性 ↔ 变体」映射表：整块必须贴在 `.o_form_sheet` 的可视宽度内。
+//
+// 面板字段的外层 `.o_field_widget` 在 Odoo 19 里可能是 CSS Grid 的一个单元格，
+// 长句（说明 / 警告）会把网格轨道按 max-content 撑开，整块就顶出表单纸面。
+// `overflow-wrap: anywhere` 既让长句自动换行，也把 min-content 压小，
+// 网格轨道不再被撑开（参考号这类没有空格的长词也断得开）。
+// 详见模块 AGENTS.md → L2 P4 陷阱 23。
+.o_variant_mapping_panel {
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+
+    .o_variant_mapping_title,
+    > div {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    // 「未保存」那一行是 flex：窄屏 / 长文案时允许折行
+    .o_variant_mapping_unsaved {
+        flex-wrap: wrap;
+    }
+
+    // 表格也可能比纸面宽（属性多列 + Variant 下拉按最长选项撑宽）：
+    // 固定布局 + 断词，把宽度交给容器而不是内容
+    table {
+        width: 100%;
+        table-layout: fixed;
+    }
+
+    th,
+    td {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        vertical-align: middle;
+    }
+
+    select.form-select {
+        max-width: 100%;
+    }
+}

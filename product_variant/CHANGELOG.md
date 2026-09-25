@@ -3,6 +3,27 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.13.0.5] - 2026-09-25（映射表面板的说明 / 警告自动换行）
+
+> 修订日期：2026-09-25 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/scss/variant_mapping_panel.scss`（新增）、`__manifest__.py`、
+> `AGENTS.md` / `README.md`
+
+### 变更
+
+1. **新增面板样式** `static/src/scss/variant_mapping_panel.scss` 并登记进 `assets` →
+   `web.assets_backend`：
+   - `.o_variant_mapping_panel { max-width: 100%; min-width: 0; }`；
+   - 标题 / 说明 / 警告等文本块 `overflow-wrap: anywhere`（把 CSS Grid 轨道的 min-content
+     压小，长句与无空格长词都能换行）；
+   - 表格 `table-layout: fixed`，`th` / `td` 断词 —— 属性列多、Variant 下拉选项长时也不撑宽；
+   - 「未保存」那行 flex 加 `flex-wrap: wrap`。
+2. 说明：之前没有样式文件，长句按 `max-content` 把纸面撑开，横向溢出 `.o_form_sheet`。
+
+### 影响
+
+- 纯前端样式修复；`-u` 后强刷浏览器即可看到换行。
+
 ## [19.0.13.0.4] - 2026-09-25（删唯一属性时守卫放行：映射已认领那条变体）
 
 > 修订日期：2026-09-25 ｜ 类型：修复（+z） ｜ 影响文件：

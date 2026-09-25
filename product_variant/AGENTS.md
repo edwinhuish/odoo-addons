@@ -13,7 +13,10 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantMappingPanel`（「属性 ↔ 变体」映射表，field widget）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给映射表补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.13.0.4`（19.0.13.0.4：**删唯一属性时守卫放行** —— 带着映射保存时，先校验「每条
+- 当前版本：`19.0.13.0.5`（19.0.13.0.5：**面板说明 / 警告文字自动换行** —— 样式放
+  `static/src/scss/variant_mapping_panel.scss`：`min-width: 0` + `overflow-wrap: anywhere`
+  把 CSS Grid 轨道压住，长句（含无空格长词）不再顶出 `.o_form_sheet`，见 L2 P4 陷阱 23；
+  19.0.13.0.4：**删唯一属性时守卫放行** —— 带着映射保存时，先校验「每条
   既有变体都有组合」，再带 `variant_conversion_keeps_variants` 上下文键走原生写入，
   `product_attribute_guards.py` 三处守卫认这个键放行（前提「变体会被连坐」不成立）；
   19.0.13.0.3：**删除唯一属性后自动复用既有变体** —— 没有属性时也要给一行「空组合」，让原来的变体继续挂靠，避免保存被拦；19.0.13.0.2：**修「Save manually 点了没反应」+ 面板不再放按钮** —— 保存钩子在 mutex 里调 `getChanges()` 会死锁（改用 `_getChanges()`）；顺带跳掉改属性行时那次多余的 `product.template` onchange；面板下方只留「未保存」徽标，保存 / 丢弃一律用标题右侧的原生按钮，见 L2 P4 陷阱 21；19.0.13.0.1：**面板标题改为 `Variants Mapping` / 「变体映射」**；19.0.13.0.0：**面板标题 + 显式保存/丢弃 + 移除原生警告** —— 映射一改就出现 `Save manually` / `Discard all changes`（靠 `FIELD_IS_DIRTY` 广播，**不**把映射塞进 record，否则自动保存会带走它），丢弃要能回滚到基线；删掉 `product.product_template_only_form_view` 里那句已不成立的 Warning 文本，见 L2 P4 陷阱 20；19.0.12.0.1：**Variant 下拉禁掉已被别行占用的变体** —— 「一条变体只能承载一个组合」要在**候选列表里**体现（灰显、选不了），想换位置就先把自己那行改回 `(new variant)` 让出来；不做「选到别处自动从原行让出」，见 L2 P4 陷阱 19；19.0.12.0.0：**前端穷举展示、后端按需预建** —— 映射表把「按需生成」属性的全部取值组合都列出来（用户要求「充分列举所有可能的组合」），但**预建**仍按属性规则：立即轴展开、按需轴只建被既有变体认领的取值，`(new variant)` 的行落在没被认领的按需取值上就**不会现在创建**（前端把这类行显示成灰色 + 提示 N 个组合等订单）；19.0.10.0.0：**映射表反向 —— 组合为行、为每个组合选变体** —— 行是固定组合，Variant 下拉留空=新建变体、选一条=由它保留；同一条变体只能占一行（选到别处自动让出，交换只需两下），「按需生成」属性的取值是行上的可改值（不预建其它取值），拦截条件变成「没被任何组合认领的既有变体」，见 L2 P4 陷阱 18；19.0.9.0.0：**一个组合只能被一条变体占用** —— 前端在下拉里禁掉已被占住的候选值，真重复时把那条标成未映射；与保存时的 `_check_variant_conversion_anchors()` 同口径，见 L2 P4 陷阱 18；19.0.8.0.4：**默认值不算用户选择** —— 单取值轴自动补的取值不能再写回 selection，否则该轴多出第二个取值时回不到「未映射」（轴状态带 `picked` 标记），见 L2 P4 陷阱 17；19.0.8.0.3：**子表编辑要订阅子表组件** —— `useRecordObserver` 的依赖是父 record，子行改字段不触发它；改为 patch `X2ManyField` / `ListX2ManyField` 的 `onPatched` + 保留 record observer + 面板低频本地自检兜底，见 L2 P4 陷阱 16；19.0.8.0.2：**新行必须保留 Odoo 的虚拟 id** —— 合并 `getChanges()` 命令时自己造 id 会让「选属性 / 勾取值」这两条后续命令落空，那一行永远不成为轴（单变体产品加属性就是这样「毫无反应」），见 L2 P4 陷阱 15；19.0.8.0.1：**用 `record.getChanges()` 合并快照基线来读表单编辑态** —— 原来读 `record.data` 的 x2many 内部结构，编辑中的取值是命令数组，会被读成空 → 加属性「毫无反应」，见 L2 P4 陷阱 14；19.0.8.0.0：**映射计算搬到前端** —— 面板挂载时取一次快照 `get_variant_mapping_snapshot()`，其后属性行增删 / 勾取值 / 挑映射全部由前端纯函数 `computeVariantMapping()` 在浏览器里算，**编辑期零 RPC**，保存时才把映射随表单提交；多取值轴（**含「按需生成」轴**）一律要求显式映射，见 L2 P4 陷阱 13；19.0.7.0.5：**给前端看的状态不再做成 compute** —— `variant_mapping_state` 降级为 `store=False` 的挂载点，面板挂载时自己 RPC 取；原来的 compute 会在每次 onchange 里被求值，那时表单里还有没保存的行（`NewId`），`json.dumps` 必炸，见 L2 P4 陷阱 12；19.0.7.0.4：**修「点 Add a line 就报必填缺失」** —— 产品表单会发出「新建但还没选属性」的半成品命令，预览 RPC 要清洗掉或兜住（前端 `hasIncompleteLine()` + 服务端 `_sanitize_attribute_line_commands()` / `NotNullViolation` 兜底），见 L2 P4 陷阱 11；19.0.7.0.3：**修映射表排版** —— 字段外层的 `.o_field_widget` 是 `inline-block`，不包一层块级 div 的话面板会被排到属性行**右边**并溢出表单宽度（「跑右边、看不见」），见 L2 P4 陷阱 10；19.0.7.0.2：**修映射表模板变量名** —— 模板里的 `state.blocked` / `state.rows` 必须写成组件上真实的 `store.`（OWL 模板表达式只认组件实例上的名字，`state` 不是保留字，写错只会得到 `undefined.x`，报错栈只指到模板），见 L2 P4 陷阱 9；19.0.7.0.1：**修字段 widget 注册方式** —— 字段组件必须注册成 `{ component, displayName, supportedTypes }` 描述对象，注册裸类会让 `web.Field` 拿到 `undefined` 的 `component`、渲染时崩在 `Component.name`（现象：打开产品表单 /「属性与变体」页报 `UncaughtPromiseError > OwlError` + `reading 'name'`，栈只落在 `Field.template`），见 L2 P4 陷阱 8；19.0.7.0.0：**模块改名 `product_variant` + 「属性 ↔ 变体」映射表** —— 改属性时属性行下方常驻一张映射表，缺取值的变体显示成**未映射**，还有未映射的变体就不放行保存；归属弹窗随之删除；**已装库必须走「原地改名」三条 SQL**（见 `README.md`），卸载重装会清空台账 / 谱系；19.0.6.1.0：**归属弹窗交互优化** —— 所有下拉选项都可选，选中已被别的组合占用的既有变体时两行**自动互换**（纯函数 `applyOwnershipSelection()`）；19.0.6.0.0：**`T-039` 支持「按需生成变体」的属性** —— 只展开「立即」轴、按需轴按既有变体现带取值钉住、缺失组合自己用 `_create_product_variant()` 补、带按需属性的产品不做价格分离；建产品时带按需属性仍然拦住；`19.0.5.3.2`：修**一次加两个属性**时 chatter 记录对多记录集取 `.display_name` 抛 `Expected singleton`、连累整单回滚；19.0.5.3.1：**按需生成属性**的拦截补齐 —— 报错点名属性并给出可执行的出路，建产品时就拦住（原生 `create()` 遇到按需生成的属性不会建任何变体，会留下「有属性、没变体」的产品）；`19.0.5.3.0`：**彻底与 `product_reference` 解耦** —— 删除编号上移与参考号交接两步、不再读写对方的任何字段，转换只做「按归属复用既有变体」，`product.product` 的值（含 `default_code`）原样保留；`19.0.5.0.0`：谱系来源改为按「转换前已存在的取值」判定，加取值场景不再丢来源；修掉未装 `product_reference` 时转换必崩；`19.0.4.1.0` 起含尺寸继承）
@@ -181,6 +184,7 @@
 | `models/product_variant_mapping.py` | 「属性 ↔ 变体」映射：挂载点字段 `variant_mapping_state`（`store=False`，**不做 compute**）、一次性快照 RPC `get_variant_mapping_snapshot()`、服务端侧判定 `get_variant_mapping_preview()` / 未映射判据 `_get_variant_mapping_rows()` |
 | `static/src/js/variant_mapping_panel.js` | 映射表面板（field widget `variant_mapping_panel`）：逐变体逐轴渲染、属性行一改就防抖刷新、状态存在 `model.variantMapping` 上；载荷构造 / 未映射计数 / 属性行签名都是纯函数 |
 | `static/src/xml/variant_mapping_panel.xml` | 映射表模板 `product_variant.VariantMappingPanel` |
+| `static/src/scss/variant_mapping_panel.scss` | 面板样式：`min-width: 0` + `overflow-wrap: anywhere` 让说明 / 警告在 `.o_form_sheet` 内自动换行，表格 `table-layout: fixed`（见 L2 P4 陷阱 23） |
 | `static/src/js/variant_conversion_form_patch.js` | patch `FormController.onWillSaveRecord`：保存前问映射状态；会丢变体 / 还有未映射的变体就提示并拦住；都映射好了就把归属放进本次 `changes` |
 | `views/product_template_views.xml` | 产品表单的技术字段（不可见）、`Conversions` 智能按钮；产品搜索筛选。**刻意不加谱系页**：谱系明细在台账详情页里看，避免产品详情页多出页签 |
 | `views/product_product_views.xml` | 变体表单的来源分组、变体列表可选列、变体搜索（按来源变体 / 所属转换） |
@@ -674,6 +678,20 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 - 判断标准：凡是「放宽守卫」的改动，都要有一个**可校验的前提**（这里是「每条既有变体都有
   组合」），并且**不带前提时行为不变**；不要直接把守卫删掉。
 
+23. **面板的说明 / 警告文字必须自动换行、不能顶出 `.o_form_sheet`（`19.0.13.0.5`）**
+- 现象：映射表上方那段说明与「N 条变体未分配」的警告是**一整行长句**，直接溢出产品表单纸面，
+  横向出现滚动条 / 文字被切掉。
+- 根因：面板字段的外层 `.o_field_widget` 在 Odoo 19 里可能是 **CSS Grid 的单元格**，
+  长句会按 `max-content` 把网格轨道撑开；再加上参考号这类**没有空格的长词**，
+  连普通换行也断不开（`white-space: nowrap` 之外，`overflow-wrap` 默认值也断不了长词）。
+- 正确做法：面板的样式放 `static/src/scss/variant_mapping_panel.scss`（并登记进
+  `assets` → `web.assets_backend`，见 L1 约束 3）：
+  `.o_variant_mapping_panel { max-width: 100%; min-width: 0; }`，
+  文本块加 `overflow-wrap: anywhere`（**不是** `break-word`：只有 `anywhere` 会把
+  min-content 压小，网格轨道才不被撑开），表格 `table-layout: fixed`，
+  「未保存」的 flex 行加 `flex-wrap: wrap`。
+- 判断标准：面板里凡是**用户可见的整句文案**，都必须能换行、且整块宽度不超过纸面；
+  新增文案后要窄屏（或把窗口拖窄）看一眼，别只看宽屏。
 
 ### P5：业务场景、数据流与一致性边界（评估完整性 / 排障时读）
 
