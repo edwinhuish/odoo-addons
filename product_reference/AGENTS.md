@@ -13,7 +13,7 @@
 - 自定义组件（前端）：字段 widget `product_reference_editor`、额外参考号管理弹窗
   （顶层 `main_components` overlay）、徽标 tooltip 模板
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.3.1.1`（19.0.3.1.1 额外参考号弹窗：`Done` 右对齐 + 点弹窗外不关闭，见 L1 第 9 条；19.0.3.1.0 型号一律大写：前端两个输入框输入即转大写 + 后端 `create` / `write` 就地改写 `vals` 兜底（导入 / API 一起覆盖），见 L1 第 11 条；19.0.3.0.0 架构调整：产品级编号 `base_reference` **叠加**进模板级 `default_code` 的 compute（`base_reference` 优先）、单变体产品两处同值、多变体产品只写 `base_reference`、产品级参考号两层都可见（不再按变体数隐藏）+ 存量回填迁移；19.0.2.7.1 补契约测试；19.0.2.5.2 修主变体表单的参考号归属）
+- 当前版本：`19.0.3.1.2`（19.0.3.1.2 修「从产品变体列表进变体详情出现两个 `Ref.` 输入框」：产品级那块加 `invisible="is_product_variant"` 在变体表单上让位给变体级编辑器，见 L1 1.1；19.0.3.1.1 额外参考号弹窗：`Done` 右对齐 + 点弹窗外不关闭，见 L1 第 9 条；19.0.3.1.0 型号一律大写：前端两个输入框输入即转大写 + 后端 `create` / `write` 就地改写 `vals` 兜底（导入 / API 一起覆盖），见 L1 第 11 条；19.0.3.0.0 架构调整：产品级编号 `base_reference` **叠加**进模板级 `default_code` 的 compute（`base_reference` 优先）、单变体产品两处同值、多变体产品只写 `base_reference`、产品级参考号两层都可见（不再按变体数隐藏）+ 存量回填迁移；19.0.2.7.1 补契约测试；19.0.2.5.2 修主变体表单的参考号归属）
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用
@@ -42,6 +42,15 @@
      （含「+」弹窗），变体表单维护该变体自己那一组。`19.0.2.4.0`～`19.0.2.7.1` 曾按
      `product_variant_count > 1` 隐藏产品级那一层，`19.0.3.0.0` 按要求放开：**禁止**再加
      `invisible="product_variant_count > 1"` 之类的整块 / 元素级隐藏
+   - **产品级那块在变体表单上必须继续隐藏**（`19.0.3.1.2`）：产品级编辑器挂在模板表单的 `h1`
+     之后（`views/product_template_views.xml`），而变体完整表单 `product_normal_form_view`
+     **继承**模板表单 → 那块随继承链出现在变体表单上，靠 `invisible="is_product_variant"`
+     （模板侧恒 `False`、变体侧恒 `True`）拦住。**禁止**去掉该门控，也**禁止**在变体侧再挂一块 ——
+     两种做法都会让标题区出现两个 `Ref.` 输入框（`19.0.3.1.2` 修的正是前者被去掉后的表现；
+     `product_dimension` 的「变体完整表单禁止重复挂载」是同款坑，见其 AGENTS L2 P6 坑 1）。
+     与上一条不冲突：上一条管**产品表单**上不许隐藏，本条只在**变体**表单上生效
+   - 挂载契约由 `tests/test_view_mounting.py` 钉住（三张表单各一个可见编辑器 + 各自维护的层级），
+     改动任一侧视图后必须跑该用例
    - **变体侧任何表单都必须显式指定 `lines_field=\"variant_reference_code_line_ids\"`**：
      widget 默认落在同视图里那个隐藏的 o2m 上，漏写就会去改产品级共享行（`19.0.2.5.2` 修的就是主变体表单）
    - 变体参考号子行创建时必须剥离 context 的 `default_product_tmpl_id`
@@ -400,8 +409,8 @@ compute / inverse 之前）。
 | `models/product_reference_code.py` | 参考号明细模型：字段、归属二选一约束、按主人去重、冗余索引同步、级联 |
 | `models/product_template.py` | 扩展 `product.template`：共享参考号 One2many、冗余字段 `reference_code_index`、`_search_display_name`、`web_search_read`、搜索词提取（供变体侧复用） |
 | `models/product_product.py` | 扩展 `product.product`：变体专属 One2many `variant_reference_code_line_ids`、冗余字段 `variant_reference_code_index`、变体搜索与命中提示、子行剥离模板默认 |
-| `views/product_template_views.xml` | 产品模板表单标题区 Reference 编辑器（继承 `product.product_template_form_view`）、隐藏常规信息页原生 Reference、列表参考号列、搜索框并入参考号搜索 |
-| `views/product_product_views.xml` | 变体主表单（`product.product.form`）与变体独立编辑表单（`product_variant_easy_edit_view`）的标题区 Reference 编辑器，并隐藏两处重复的原生 Reference |
+| `views/product_template_views.xml` | 产品模板表单标题区 Reference 编辑器（继承 `product.product_template_form_view`，带 `invisible="is_product_variant"` 门控以免在变体表单上重复）、隐藏常规信息页原生 Reference、列表参考号列、搜索框并入参考号搜索 |
+| `views/product_product_views.xml` | 变体主表单（`product.product.form`）与变体独立编辑表单（`product_variant_easy_edit_view`）的标题区 Reference 编辑器，并隐藏两处重复的原生 Reference；产品级那块靠 `is_product_variant` 门控让位（见 L1 1.1，勿去掉） |
 | `views/product_reference_code_views.xml` | 参考号独立列表/表单/搜索视图与菜单动作 |
 | `static/src/js/product_reference_editor.js` | 字段 widget `product_reference_editor`：复用原生 `CharField` 渲染 `default_code`，右侧「+」与「+N」徽标（tooltip） |
 | `static/src/js/product_reference_manage.js` | 额外参考号管理弹窗组件 + 顶层 overlay 注册（`main_components`）；行增删改排序都落到产品表单 record |

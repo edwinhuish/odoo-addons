@@ -48,8 +48,14 @@
 
     <!-- ============================================================ -->
     <!-- 变体主表单（product.product.form，继承模板基础视图）：        -->
-    <!-- 同样在产品名称下方放置 Reference 编辑器；常规信息页分类栏里  -->
-    <!-- 的原生 Reference 隐藏避免重复                                -->
+    <!-- 标题区放「变体级」Reference 编辑器（本变体自己的编号 + 本变体 -->
+    <!-- 专属参考号行）；常规信息页分类栏里的原生 Reference 隐藏避免   -->
+    <!-- 重复。                                                        -->
+    <!-- ⚠ 产品级那块（product_template_views.xml 挂在模板表单 h1 后的  -->
+    <!-- div）会随继承链一起出现在这个表单上，它带 `invisible=           -->
+    <!-- "is_product_variant"`，变体表单上恒为真 → 被隐藏；因此标题区   -->
+    <!-- 只剩下面这一个编辑器。改动任一侧（去掉门控 / 再挂一块）都会让  -->
+    <!-- 界面上出现两个 Ref. 输入框。                                   -->
     <!-- ============================================================ -->
     <record id="product_normal_form_view_inherit" model="ir.ui.view">
         <field name="name">product.product.form.inherit.reference.code</field>

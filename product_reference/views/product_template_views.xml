@@ -19,8 +19,20 @@
                  各变体自己的编号在变体表单维护；额外参考号也始终挂在这一层。
                  两种形态都显示（不再按变体数隐藏）：`default_code` 的 compute 里
                  base_reference 优先，所以这里显示的就是产品编号。 -->
+            <!-- invisible 门控：这块是**产品级**那一层，只在产品表单上渲染。
+                 `product.product` 的完整表单（product_normal_form_view）**继承**本视图，
+                 所以这一块会随继承链自动出现在变体表单上，而变体表单的同一位置另有
+                 「变体级」编辑器（见 product_product_views.xml）—— 两块都渲染就会在
+                 标题区看到两个一模一样的 `Ref.` 输入框（一个编产品级共享行、一个编变体
+                 专属行，界面上分不出来）。
+                 门控用 `is_product_variant`（模板侧恒 False、变体侧恒 True，见
+                 product/product.template 与 product.product 各自的 _compute_is_product_variant）。
+                 注意与 L1.1「禁止按 product_variant_count 隐藏产品级那一层」不冲突：
+                 那条禁止的是**产品表单**上的隐藏（多变体产品会因此没有产品编号入口），
+                 本门控只在**变体**表单上生效，产品表单始终显示。 -->
             <xpath expr="//div[hasclass('oe_title')]/h1" position="after">
-                <div name="product_reference" class="o_product_reference_area mt-1">
+                <div name="product_reference" class="o_product_reference_area mt-1"
+                     invisible="is_product_variant">
                     <!-- 标签固定为 Ref.（中文界面同样显示 Ref.，不做本地化翻译） -->
                     <label for="default_code" string="Ref."/>
                     <field name="default_code"

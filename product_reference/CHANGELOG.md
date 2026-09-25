@@ -1,5 +1,67 @@
 # 变更日志
 
+## [19.0.3.1.2] - 2026-09-25（修复：变体主表单出现两个 `Ref.` 输入框）
+
+> 类型：修复（视图挂载） ｜ 涉及文件：`views/product_template_views.xml` /
+> `views/product_product_views.xml`（注释）/ `tests/test_view_mounting.py`（新增）/
+> `tests/__init__.py` / `__manifest__.py` / `README.md` / `AGENTS.md`
+
+### 问题
+
+从 **产品变体列表（Product Variants）** 点进变体详情（默认表单 `product.product.form` =
+`product.product_normal_form_view`），标题区出现**两个一模一样的 `Ref.` 输入框**，都带「+」按钮，
+界面上分不出哪个是哪个（两个框里的编号还往往同值，因为单变体产品的产品编号与变体编号本就同值）。
+
+### 根因
+
+`product.product` 的完整表单 `product_normal_form_view` **继承**产品模板表单
+`product.product_template_form_view`（见 `product/views/product_views.xml`），而本模块的
+**产品级**编辑器就挂在模板表单的 `h1` 之后 —— 于是它随继承链出现在变体表单上；变体表单同位置
+另有本模块挂的**变体级**编辑器（`19.0.2.5.2` 补 `lines_field` 的那块）。两块都渲染 ⇒ 两个框：
+
+| 块 | 来源视图 | 「+」弹窗管理的行 |
+|----|----------|------------------|
+| 产品级 | `product_template_form_inherit`（挂模板表单，随继承链带过来） | `reference_code_line_ids`（产品级共享行） |
+| 变体级 | `product_normal_form_view_inherit`（挂变体主表单） | `variant_reference_code_line_ids`（变体专属行） |
+
+历史：`19.0.2.4.0` ～ `19.0.2.7.1` 产品级那块带 `invisible="product_variant_count > 1"`，
+多变体产品在变体表单上恰好被挡住（**单变体产品当时就能看到两个框**）；`19.0.3.0.0` 按要求去掉该门控
+（产品表单必须始终显示产品级编号），于是**所有**产品从变体详情进去都变成两个框。
+
+### 变更
+
+1. **产品级那块加 `invisible="is_product_variant"`**（`views/product_template_views.xml`）：
+   该字段模板侧恒 `False`（`product.template._compute_is_product_variant`）、变体侧恒 `True`
+   （`product.product._compute_is_product_variant`），于是
+   - 产品表单（含多变体产品）→ 照常显示产品级编号 + 产品级参考号入口；
+   - 变体表单（主表单 / 快速编辑表单）→ 产品级那块被隐藏，标题区只剩**变体级**编辑器。
+
+   与 L1.1「禁止按 `product_variant_count` 隐藏产品级那一层」不冲突：那条禁止的是**产品表单**上的
+   隐藏（多变体产品会因此没有编号入口），本条只在**变体**表单上生效。
+2. **注释同步**（两个视图文件）：写清哪一块归哪个表单、以及「改任一侧都会重新出现两个输入框」。
+3. **新增 `tests/test_view_mounting.py`**（4 项）钉住挂载契约：三张表单各只有一个可见编辑器；
+   产品表单那块带 `is_product_variant` 门控且维护产品级共享行；变体主表单多出的产品级块被同一
+   门控隐藏、可见的那块维护变体专属行；`is_product_variant` 在两侧的取值就是分层的依据。
+   （同类坑 `product_dimension` 先踩过：变体完整表单继承模板表单，**禁止重复挂载**。）
+
+### 影响
+
+- 只改视图 arch 与注释：**不新增字段、不动数据、无迁移**；
+- 升级后**强刷浏览器**（视图 arch 走前端缓存）；
+- 变体主表单的 `Ref.` 从此只有一个，编辑的是**该变体自己的**编号与参考号；产品编号与产品级参考号
+  仍在产品表单（Products 列表点进去那张）维护，两层语义不变。
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| `task test -- product_reference` | **25 tests, 0 failed, 0 error**（19 项 post-tests，含本次新增 4 项）✓ |
+| 合成 arch（`get_view` 实测） | 产品模板表单：1 块（`is_product_variant` 门控，模板侧为假 → 渲染）；变体主表单：2 块 = 1 隐藏（产品级）+ 1 渲染（变体级）；变体快速编辑表单：1 块 ✓ |
+| `task check`（仓库自检） | 通过（无结构性问题）✓ |
+| 目标环境 | **待验证**：升级后强刷浏览器，从 Product Variants 点进变体详情只见**一个** `Ref.` 输入框；产品表单仍显示产品编号 + 产品级参考号；两张变体表单的「+」弹窗都只列**该变体**的参考号（中英各验一遍） |
+
+---
+
 ## [19.0.3.1.1] - 2026-09-25（额外参考号弹窗：`Done` 右对齐 + 点弹窗外不关闭）
 
 > 类型：修复（交互） ｜ 涉及文件：`static/src/xml/product_reference_manage.xml` /
