@@ -61,16 +61,11 @@
                        t-esc="shareVendorPricesLabel"/>
             </div>
 
-            <!-- 映射改过（尚未保存）时才出现：显式的保存 / 丢弃，避免依赖 Odoo 的
-                 自动保存把映射悄悄写进去（见模块 AGENTS.md → L2 P4 陷阱 20） -->
+            <!-- 映射改过（尚未保存）时**只留提示**，不放按钮：保存 / 丢弃一律用标题右侧
+                 （导航栏下方）那两个原生按钮，它们由 ``FIELD_IS_DIRTY`` 广播点亮
+                 （见模块 AGENTS.md → L2 P4 陷阱 20 / 21） -->
             <div t-if="mappingDirty" class="o_variant_mapping_unsaved d-flex align-items-center gap-2 mt-2">
                 <span class="badge text-bg-warning" t-esc="unsavedLabel"/>
-                <button type="button" class="btn btn-primary btn-sm"
-                        t-att-disabled="!isEditable"
-                        t-on-click="onSaveManually" t-esc="saveManuallyLabel"/>
-                <button type="button" class="btn btn-secondary btn-sm"
-                        t-att-disabled="!isEditable"
-                        t-on-click="onDiscardChanges" t-esc="discardChangesLabel"/>
             </div>
             <div t-if="mappingDirty" class="text-muted small mt-1" t-esc="dirtyHint"/>
         </div>

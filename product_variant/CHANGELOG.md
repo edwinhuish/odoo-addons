@@ -3,6 +3,40 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.13.0.2] - 2026-09-25（修「Save manually 点了没反应」：保存钩子里不能调 `getChanges()`）
+
+> 修订日期：2026-09-25 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`static/src/js/variant_conversion_form_patch.js`、
+> `static/src/xml/variant_mapping_panel.xml`、`i18n/zh_CN.po`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **修「点了 Save manually 就一直灰着」**：保存钩子 `FormController.onWillSaveRecord()` 是在
+   `Record._save()` 里被调用的，而 `_save()` 占着 `model.mutex`；里面再 `await record.getChanges()`
+   （它同样要抢这把锁）就是**死锁** —— 表现为按钮变灰、一条保存请求都没发、永远灰着。
+   改为 `readLocalChanges(record)` = `record._getChanges(record._changes, { withReadonly: true })`，
+   `_getChanges()` 与 x2many 的 `_getCommands()` 都是同步的，不需要锁。
+2. **取消改属性行时那次多余的 onchange**：`ir.ui.view._postprocess_on_change()` 会给「视图里某个
+   compute 字段的依赖」自动补 `on_change="1"`（`attribute_line_ids` 就是这样被补上的），于是每改一次
+   属性行就发一次 `/web/dataset/call_kw/product.template/onchange`。本模块的属性改动全在前端算，
+   这次调用既无用又占 mutex → patch `Record.prototype._getOnchangeValues()`，改动里只有
+   `attribute_line_ids` 且模型是 `product.template` 时直接返回 `{}`。
+3. **面板下方不再放按钮**：只留「Unsaved mapping changes」徽标 + 一句指向标题右侧原生按钮的提示；
+   保存 / 丢弃一律用 `FormStatusIndicator` 那两个原生按钮（`FIELD_IS_DIRTY` 广播点亮）。
+   随之删掉 `onSaveManually` / `onDiscardChanges` 与 `variantMappingController` 这条多余的通道。
+4. **保存成功后作废快照重取**（`settleMappingAfterSave()`）：`snapshot.lines` 是「上一次保存」的属性行，
+   保存后 `_changes` 清空，不重取的话面板会把「旧基线 + 空改动」当成当前配置 —— 界面退回保存前的样子，
+   甚至又把「未保存」标记点亮。丢弃同理改为 `scheduleRefresh()`（要重算，不是只刷行）。
+5. `FormController.save()` / `discard()` 的补丁只作用于 `product.template`，别的模型不再被
+   `getMappingStore()` / `FIELD_IS_DIRTY` 广播波及。
+
+### 影响
+
+- 纯前端修复；需 `-u` + 强刷浏览器。`dirtyHint` 的 `msgid` 变了（指向标题右侧按钮），
+  改过的译文要按根 `AGENTS.md` 4.7 强制刷新一次才会生效。
+- 行为变化：属性行改动不再触发 `product.template` 的 onchange（该 onchange 只用来重算
+  `valid_product_template_attribute_line_ids` 这类 compute 字段，本模块不依赖它）。
+
 ## [19.0.13.0.1] - 2026-09-24（文案：面板标题改为 `Variants Mapping` / 「变体映射」）
 
 > 修订日期：2026-09-24 ｜ 类型：修复/文案（+z） ｜ 影响文件：

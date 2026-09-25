@@ -43,20 +43,8 @@ msgstr "映射有未保存的改动"
 #. module: product_variant
 #. odoo-javascript
 #: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid "Use Save manually to store the mapping, or Discard all changes to roll the attribute lines and the mapping back to the last saved state."
-msgstr "点「Save manually」保存映射，或点「Discard all changes」把属性行与映射一起回滚到最后一次保存的状态。"
-
-#. module: product_variant
-#. odoo-javascript
-#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid "Save manually"
-msgstr "手动保存"
-
-#. module: product_variant
-#. odoo-javascript
-#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid "Discard all changes"
-msgstr "放弃所有更改"
+msgid "Use the Save / Discard buttons next to the product title to store the mapping, or to roll the attribute lines and the mapping back to the last saved state."
+msgstr "用产品标题右侧的「保存 / 放弃」按钮保存映射，或把属性行与映射一起回滚到最后一次保存的状态。"
 
 #. module: product_variant
 #. odoo-javascript

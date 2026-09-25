@@ -27,12 +27,6 @@ import {
  * 映射只能由用户显式点保存（或属性行改动触发的正常保存）提交，见 AGENTS.md → L2 P4 陷阱 20。
  */
 patch(FormController.prototype, {
-    setup() {
-        super.setup(...arguments);
-        // 面板里的 Save manually / Discard all changes 按钮要能触发原生行为
-        this.model.variantMappingController = this;
-    },
-
     /** 重算面板并返回映射 store（面板可能没挂载，例如用户从别的页签保存）。 */
     async ensureMappingStore() {
         const store = getMappingStore(this.model);
@@ -76,8 +70,12 @@ patch(FormController.prototype, {
     },
 
     async save(params) {
-        const store = getMappingStore(this.model);
         const record = this.model.root;
+        // 只管产品表单：别的模型不该被这里的映射逻辑碰（尤其不能乱广播 FIELD_IS_DIRTY）
+        if (record?.resModel !== "product.template") {
+            return super.save(params);
+        }
+        const store = getMappingStore(this.model);
         // 只改了映射（属性行没动）：原生保存不会带任何 changes，映射要在这里自己写一次
         const mappingOnly = Boolean(record.resId) && !record.dirty && store.dirty;
         if (mappingOnly) {
@@ -101,17 +99,41 @@ patch(FormController.prototype, {
                 },
             ]);
         }
-        // 保存成功：当前映射就是新的「未修改前」，未保存标记随之清掉
-        if (store.rows.length) {
-            snapshotMappingBaseline(store);
-            store.dirty = false;
-            this.model.bus?.trigger("FIELD_IS_DIRTY", false);
-        }
+        await this.settleMappingAfterSave();
         return saved;
+    },
+
+    /**
+     * 保存成功后的收尾：**作废快照重取**，再以「刚保存完的状态」作为新的未修改基线。
+     *
+     * 不重取的话 ``snapshot.lines`` 还是**上一次保存**的属性行；保存后 ``record._changes``
+     * 已被清空，面板下一次重算会把「基线（旧） + 空改动」当成当前配置 —— 界面退回保存前的
+     * 样子，甚至又把「未保存」标记点亮（见模块 AGENTS.md → L2 P4 陷阱 21）。
+     */
+    async settleMappingAfterSave() {
+        const store = getMappingStore(this.model);
+        const panel = this.model.variantMappingPanel;
+        if (panel) {
+            panel.store.snapshot = null;
+            try {
+                await panel.load();
+            } catch {
+                // 快照取不回来就等面板下次挂载时再取：保存已经成功了，不该因为它而失败
+                store.snapshot = null;
+            }
+        } else {
+            store.snapshot = null;
+        }
+        snapshotMappingBaseline(store);
+        store.dirty = false;
+        this.model.bus?.trigger("FIELD_IS_DIRTY", false);
     },
 
     async discard() {
         const result = await super.discard(...arguments);
+        if (this.model.root?.resModel !== "product.template") {
+            return result;
+        }
         // record 已经恢复成最后一次保存的状态 → 映射按恢复后的属性行回到基线
         discardMappingChanges(this.model);
         return result;

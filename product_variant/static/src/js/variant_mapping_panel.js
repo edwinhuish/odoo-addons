@@ -7,6 +7,7 @@ import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { _t } from "@web/core/l10n/translation";
 import { useService } from "@web/core/utils/hooks";
 import { useRecordObserver } from "@web/model/relational_model/utils";
+import { Record } from "@web/model/relational_model/record";
 import { X2ManyField } from "@web/views/fields/x2many/x2many_field";
 import { ListX2ManyField } from "@web/views/fields/x2many/list_x2many_field";
 
@@ -29,7 +30,8 @@ import { ListX2ManyField } from "@web/views/fields/x2many/list_x2many_field";
  *
  * 编辑期间**不问服务端**（见 AGENTS.md → L2 P4 陷阱 13）：挂载时取一次快照
  * （既有变体各自带的取值 + 已保存的属性行基线 + 各属性 / 取值的名称与生成方式），
- * 之后一切变化都用 ``record.getChanges()``（本地）+ 纯函数算；保存时才把映射随表单提交。
+ * 之后一切变化都用 ``readLocalChanges()``（本地 ``_getChanges()``，不走 mutex）+ 纯函数算；
+ * 保存时才把映射随表单提交。
  */
 
 /** 纯函数：还没被分配到任何组合的既有变体数（> 0 就不许保存）。 */
@@ -424,6 +426,21 @@ export function getMappingStore(model) {
     return model.variantMapping;
 }
 
+/**
+ * 读「表单当前编辑态」的字段改动 —— **不走** ``model.mutex``。
+ *
+ * ``Record.getChanges()`` 是 ``mutex.exec(() => this._getChanges(...))``，而 ``Record.save()``
+ * 已经把 ``_save()`` 丢进了同一把 mutex（``mutex.exec(() => this._save(options))``）。
+ * 于是保存钩子（``FormController.onWillSaveRecord``）里再调 ``getChanges()``，就是
+ * **等自己正占着的那把锁** —— 死锁：``await`` 永远不返回，表现为「点了 Save manually
+ * 按钮变灰、一个请求都没发、然后一直灰着」（见模块 AGENTS.md → L2 P4 陷阱 21）。
+ *
+ * ``Record._getChanges()`` 与它调的 x2many ``_getCommands()`` 都是同步的，直接读即可。
+ */
+export function readLocalChanges(record) {
+    return record._getChanges(record._changes, { withReadonly: true });
+}
+
 /** 换产品记录时把上一份映射（含基线、脏标记）整个丢掉。 */
 export function resetMappingStore(model, resId) {
     model.variantMapping = emptyMappingStore(resId);
@@ -459,7 +476,8 @@ export function discardMappingChanges(model) {
     store.shareVendorPrices = Boolean(baseline && baseline.shareVendorPrices);
     store.dirty = false;
     model.bus?.trigger("FIELD_IS_DIRTY", false);
-    model.variantMappingPanel?.refreshRows();
+    // 属性行也回到基线了：要**重算**（不是只刷行），否则面板还停在丢弃前的属性配置上
+    model.variantMappingPanel?.scheduleRefresh();
 }
 
 /** 「属性 ↔ 变体」映射表：产品表单「属性与变体」页、属性行下方的常驻面板。 */
@@ -518,7 +536,7 @@ export class VariantMappingPanel extends Component {
     }
 
     /**
-     * 纯前端重算：``getChanges()``（本地）拿属性行命令 → 合并到快照基线 → 算组合表。
+     * 纯前端重算：``readLocalChanges()``（本地、不走 mutex）拿属性行命令 → 合并到快照基线 → 算组合表。
      *
      * 属性配置没真的变（例如只是改了产品名）就直接返回，省掉重算与重渲染；
      * 但**分配关系**变了要走 ``refreshRows()``（那里不做签名去重）。
@@ -529,7 +547,8 @@ export class VariantMappingPanel extends Component {
         if (!record || !record.resId || !snapshot) {
             return;
         }
-        const changes = await record.getChanges({ withReadonly: true });
+        // 不走 ``record.getChanges()``：保存钩子是在 mutex 里调它的，会死锁（陷阱 21）
+        const changes = readLocalChanges(record);
         const lines = mergeAttributeLines(snapshot.lines, changes.attribute_line_ids);
         const signature = JSON.stringify(lines);
         if (signature === this.store.signature) {
@@ -632,16 +651,8 @@ export class VariantMappingPanel extends Component {
 
     get dirtyHint() {
         return _t(
-            "Use Save manually to store the mapping, or Discard all changes to roll the attribute lines and the mapping back to the last saved state."
+            "Use the Save / Discard buttons next to the product title to store the mapping, or to roll the attribute lines and the mapping back to the last saved state."
         );
-    }
-
-    get saveManuallyLabel() {
-        return _t("Save manually");
-    }
-
-    get discardChangesLabel() {
-        return _t("Discard all changes");
     }
 
     get axisLabels() {
@@ -757,16 +768,6 @@ export class VariantMappingPanel extends Component {
         this.store.shareVendorPrices = ev.target.checked;
         this.syncDirty();
     }
-
-    /** 面板里的「保存」：走表单自己的保存（含保存前钩子里的映射校验）。 */
-    onSaveManually() {
-        this.props.record.model.variantMappingController?.saveButtonClicked();
-    }
-
-    /** 面板里的「丢弃」：走表单自己的丢弃（映射改动由 form patch 一并回滚）。 */
-    onDiscardChanges() {
-        this.props.record.model.variantMappingController?.discard();
-    }
 }
 
 /**
@@ -795,6 +796,35 @@ for (const X2Many of [X2ManyField, ListX2ManyField]) {
         },
     });
 }
+
+/**
+ * 改属性行时**不再**打一次 ``product.template`` 的 onchange
+ * （见模块 AGENTS.md → L2 P4 陷阱 21）。
+ *
+ * Odoo 的 ``ir.ui.view._postprocess_on_change()`` 会给「视图里某个 compute 字段的依赖」
+ * 自动补 ``on_change="1"``：``attribute_line_ids`` 是 ``valid_product_template_attribute_line_ids``
+ * 这类 compute 字段的依赖，于是表单里一改属性行就发一次
+ * ``/web/dataset/call_kw/product.template/onchange``。本模块的属性改动**全部在前端算**
+ * （挂载时一次快照 + 本地 ``_getChanges()``），这次调用既没有用，又会把 model 的 mutex 占住
+ * （保存要排在它后面），所以直接跳掉 —— 只跳「改动里只有属性行」的那一次，
+ * ``standard_price`` / ``type`` / ``uom_id`` 这些真有 onchange 的字段照旧。
+ */
+const NO_ONCHANGE_MODEL = "product.template";
+const NO_ONCHANGE_FIELDS = new Set(["attribute_line_ids"]);
+
+patch(Record.prototype, {
+    async _getOnchangeValues(changes) {
+        const fieldNames = Object.keys(changes || {});
+        if (
+            this.resModel === NO_ONCHANGE_MODEL &&
+            fieldNames.length &&
+            fieldNames.every((fieldName) => NO_ONCHANGE_FIELDS.has(fieldName))
+        ) {
+            return {};
+        }
+        return super._getOnchangeValues(...arguments);
+    },
+});
 
 /**
  * 字段注册表的描述对象。
