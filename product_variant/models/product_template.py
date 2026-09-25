@@ -188,9 +188,20 @@ class ProductTemplate(models.Model):
             # 典型是给产品加一个**多取值**的「按需生成」属性行）→ 不能交给原生，
             # 往下走转换、用默认归属把每条既有变体的锚点写下去（没有新变体，所以不用弹窗确认）。
             if not affected["needs_anchoring"]:
-                if mapping_payload:
-                    vals["variant_conversion_mapping"] = False
-                return super().write(vals)
+                if not mapping_payload:
+                    return super().write(vals)
+                # 用户在映射表里给每条既有变体指定了组合后，删属性行 / 删取值是**有意为之**：
+                # 典型是删掉产品上唯一的属性 —— 那条变体由映射继续承载「空组合」，不会被删。
+                # 但原生写法会先删属性行，而 product_attribute_guards.py 里「不许删带着在用变体的
+                # 属性行 / 取值」的守卫会在那里拦住它。守卫的前提是「变体会被连坐删掉或归档」，
+                # 映射已经说明不会（每条既有变体都有组合），所以带上下文键放行。
+                # 先解析一次映射，确认「每条既有变体都有组合」这条前提真的成立再放行。
+                self._parse_variant_conversion_mapping(mapping_payload)
+                vals["variant_conversion_mapping"] = False
+                return super(
+                    ProductTemplate,
+                    self.with_context(variant_conversion_keeps_variants=True),
+                ).write(vals)
         elif not mapping_payload:
             # 还有变体没有组合（映射表里处于「未映射」）：保存不放行。
             # 正常路径是用户在「属性与变体」页下方的映射表里逐条选好，由表单把映射

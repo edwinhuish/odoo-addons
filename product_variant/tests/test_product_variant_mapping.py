@@ -8,7 +8,8 @@
 3. 用户在映射表里给变体选了取值 → 回到已映射；
 4. 单取值轴与「按需生成」轴由 Odoo 自己补取值，不算未映射；
 5. 会丢变体的改动（删取值）走不通，映射表拿到的是 blocked 而不是一堆未映射；
-6. 还有未映射变体时，保存被拒绝且一个字都不写库。
+6. 还有未映射变体时，保存被拒绝且一个字都不写库；
+7. 删掉唯一属性：带映射 → 那条变体原样留下（承载空组合）；不带映射 → 守卫照旧拦住。
 
 跑法（本地开发环境）：
 
@@ -304,3 +305,47 @@ class TestProductVariantMapping(TransactionCase):
         self.assertFalse(preview["blocked"])
         # 加了尺码：既有两条变体都缺这一轴 → 未映射
         self.assertEqual(preview["unmapped_count"], 2)
+
+    # ------------------------------------------------------------------
+    # 删掉唯一的属性：那条变体由映射继续承载「空组合」
+    # ------------------------------------------------------------------
+
+    def test_removing_the_only_attribute_keeps_the_existing_variant(self):
+        """删掉产品上唯一的属性后，那条既有变体必须原样留下（只丢掉它带的取值）。
+
+        原生写法会先删属性行，而 ``product_attribute_guards.py`` 里「不许删带着在用变体的
+        属性行」的守卫会拦在那里。映射表已经说明「这条变体继续承载空组合」，所以带映射
+        保存时守卫要放行 —— 前提（变体会被连坐删掉 / 归档）不成立。
+        """
+        product = self._create_product()
+        self._configure(product, self.color, self.color.value_ids[0])
+        variant = product.product_variant_ids
+        self.assertEqual(len(variant), 1, "单取值配置：一条变体")
+        line = product.attribute_line_ids
+        self.assertTrue(variant.product_template_attribute_value_ids, "变体带着 Color 的取值")
+
+        product.write({
+            "attribute_line_ids": [Command.delete(line.id)],
+            "variant_conversion_mapping": json.dumps({
+                "mapping": [{"values": [], "origin_variant_id": variant.id}],
+                "share_vendor_prices": False,
+            }),
+        })
+        product.invalidate_recordset()
+        variant.invalidate_recordset()
+
+        self.assertFalse(product.attribute_line_ids, "属性行已删掉")
+        self.assertEqual(product.product_variant_ids, variant, "还是原来那条变体，没有新建")
+        self.assertTrue(variant.active, "变体没有被归档")
+        self.assertFalse(
+            variant.product_template_attribute_value_ids, "空组合：不再带任何取值")
+
+    def test_removing_the_only_attribute_without_mapping_is_still_blocked(self):
+        """没带映射时守卫照旧拦住：没人认领那条变体，不能替用户把它处理掉。"""
+        product = self._create_product()
+        self._configure(product, self.color, self.color.value_ids[0])
+        line = product.attribute_line_ids
+        with self.assertRaises(UserError) as caught:
+            product.write({"attribute_line_ids": [Command.delete(line.id)]})
+        self.assertIn("Removing the attribute", str(caught.exception))
+        self.assertEqual(len(product.product_variant_ids), 1, "一个字都没写库")

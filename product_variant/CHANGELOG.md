@@ -3,6 +3,30 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.13.0.4] - 2026-09-25（删唯一属性时守卫放行：映射已认领那条变体）
+
+> 修订日期：2026-09-25 ｜ 类型：修复（+z） ｜ 影响文件：
+> `models/product_attribute_guards.py`、`models/product_template.py`、
+> `tests/test_product_variant_mapping.py`、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更
+
+1. **带映射保存时，属性守卫放行**：`product.template.write()` 在「不新增变体、原生可直写」这条
+   分支上，若本次带着映射（`variant_conversion_mapping`），先解析校验「每条既有变体都有组合」，
+   再带上下文键 `variant_conversion_keeps_variants=True` 走原生写入；
+   `product_attribute_guards.py` 三处守卫（删属性行 / 删取值 / 改 `value_ids`）认这个键并放行。
+2. 守卫常量化：`KEEP_VARIANTS_KEY`，三处判断同一口径，注释写明「守卫的前提是变体会被连坐，
+   映射已经说明不会」。
+3. 回归用例两条（服务端）：
+   - 删掉唯一属性 + 映射指定那条变体承载空组合 → 变体原样留下、仍启用、不再带取值；
+   - 不带映射删属性行 → 守卫照旧拦住（提示还是原来那条「Removing the attribute …」）。
+
+### 影响
+
+- 行为修复：删掉产品上唯一的属性时不再报「Removing the attribute … would affect N active
+  variants」，保存能过，原来那条变体继续承载空组合（库存 / 订单 / 发票全在）。
+- 无迁移、无新字段；服务端改动 `-u` 即生效。
+
 ## [19.0.13.0.3] - 2026-09-25（删除唯一属性后也能复用既有变体）
 
 > 修订日期：2026-09-25 ｜ 类型：修复（+z） ｜ 影响文件：

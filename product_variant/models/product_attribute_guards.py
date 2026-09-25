@@ -11,10 +11,19 @@
 
 本模块的转换不受影响：它只**新增**取值 / 新建属性行，从不删取值。
 要删取值的正确姿势（也是报错里给的出路）：先归档或删除用到它的变体，再删取值。
+
+一个例外必须放行：**产品表单带着「归属映射」一起保存时**（``variant_conversion_mapping``，
+即映射表里每条既有变体都指定了改动后它占哪个组合）。典型是「删掉产品上唯一的属性」：
+那条变体由映射继续承载**空组合**，不会被删除也不会被归档 —— 守卫的前提（变体会被连坐）
+不成立，再拦就是误伤。``product.template.write()`` 校验过映射之后会带上
+``variant_conversion_keeps_variants`` 上下文键落库，本文件据此放行。
 """
 
 from odoo import _, api, models
 from odoo.exceptions import UserError
+
+# 「映射已指定每条既有变体的归属组合」→ 删属性行 / 删取值不再连坐变体，守卫放行
+KEEP_VARIANTS_KEY = "variant_conversion_keeps_variants"
 
 
 class ProductTemplateAttributeValue(models.Model):
@@ -25,8 +34,11 @@ class ProductTemplateAttributeValue(models.Model):
 
         ``create_product_product=False`` 时放行：那是本模块「只写配置、不碰变体」的沙盒写入
         （试写分析 / 转换内部写入，在保存点里跑、随即回滚），与 L1 约束 10 同源。
+        带 ``variant_conversion_keeps_variants`` 时也放行：映射已指定这些变体继续承载哪个
+        组合（例如删掉唯一属性后由它承载空组合），不存在「连坐删除」。
         """
-        if self.env.context.get("create_product_product", True):
+        if (self.env.context.get("create_product_product", True)
+                and not self.env.context.get(KEEP_VARIANTS_KEY)):
             blocked = self.ptav_product_variant_ids.filtered("active")
             if blocked:
                 sample = self[0]
@@ -69,9 +81,12 @@ class ProductTemplateAttributeLine(models.Model):
     def unlink(self):
         """直接删属性行：带着这些取值的在用变体会失去归属（变体数坍缩），必须先处理变体。
 
-        ``create_product_product=False`` 时放行（沙盒写入，见上面的说明）。
+        ``create_product_product=False`` 时放行（沙盒写入，见上面的说明）；
+        带 ``variant_conversion_keeps_variants`` 时也放行：用户已在映射表里给每条既有变体
+        指定了组合（删掉唯一属性时那条变体继续承载空组合），变体不会被删也不会被归档。
         """
-        if self.env.context.get("create_product_product", True):
+        if (self.env.context.get("create_product_product", True)
+                and not self.env.context.get(KEEP_VARIANTS_KEY)):
             blocked = self.env["product.product"]
             for line in self:
                 blocked |= line.product_template_value_ids.ptav_product_variant_ids.filtered("active")
@@ -89,7 +104,8 @@ class ProductTemplateAttributeLine(models.Model):
         return super().unlink()
 
     def write(self, vals):
-        if "value_ids" in vals and self.env.context.get("create_product_product", True):
+        if ("value_ids" in vals and self.env.context.get("create_product_product", True)
+                and not self.env.context.get(KEEP_VARIANTS_KEY)):
             self._check_variant_conversion_value_removal(vals["value_ids"])
         return super().write(vals)
 
