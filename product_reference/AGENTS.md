@@ -13,7 +13,7 @@
 - 自定义组件（前端）：字段 widget `product_reference_editor`、额外参考号管理弹窗
   （顶层 `main_components` overlay）、徽标 tooltip 模板
 - 主依赖：`product`（最小化，不依赖 `sale`）
-- 当前版本：`19.0.3.1.0`（19.0.3.1.0 型号一律大写：前端两个输入框输入即转大写 + 后端 `create` / `write` 就地改写 `vals` 兜底（导入 / API 一起覆盖），见 L1 第 11 条；19.0.3.0.0 架构调整：产品级编号 `base_reference` **叠加**进模板级 `default_code` 的 compute（`base_reference` 优先）、单变体产品两处同值、多变体产品只写 `base_reference`、产品级参考号两层都可见（不再按变体数隐藏）+ 存量回填迁移；19.0.2.7.1 补契约测试；19.0.2.5.2 修主变体表单的参考号归属）
+- 当前版本：`19.0.3.1.1`（19.0.3.1.1 额外参考号弹窗：`Done` 右对齐 + 点弹窗外不关闭，见 L1 第 9 条；19.0.3.1.0 型号一律大写：前端两个输入框输入即转大写 + 后端 `create` / `write` 就地改写 `vals` 兜底（导入 / API 一起覆盖），见 L1 第 11 条；19.0.3.0.0 架构调整：产品级编号 `base_reference` **叠加**进模板级 `default_code` 的 compute（`base_reference` 优先）、单变体产品两处同值、多变体产品只写 `base_reference`、产品级参考号两层都可见（不再按变体数隐藏）+ 存量回填迁移；19.0.2.7.1 补契约测试；19.0.2.5.2 修主变体表单的参考号归属）
 
 > 命名语义：与 Odoo 原生一致，`default_code` 是「内部参考（Internal Reference）」，
 > 本模块挂的是**额外的**参考号（客户 / 工厂 / 别名）。源码与用户可见文案一律用
@@ -158,6 +158,13 @@
      依据 `web/static/src/core/dialog/dialog.xml`）：不要自造 header / footer 样式、
      不要改字体颜色、不要自定义 `modal-dialog` 宽度；本弹窗不走 dialog 服务，
      遮罩画在 `.modal` 上（见 `static/src/scss/product_reference.scss`）
+   - **两处有意偏离原生，勿改回**（`19.0.3.1.1`，用户要求）：
+     ① **点弹窗外（遮罩区域）不关闭** —— 模板里 `.modal` 上**不加**
+     `t-on-click.self`（原生 `web.Dialog` 也没有 click-outside 关闭）；关闭只有
+     Esc / 右上角 × / 底部 `Done` 三个入口；
+     ② **footer 的 `Done` 右对齐** —— 原生 19.0 footer 的类名是
+     `justify-content-around justify-content-md-start`（左对齐），本弹窗改成
+     `justify-content-end`，其余类名（`d-empty-none` / `flex-wrap` / `gap-1` / `w-100`）保留
    - 新增行入口是表格 `tfoot` 里的 **`Add a line`** 链接
      （`<a role="button" class="o_field_x2many_list_row_add">`，依据
      `web/static/src/views/list/list_renderer.xml`）：链接式、不带图标，

@@ -81,9 +81,10 @@
 
 // 额外参考号管理弹窗（顶层 overlay，与产品表单渲染树解耦）
 // 结构与类名与 Odoo 原生弹窗一致（`.o_dialog > .modal.o_technical_modal > …`，
-// 见 web/static/src/core/dialog/dialog.xml）：标题、关闭按钮、footer 按钮、字体
-// 颜色全部走原生样式，这里只留本弹窗必需的两件事 —— 遮罩（挂在 main_components，
-// 不走 dialog 服务，没有独立的 backdrop 元素）与表格列宽。
+// 见 web/static/src/core/dialog/dialog.xml）：标题、关闭按钮、字体颜色走原生样式，
+// 这里只留本弹窗必需的两件事 —— 遮罩（挂在 main_components，不走 dialog 服务，
+// 没有独立的 backdrop 元素；**点它不关闭弹窗**，见模板注释）与表格列宽。
+// footer 的 Done 右对齐由模板上的 `justify-content-end` 负责，这里不再覆盖。
 .o_product_reference_manage {
     background: rgba(0, 0, 0, 0.5);
     // 高于 Odoo 模态（1055），避免被表单里的下拉 / 通知盖住

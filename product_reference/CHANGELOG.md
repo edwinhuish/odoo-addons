@@ -1,5 +1,41 @@
 # 变更日志
 
+## [19.0.3.1.1] - 2026-09-25（额外参考号弹窗：`Done` 右对齐 + 点弹窗外不关闭）
+
+> 类型：修复（交互） ｜ 涉及文件：`static/src/xml/product_reference_manage.xml` /
+> `static/src/js/product_reference_manage.js` / `static/src/scss/product_reference.scss` /
+> `__manifest__.py` / `README.md` / `AGENTS.md`
+
+### 变更
+
+1. **`Done` 按钮改到弹窗右下方**（`static/src/xml/product_reference_manage.xml`）：
+   footer 的两段对齐类名 `justify-content-around justify-content-md-start`
+   （Odoo 19 原生 footer 的左对齐口径）换成 **`justify-content-end`**；
+   footer 其余类名（`modal-footer` / `d-empty-none` / `flex-wrap` / `gap-1` / `w-100`）
+   保持与原生一致，按钮样式与字体颜色不受影响。
+2. **点击弹窗外不再关闭弹窗**（同上）：去掉 `.modal` 上的 `t-on-click.self="close"` ——
+   之前点在遮罩区域会直接把弹窗关掉，正在录入、还没保存的参考号一起丢；
+   关闭入口只剩 **Esc / 右上角 × / 底部 `Done`**（与 Odoo 原生 `web.Dialog` 一致：
+   `dialog.xml` 的 `.modal` 上本来就没有 click-outside 处理）。
+3. 注释同步：模板头注释标出这两处「有意偏离原生、勿改回」；JS 关闭逻辑段、
+   SCSS 弹窗段说明遮罩点击不关闭、footer 对齐交给模板工具类。
+
+### 影响
+
+- 纯前端交互调整：不新增字段、不改视图 / 数据、**无迁移**；不用重新导入译文
+  （`Done` 的 `msgid` / `msgstr` 不变）；
+- `-u` 升级后需**强刷浏览器**才会拿到新的模板与样式；
+- 之前习惯了「点外面关掉弹窗」的使用方式需要改回用 × / Esc / `Done`。
+
+### 验证记录
+
+| 项 | 结果 |
+|----|------|
+| XML（`minidom` 解析） | 弹窗模板通过（本地） |
+| 目标环境 | **待验证**：① `Done` 在弹窗右下角，与表格右边缘对齐；② 点弹窗外（灰色遮罩）弹窗保持打开；③ Esc / × / `Done` 三个入口仍能关闭；④ 关闭后参考号改动仍在表单 record 上（点产品「保存」才入库）。升级后强刷浏览器，中英各验一遍 |
+
+---
+
 ## [19.0.3.1.0] - 2026-09-24（型号一律大写 + 额外参考号弹窗与 Odoo 原生统一 / 删除空行修复）
 
 > 类型：功能新增 ｜ 涉及文件：`models/reference_case.py`（新增）/ `models/product_reference_code.py` /

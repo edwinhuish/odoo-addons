@@ -7,13 +7,20 @@
         - **结构与类名沿用 Odoo 原生弹窗**：`.o_dialog > .modal.o_technical_modal >
           .modal-dialog > .modal-content > (header.modal-header / main.modal-body /
           footer.modal-footer)`，与 `web/static/src/core/dialog/dialog.xml` 一致 ——
-          标题、关闭按钮、footer 按钮、字体颜色都走原生样式；本弹窗不走 dialog 服务
-          （没有独立的 backdrop 元素），遮罩画在 `.modal` 上（见 scss）。
-          footer 的类名同样沿用原生（左对齐、按钮无外边距）
+          标题、关闭按钮、字体颜色都走原生样式；本弹窗不走 dialog 服务
+          （没有独立的 backdrop 元素），遮罩画在 `.modal` 上（见 scss）
+        - 两处**有意偏离原生**（用户要求，勿改回）：
+          ① **点击弹窗外（遮罩区域）不关闭** —— 原生 `web.Dialog` 本身也没有
+             click-outside 关闭（`dialog.xml` 的 `.modal` 上没有点击处理），这里同样
+             不加 `t-on-click.self`，避免误点一下就把没保存的录入丢掉；
+          ② **footer 的 Done 按钮右对齐** —— 原生 19.0 的 footer 是
+             `justify-content-around justify-content-md-start`（左对齐），这里换成
+             `justify-content-end`；其余 footer 类名（`d-empty-none` / `flex-wrap`
+             / `gap-1` / `w-100`）仍与原生一致
         - 行内可直接改参考号 / 类型 / 启用 / 备注；上移下移改排序；右侧删除按钮删行
         - 所有改动作用在产品表单 record 上，点产品表单「保存」才入库
           （未保存的新产品也能先录入参考号）
-        - 关闭：右上角 × / 遮罩 / Esc / 底部「Done」按钮
+        - 关闭：右上角 × / Esc / 底部「Done」按钮（点弹窗外不关闭）
     -->
     <t t-name="product_reference.ProductReferenceManageDialog">
         <div class="o_dialog">
@@ -21,8 +28,7 @@
                  class="o_product_reference_manage modal d-block o_technical_modal"
                  tabindex="-1"
                  t-ref="autofocus"
-                 t-on-keydown.stop="onKeydown"
-                 t-on-click.self="close">
+                 t-on-keydown.stop="onKeydown">
                 <div class="modal-dialog modal-dialog-centered modal-lg">
                     <div class="modal-content">
                         <header class="modal-header">
@@ -123,7 +129,9 @@
                             </table>
                         </main>
 
-                        <footer class="modal-footer d-empty-none justify-content-around justify-content-md-start flex-wrap gap-1 w-100">
+                        <!-- Done 右对齐：原生 footer 是左对齐（justify-content-md-start），
+                             此处按用户要求改为右对齐；其余类名与原生一致 -->
+                        <footer class="modal-footer d-empty-none justify-content-end flex-wrap gap-1 w-100">
                             <button type="button"
                                     class="btn btn-primary"
                                     t-on-click="close">
