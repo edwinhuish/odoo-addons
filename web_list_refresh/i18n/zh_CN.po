@@ -1,0 +1,61 @@
+
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#	* web_list_refresh
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 19.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-25 00:00+0000\n"
+"PO-Revision-Date: 2026-09-25 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. module: web_list_refresh
+#. odoo-javascript
+#: code:addons/web_list_refresh/static/src/xml/list_refresh_templates.xml:0
+msgid "Refresh"
+msgstr "刷新"
+
+#. module: base
+#: model:ir.module.module,shortdesc:base.module_web_list_refresh
+msgid "List View Refresh"
+msgstr "列表视图刷新"
+
+#. module: base
+#: model:ir.module.module,summary:base.module_web_list_refresh
+msgid "Add a refresh button to every list, kanban and card view: reloads data with the current search terms, filters, grouping, sorting and page preserved"
+msgstr "为所有列表、看板与卡片视图增加刷新按钮：按当前搜索词、过滤器、分组、排序与页码重新加载数据，状态不丢"
+
+#. module: base
+#: model:ir.module.module,description:base.module_web_list_refresh
+msgid ""
+"\n"
+"List View Refresh module for foreign trade SOHO scenarios.\n"
+"\n"
+"Source language of this module is English (en_US); a Simplified Chinese translation ships in i18n/zh_CN.po.\n"
+"\n"
+"Key features:\n"
+"- A refresh button is added to the control panel of every multi-record view (list, kanban and custom views derived from them, such as a card view)\n"
+"- Refreshing re-runs the current query without rebuilding the view, so search terms, filters, group bys, favourites, pagination and sorting stay exactly as they were\n"
+"- A row being edited is saved first; if validation fails, the refresh is aborted and the draft is kept\n"
+"- The button only appears when the current view registered a refresh handler, so form views and other non list views do not show it\n"
+"- Standard extension only: a core OWL template is extended with t-inherit and two controllers are patched with @web/core/utils/patch, no core file is modified\n"
+msgstr ""
+"\n"
+"面向外贸 SOHO 场景的列表刷新模块。\n"
+"\n"
+"本模块源码语言为英文（en_US），简体中文译文见 i18n/zh_CN.po。\n"
+"\n"
+"主要功能：\n"
+"- 在所有多记录视图（列表、看板，以及由它们派生的自定义视图如卡片视图）的控制面板上增加一个刷新按钮\n"
+"- 刷新只是按当前条件重新查询、不重建视图：搜索词、过滤器、分组、收藏夹、分页位置与排序全部原样保留\n"
+"- 正在编辑的行会先保存；保存校验失败则中止刷新并保留草稿\n"
+"- 只有注册了刷新处理器的视图才显示按钮，表单等非列表视图不显示\n"
+"- 只用标准扩展方式：用 t-inherit 继承一个核心 OWL 模板、用 @web/core/utils/patch 给两个控制器打补丁，不修改任何核心文件\n"

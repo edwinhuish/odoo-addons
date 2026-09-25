@@ -97,6 +97,13 @@
 > （完成日期 / 落地版本 / 做法 / 验收记录 / 遗留），**按 ID 倒序**排列；
 > 详细验收记录见各模块 `CHANGELOG.md` →「验收记录（T-0xx）」与根 [`README.md`](README.md) 模块一览表。
 
+- **T-043 所有列表 / 看板 / 卡片视图统一刷新按钮（保留搜索条件与分页位置）** ｜ `web_list_refresh` ｜ P1
+  - 完成日期：2026-09-25 ｜ 状态：**已交付，待目标环境验证（前端改动需 `-u` + 强刷浏览器）**
+  - 落地版本：`web_list_refresh` `19.0.1.0.0`
+  - 做法：新建纯前端模块 `web_list_refresh`（`depends: ["web"]`）。只扩展一次核心 `web.ControlPanel` 模板把按钮插在分页器左侧（`xpath //div[hasclass('o_cp_pager')]` + `position="before"`），并用 `@web/core/utils/patch` 给 `ListController` / `KanbanController` 的 `setup` 打补丁，通过 `useSubEnv({ viewRefresh })` 注册刷新处理器（按钮侧 `t-if="env.viewRefresh"` 软探测 + 降级，表单视图因此不显示按钮；`product_card_view` 的 card 视图复用 `KanbanController`，自动获得按钮）。**刷新语义定为无参 `model.load()`**：`RelationalModel.config` 已存着上次加载的 `domain` / `context` / `groupBy` / `orderBy` / `limit` / `offset` / `currentGroups`，无参 load 原样复用，故搜索词 / 过滤器 / 收藏夹 / 分组展开态 / 排序 / 页码全部保留；**刻意避开显式回传搜索参数**——核心 `_getNextConfig()` 里 `params.domain` 非空会把 `offset` 归零，刷新后跳回第 1 页（模块 `AGENTS.md` L1 第 1 条）。列表编辑态先 `editedRecord.save()`，校验失败即中止刷新、保留草稿。不重建 `SearchModel` / `WithSearch`，不用整页 `location.reload()`。
+  - 验收记录：模块 [`CHANGELOG.md`](web_list_refresh/CHANGELOG.md) → `[19.0.1.0.0]`；`python3 .dev/scripts/check_repo.py` 通过且新模块 **0 告警**（po 应用列表元数据 `msgid` 与 manifest 逐字符一致、含 `#. odoo-javascript` 运行期标记、XML 合法、两个 JS `node --check` 通过）；设计依据为 `odoo:19.0` 镜像内核心源码——`list_controller.js` 的 `useViewButtons({ reload: () => this.model.load() })`、`relational_model.js::_getNextConfig()`、`with_search.js` 的 `useSubEnv({ searchModel })`、`control_panel.xml` 的 `o_cp_pager` 锚点。**界面行为待目标环境验证**（模块 `README.md` →「验证清单」12 项）。
+  - 遗留：目标环境手工验证 12 项（列表 / 看板 / Card 三处的条件 / 分组 / 排序 / 页码保留、编辑态先保存与失败中止、表单视图无按钮、中英双语、应用列表中文化）；**分组列表下组内编辑行的草稿保护未实现**（`DynamicGroupList` 取不到组内 `editedRecord`，见模块 `AGENTS.md` → L2 P4）。
+
 - **T-042 模块改名 `product_variant` + 「属性 ↔ 变体」映射表（变体未映射就不许保存）** ｜ `product_variant` ｜ P1
   - 完成日期：2026-09-24 ｜ 状态：**已交付，待目标环境验证（改名必须走原地改名 SQL，映射表需 `-u` + 强刷）**
   - 落地版本：`product_variant` `19.0.13.0.1`

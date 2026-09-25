@@ -43,6 +43,7 @@ addons:
   - sale_order_no
   - sale_product_hover
   - web_image_paste
+  - web_list_refresh
   # - web_multi_tabs
 
 # --- 语言 ---------------------------------------------------------------------
