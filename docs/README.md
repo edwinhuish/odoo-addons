@@ -22,6 +22,7 @@
 |------|------|
 | [`docs/README.md`](README.md) | 本文件：文档地图 + 归档策略 |
 | [`docs/product_variant_mapping_review_2026-09-24.md`](product_variant_mapping_review_2026-09-24.md) | **功能线复盘**：`product_variant` 映射表的整条迭代（`19.0.7.0.0` → `19.0.13.0.1`）——目标 / 关键步骤 / 技术要点 / 问题与解法 / 结果与待验证，含模块改名的原地升级路径。权威细节仍在模块三件套；本文件是横切归纳与决策记录，长期不再维护时按第 3 节归档 |
+| [`docs/product_variant_mapping_change_record_2026-09-24.md`](product_variant_mapping_change_record_2026-09-24.md) | **操作记录与变更追溯**：同一条改造的目的 / 时间 / 环境 / 执行内容（命令级）/ 产生的变更（数据库、文件、行为）/ 注意事项（生产升级、前端缓存、i18n、保存拦截口径）/ 后续建议 / 追溯入口。与上一份分工：复盘讲「为什么这样设计、踩了什么坑」，本文件讲「做了什么、动了什么、要注意什么」 |
 | [`docs/archive/`](archive/) | **归档区**：时效性强、已沉淀完毕、日常不再读的历史文档（见下节） |
 
 > `docs/` 位于 `addons_path` 之下，但目录下没有 `__manifest__.py`，Odoo 不会把它当成模块，
