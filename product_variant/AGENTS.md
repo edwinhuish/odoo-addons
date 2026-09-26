@@ -13,7 +13,11 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantMappingPanel`（「属性 ↔ 变体」映射表，field widget）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给映射表补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.13.0.6`（19.0.13.0.6：**核查修订** —— README 同步到当前实现
+- 当前版本：`19.0.13.0.7`（19.0.13.0.7：**修「点 New 后映射表还是上一个产品的」** —— 点 New / 翻页走
+  `model.load({resId})`，model 与面板组件实例都被复用（`setup()` 不再跑），「换记录」只能在
+  `recompute()` 里认（作废整份状态 + 重取快照）；`resetMappingStore()` 改**原地**清空（换对象会让
+  组件与保存钩子各拿一份、且不经代理不重画）；新建（没 id）与「快照还没取回来」时整块不显示，
+  见 L2 P4 陷阱 24；19.0.13.0.6：**核查修订** —— README 同步到当前实现
   （映射表示例 / 签名 / 前端资源表 / 测试数口径）、把「原生直写的安全不变量」写成注释与用例
   （见 L2 P4 陷阱 22 第 4 条）；19.0.13.0.5：**面板说明 / 警告文字自动换行** —— 样式放
   `static/src/scss/variant_mapping_panel.scss`：`min-width: 0` + `overflow-wrap: anywhere`
@@ -704,6 +708,33 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   「未保存」的 flex 行加 `flex-wrap: wrap`。
 - 判断标准：面板里凡是**用户可见的整句文案**，都必须能换行、且整块宽度不超过纸面；
   新增文案后要窄屏（或把窗口拖窄）看一眼，别只看宽屏。
+
+24. **「换了一条产品记录」要自己认：面板状态挂在 model 上，model 是复用的（`19.0.13.0.7`）**
+- 现象：产品表单上点 **New**（或用分页翻到下一条产品），`Variants Mapping` 里挂的还是
+  **上一条产品**的组合与变体映射；新建的产品还没保存，却显示着别人的映射。
+- 根因（两处叠加，都在 Odoo 19 源码里）：
+  1. `FormController.create()` / 翻页走的都是 `this.model.load({resId})`
+     （`web/static/src/views/form/form_controller.js`），而 model 是 `useModel()` 在
+     `setup()` 里建的 —— **同一个 model 实例被复用**，挂在它上面的 `model.variantMapping`
+     自然跟着留下来；面板是表单里的字段组件，`t-component` 没有 `t-key` 变化，
+     **组件实例也被复用 → `setup()` 不会再跑一次**。于是原来那句「`store.resId !==
+     props.record.resId` 就重置」写在 `setup()` 里，根本没机会执行。
+  2. `recompute()` 开头只判 `if (!record || !record.resId || !snapshot) return;` ——
+     新记录没有 id，直接返回，**旧快照、旧行、旧分配原封不动留在界面上**。
+- 正确做法（三处一起改）：
+  1. **把「记录换了没有」的判断搬到 `recompute()`**：它同时被 `useRecordObserver`、
+     o2m 的 `onPatched` 通知与每秒兜底自检调用，覆盖所有切换路径；发现
+     `store.resId !== (record.resId || false)` 就 `resetForRecord()`（作废 + 重取快照）；
+  2. `resetMappingStore(store, resId)` 改成**原地清空**（`delete` 老键 + `Object.assign`）：
+     `this.store` 是 `useState()` 给的响应式代理，另建新对象 ① 组件与保存钩子
+     （`FormController` 里那几个补丁都握着 `model.variantMapping`）各拿一份，
+     ② 不经过代理的 set 陷阱，**界面根本不重画**；
+  3. 模板根 div 加 `t-if="showPanel"`（已保存的产品 + 快照属于当前记录才显示）：
+     新建时没有既有变体可映射；换记录后重算与取快照都是异步的，那几百毫秒里
+     不能把上一条产品的映射当成这一条的。
+- 判断标准：凡是**挂在 model / env 上、跨组件复用**的状态，都要回答「换记录时谁负责作废」；
+  只写在 `setup()` 里的重置逻辑在 Odoo 的表单里**不可靠**（组件与 model 都被复用）。
+  验证方式：打开一个有变体的产品 → 点 New（面板应消失）→ 再翻回原产品（映射重新算出来）。
 
 ### P5：业务场景、数据流与一致性边界（评估完整性 / 排障时读）
 

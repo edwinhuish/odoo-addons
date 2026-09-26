@@ -33,14 +33,16 @@ const {
     buildCombinationRows,
     buildVariantOptions,
     computeVariantMapping,
+    emptyMappingStore,
     mappingDiffersFromBaseline,
     mergeAttributeLines,
+    resetMappingStore,
     rowMatchesVariant,
     snapshotMappingBaseline,
 } = new Function(
     `${pure}; return { applyDefaultAssignment, applyValueCommands, buildMappingPayload, buildCombinationRows, ` +
-        `buildVariantOptions, computeVariantMapping, mappingDiffersFromBaseline, mergeAttributeLines, ` +
-        `rowMatchesVariant, snapshotMappingBaseline };`
+        `buildVariantOptions, computeVariantMapping, emptyMappingStore, mappingDiffersFromBaseline, ` +
+        `mergeAttributeLines, resetMappingStore, rowMatchesVariant, snapshotMappingBaseline };`
 )();
 
 const check = (label, fn) => {
@@ -312,6 +314,35 @@ check("映射改过才显示保存/丢弃：默认分配不算改动，动过才
 
     store.shareVendorPrices = true;
     assert.equal(mappingDiffersFromBaseline(store), true, "勾选框也属于映射状态");
+});
+
+check("换产品记录：映射状态**原地**清空（点 New / 翻页都不会串记录）", () => {
+    const store = emptyMappingStore(5);
+    // 模拟「上一条产品已经算出映射、用户还动过分配」
+    store.rows = [{ key: "51-61", variant_id: 900 }];
+    store.lines = [{ id: 1, attribute_id: 5, value_ids: [51] }];
+    store.assignment = { "51-61": 900 };
+    store.cleared = { "51-62": true };
+    store.baseline = { assignment: {}, shareVendorPrices: false };
+    store.dirty = true;
+    store.snapshot = { variants: [], lines: [], attributes: {}, values: {} };
+
+    // 点 New：新记录还没有 id（false）
+    const same = resetMappingStore(store, false);
+    assert.equal(same, store, "必须原地改：面板与保存钩子握着同一个对象，换对象就各说各话");
+    assert.equal(store.resId, false, "新记录记成 false，下次重算才认得出「换了记录」");
+    assert.deepEqual(store.rows, [], "上一个产品的组合行不能留着");
+    assert.deepEqual(store.assignment, {}, "上一个产品的分配不能留着");
+    assert.deepEqual(store.cleared, {});
+    assert.equal(store.baseline, null, "基线也要一起作废");
+    assert.equal(store.dirty, false, "Save manually 不能跟着带到新记录上");
+    assert.equal(store.snapshot, null, "快照要重新取，不能拿上一条产品的");
+    assert.ok(!("lines" in store), "重算中途加出来的键也要清掉");
+
+    // 翻到另一条已保存的产品
+    resetMappingStore(store, 7);
+    assert.equal(store.resId, 7);
+    assert.equal(store.snapshot, null);
 });
 
 console.log("all good");

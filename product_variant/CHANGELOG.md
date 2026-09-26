@@ -3,6 +3,59 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.13.0.7] - 2026-09-26（修「点 New 后 `Variants Mapping` 还是上一个产品的」）
+
+> 修订日期：2026-09-26 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`static/src/xml/variant_mapping_panel.xml`、
+> `tests/js/variant_mapping_pure.mjs`（+1 用例）、`__manifest__.py`、`AGENTS.md` / `README.md`
+
+### 变更
+
+1. **「换了一条产品记录」改由 `recompute()` 自己认**（用户实测：产品表单点 **New** 之后，
+   `Variants Mapping` 里挂的还是上一条产品的组合与变体映射）：
+   - 根因一（组件与 model 都被复用）：点 New / 翻页走的都是 `FormController` 里的
+     `this.model.load({resId})`（`web/static/src/views/form/form_controller.js`），model 是
+     `useModel()` 在 `setup()` 里建的、**同一个实例被复用**；面板是表单里的字段组件，
+     `t-component` 没有 `t-key` 变化 → **组件实例也被复用，`setup()` 不会再跑一次**。
+     原来那句「`store.resId !== props.record.resId` 就重置」写在 `setup()` 里，根本没机会执行；
+   - 根因二（`recompute()` 把新记录挡在门外）：它开头只判
+     `if (!record || !record.resId || !snapshot) return;` —— 新记录没有 id，直接返回，
+     **旧快照、旧行、旧分配原封不动留在界面上**；
+   - 修复：把「记录换了没有」的判断搬到 `recompute()`（同时被 `useRecordObserver`、
+     o2m 的 `onPatched` 通知与每秒兜底自检调用，覆盖所有切换路径），发现
+     `store.resId !== (record.resId || false)` 就调 `resetForRecord()` —— 整份状态作废 +
+     按新记录重取快照；新建的产品保存后拿到真实 id 时同样走这条路（`load()` 里顺势记下 `resId`）。
+2. `resetMappingStore(store, resId)` 改成**原地清空**（原来换一个新对象：
+   `model.variantMapping = emptyMappingStore(resId)`）：
+   - 面板的 `this.store` 是 `useState()` 给的**响应式代理**，换对象上去 ① 组件与保存钩子
+     （`variant_conversion_form_patch.js` 里那几个补丁握着 `model.variantMapping`）会各拿一份，
+     ② 不经过代理的 set 陷阱，**界面根本不重画**；
+   - 现在 `delete` 掉所有键再 `Object.assign` 空状态（含重算中途加出来的 `lines` / `axes`），
+     对象身份不变，且「未保存」标记（`FIELD_IS_DIRTY`）一起撤掉。
+3. **快照还没取回来时整块不显示**：模板根 div 加 `t-if="showPanel"`
+   （`product_variant.VariantMappingPanel`）—— 只有「已保存的产品」且快照属于**当前这条记录**
+   时才渲染。新建（没有 id）时没有既有变体可映射；换记录后重算与取快照都是异步的
+   （防抖 150ms / 兜底 1s + 一次 RPC），那几百毫秒里不能把上一条产品的映射当成这一条的。
+4. 离线自测 `tests/js/variant_mapping_pure.mjs` 加一条
+   「换产品记录：映射状态**原地**清空」—— 行 / 分配 / 已清标记 / 基线 / 脏标记 / 快照全部作废，
+   重算中途加出来的键也没留下，且 `resetMappingStore()` 返回的**还是同一个对象**。
+
+### 影响
+
+- 只动前端；要 `-u product_variant` + **强刷浏览器**才生效（见模块 `AGENTS.md` → L2 P4 陷阱 4）。
+- 新建（未保存）产品的表单上不再显示映射表面板 —— 那时没有既有变体可映射；产品保存之后
+  （拿到 id）面板自动出现。已有产品的映射计算、未分配拦截、保存 / 丢弃逻辑一律不变。
+- 无数据迁移；服务端 Python 未改动。
+
+### 验证
+
+- `node product_variant/tests/js/variant_mapping_pure.mjs` → 17 项全过（含新增 1 项）；
+  JS / XML 语法检查通过。
+- 待目标环境手工验证（前端无浏览器自动化）：① 打开一个多变体产品、「属性与变体」页看到映射表
+  → 点 **New** → 面板**消失**（不再显示上一条产品的映射）；② 新建产品填名称保存 → 面板出现且为空；
+  ③ 用分页翻到另一条产品 → 映射按那条产品重算（不是上一条的）；④ 回到原产品改属性 → 映射照旧，
+  未分配提示与保存拦截不受影响。
+
 ## [19.0.13.0.6] - 2026-09-26（核查修订：文档同步 + 原生直写安全不变量用例）
 
 > 修订日期：2026-09-26 ｜ 类型：文档 / 测试（+z） ｜ 影响文件：

@@ -438,15 +438,8 @@ export function buildMappingPayload(rows, shareVendorPrices) {
     };
 }
 
-/**
- * 映射表状态存在 ``model`` 上（不是组件里）：
- *
- * 面板挂在「属性与变体」页里，用户切到别的页签它就卸载了。把状态放在 model 上，
- * 保存钩子（``FormController.onWillSaveRecord``）与面板共享同一份数据 —— 无论面板
- * 当前有没有挂载，「用户怎么分配的」都不会丢；快照也只取一次。
- */
-/** 空的映射表状态（``resId`` 用来识别「换了产品记录」）。 */
-function emptyMappingStore(resId) {
+/** 纯函数：空的映射表状态（``resId`` 用来识别「换了产品记录」）。 */
+export function emptyMappingStore(resId) {
     return {
         resId: resId || false,
         rows: [],
@@ -461,6 +454,33 @@ function emptyMappingStore(resId) {
     };
 }
 
+/**
+ * 纯函数：把一份映射状态**原地**清空成「刚换到 ``resId`` 这条记录」的样子。
+ *
+ * 必须**原地**改：``this.store`` 是 ``useState()`` 给的响应式代理，换一个新对象上去
+ * ① 组件与保存钩子（都握着旧对象）会各说各话，② 不经过代理的 set 陷阱，界面根本不重画
+ * （见模块 AGENTS.md → L2 P4 陷阱 24）。
+ *
+ * :param dict store: 映射状态（通常就是面板的 ``this.store``）。
+ * :param resId: 当前记录的 id（新建还没保存时为 ``false``）。
+ * :return: 同一个 ``store`` 对象（身份不变）。
+ */
+export function resetMappingStore(store, resId) {
+    const fresh = emptyMappingStore(resId);
+    for (const key of Object.keys(store)) {
+        delete store[key];
+    }
+    Object.assign(store, fresh);
+    return store;
+}
+
+/**
+ * 映射表状态存在 ``model`` 上（不是组件里）：
+ *
+ * 面板挂在「属性与变体」页里，用户切到别的页签它就卸载了。把状态放在 model 上，
+ * 保存钩子（``FormController.onWillSaveRecord``）与面板共享同一份数据 —— 无论面板
+ * 当前有没有挂载，「用户怎么分配的」都不会丢；快照也只取一次。
+ */
 export function getMappingStore(model) {
     if (!model.variantMapping) {
         model.variantMapping = emptyMappingStore(model.root?.resId);
@@ -481,13 +501,6 @@ export function getMappingStore(model) {
  */
 export function readLocalChanges(record) {
     return record._getChanges(record._changes, { withReadonly: true });
-}
-
-/** 换产品记录时把上一份映射（含基线、脏标记）整个丢掉。 */
-export function resetMappingStore(model, resId) {
-    model.variantMapping = emptyMappingStore(resId);
-    model.bus?.trigger("FIELD_IS_DIRTY", false);
-    return model.variantMapping;
 }
 
 /**
@@ -529,20 +542,32 @@ export class VariantMappingPanel extends Component {
 
     setup() {
         this.orm = useService("orm");
-        // 切换产品记录时 model 是复用的：先把上一份映射（含基线）清掉，免得串记录
-        if (getMappingStore(this.props.record.model).resId !== this.props.record.resId) {
-            resetMappingStore(this.props.record.model, this.props.record.resId);
-        }
         this.store = useState(getMappingStore(this.props.record.model));
         // 保存钩子要用同一个实例重算（用户可能在本页改完就走保存）
         this.props.record.model.variantMappingPanel = this;
-        this.store.signature = undefined;
+        // 切换产品记录时 model 是复用的：先把上一份映射（含基线）清掉，免得串记录
+        this.resetForRecord();
         // 属性行增删、勾取值都会让 record 变化：统一防抖后重算（重算里再按签名去重）
         useRecordObserver(() => this.scheduleRefresh());
         // 兜底自检：Odoo 的 observer 触发条件依赖内部实现（见 AGENTS.md → L2 P4 陷阱 16），
         // 面板挂载期间每秒本地比较一次签名；没变化时 recompute() 直接返回，没有开销。
         this.pollTimer = setInterval(() => this.scheduleRefresh(), 1000);
-        this.load();
+    }
+
+    /**
+     * 换到另一条产品记录（点 **New** / 翻页 / 新建的产品保存后拿到真实 id）：
+     * 上一份映射（行、分配、基线、脏标记）**整个作废**，再按新记录重取快照。
+     *
+     * 点 New 与翻页走的都是 ``model.load({resId})``：model 与面板组件实例都被复用
+     * （``setup()`` 不会再跑一次），所以「记录换了」这件事只能在 ``recompute()`` /
+     * 挂载时自己认出来（见模块 AGENTS.md → L2 P4 陷阱 24）。
+     */
+    async resetForRecord() {
+        const resId = this.props.record?.resId || false;
+        resetMappingStore(this.store, resId);
+        // 上一份「未保存」标记要跟着一起撤掉，否则新记录上还挂着 Save manually
+        this.props.record.model.bus?.trigger("FIELD_IS_DIRTY", false);
+        await this.load();
     }
 
     willUnmount() {
@@ -560,6 +585,8 @@ export class VariantMappingPanel extends Component {
         if (!record || !record.resId) {
             return;
         }
+        // 新建的产品保存之后才有 id：记下来，免得又被当成「换了记录」反复作废
+        this.store.resId = record.resId;
         if (!this.store.snapshot) {
             this.store.snapshot = await this.orm.call(
                 "product.template",
@@ -585,8 +612,17 @@ export class VariantMappingPanel extends Component {
      */
     async recompute() {
         const record = this.props.record;
+        if (!record) {
+            return;
+        }
+        // 换了记录（New / 翻页 / 新建保存后拿到 id）：旧快照与旧分配都不再属于这条记录
+        const resId = record.resId || false;
+        if (this.store.resId !== resId) {
+            await this.resetForRecord();
+            return;
+        }
         const snapshot = this.store.snapshot;
-        if (!record || !record.resId || !snapshot) {
+        if (!resId || !snapshot) {
             return;
         }
         // 不走 ``record.getChanges()``：保存钩子是在 mutex 里调它的，会死锁（陷阱 21）
@@ -664,6 +700,18 @@ export class VariantMappingPanel extends Component {
 
     get isEditable() {
         return this.props.record.isInEdition;
+    }
+
+    /**
+     * 面板要不要显示：**已保存的产品**、且快照确实属于**当前这条记录**时才显示。
+     *
+     * 新建（还没有 id）时没有既有变体可映射；换到另一条记录后，重算与取快照都是异步的
+     * （防抖 150ms / 兜底 1s + 一次 RPC），这段时间里**先藏起来** —— 否则界面上挂着的
+     * 是上一条产品的映射，用户会当成这一条的（见模块 AGENTS.md → L2 P4 陷阱 24）。
+     */
+    get showPanel() {
+        const resId = this.props.record?.resId || false;
+        return Boolean(resId) && this.store.resId === resId;
     }
 
     /** 面板标题（原来只有一句说明，看不出这一块是干什么的）。 */

@@ -15,7 +15,9 @@
         模板只负责渲染，不写句子。
     -->
     <t t-name="product_variant.VariantMappingPanel">
-        <div class="o_variant_mapping_panel mt-3 w-100">
+        <!-- 新建（还没保存）的产品没有既有变体可映射；换记录后快照还没取回来时先整块藏起来，
+             免得把上一条产品的映射当成这一条的（见 AGENTS.md → L2 P4 陷阱 24） -->
+        <div t-if="showPanel" class="o_variant_mapping_panel mt-3 w-100">
             <h5 class="o_variant_mapping_title border-bottom pb-1 mb-2" t-esc="panelTitle"/>
             <div class="text-muted" t-esc="introLabel"/>
             <div t-if="unassignedCount" class="alert alert-warning mt-2 mb-1" t-esc="unassignedHint"/>
