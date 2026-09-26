@@ -30,8 +30,16 @@ patch(FormController.prototype, {
     /** 重算面板并返回映射 store（面板可能没挂载，例如用户从别的页签保存）。 */
     async ensureMappingStore() {
         const store = getMappingStore(this.model);
-        await this.model.variantMappingPanel?.recompute();
-        this.model.variantMappingPanel?.refreshRows();
+        // 面板可能已经跟着上一次的表单销毁了（model 上的引用那时会被摘掉）：
+        // 这时候只能拿 store 里算过的结果，不能再去重算 —— 已销毁组件的服务调用会被
+        // useService 当场拒掉（"Component is destroyed"，见模块 AGENTS.md → L2 P4 陷阱 26）
+        const panel = this.model.variantMappingPanel;
+        if (panel?.isAlive) {
+            await panel.runGuarded(() => panel.recompute());
+            if (panel.isAlive) {
+                panel.refreshRows();
+            }
+        }
         return store;
     },
 
@@ -113,14 +121,13 @@ patch(FormController.prototype, {
     async settleMappingAfterSave() {
         const store = getMappingStore(this.model);
         const panel = this.model.variantMappingPanel;
-        if (panel) {
+        // 面板已经跟着表单销毁了就别再碰它的响应式状态（那会被 Owl 抛 "Component is destroyed"）
+        if (panel?.isAlive) {
             panel.store.snapshot = null;
-            try {
-                await panel.load();
-            } catch {
-                // 快照取不回来就等面板下次挂载时再取：保存已经成功了，不该因为它而失败
-                store.snapshot = null;
-            }
+            // 走 runGuarded：面板可能在 await 期间被 destroy（用户保存完立刻切页签），
+            // 那时 ORM 的答复会变成永不 settle 的 promise —— 不能让整个 save() 跟着挂住
+            // （保存已经成功；新挂载的面板实例会自己重取快照并重建基线）
+            await panel.runGuarded(() => panel.load());
         } else {
             store.snapshot = null;
         }

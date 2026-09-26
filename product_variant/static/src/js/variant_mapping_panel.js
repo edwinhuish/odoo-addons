@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, onPatched, useState } from "@odoo/owl";
+import { Component, onPatched, onWillDestroy, useState } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { patch } from "@web/core/utils/patch";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
@@ -415,6 +415,21 @@ function assignmentSignature(assignment) {
         .join("|");
 }
 
+/** Owl ``ComponentNode.status`` 的 DESTROYED 取值（``web/static/lib/owl/owl.js``）。 */
+const OWL_STATUS_DESTROYED = 3;
+
+/**
+ * 纯函数：这个错误是不是「组件已经销毁了」（Odoo ``useService`` 的保护机制）。
+ *
+ * 组件被销毁之后再去调服务方法，``useService`` 不会真的发请求，而是直接返回一个被拒的
+ * promise（``Error("Component is destroyed")``，见 ``web/static/src/core/utils/hooks.js``
+ * 里的 ``useServiceProtectMethodHandling``）—— 那是**收尾时的正常现象**（用户在在飞的请求
+ * 回来之前关了表单 / 换了视图），不是缺陷，也没有对象可以展示它的错误。
+ */
+export function isDestroyedError(error) {
+    return String((error && error.message) || error) === "Component is destroyed";
+}
+
 /** 纯函数：字典里「值为真的键」的稳定签名（与插入顺序无关）。 */
 function truthyKeysSignature(dict) {
     return Object.keys(dict || {})
@@ -577,15 +592,33 @@ export class VariantMappingPanel extends Component {
     setup() {
         this.orm = useService("orm");
         this.store = useState(getMappingStore(this.props.record.model));
+        // 每次重取快照领一个号：只有「最后一趟」的回复才作数（见 load()）
+        this.loadToken = 0;
+        // 组件被销毁时放行所有等待者：Odoo 会把「已销毁组件在飞请求」的答复换成
+        // **永不 settle** 的 promise，await 它的人必须有别的出路（见 AGENTS.md → L2 P4 陷阱 26）
+        this.destroyedPromise = new Promise((resolve) => {
+            this.releaseOnDestroy = resolve;
+        });
         // 保存钩子要用同一个实例重算（用户可能在本页改完就走保存）
         this.props.record.model.variantMappingPanel = this;
+        // 组件被销毁（关表单 / 换视图）后必须把这份引用摘掉：否则保存钩子还会拿一张已销毁的
+        // 面板去算 —— 而 Odoo 的 useService 保护会把它的服务调用当场拒掉
+        // （"Component is destroyed"，见模块 AGENTS.md → L2 P4 陷阱 26）
+        onWillDestroy(() => {
+            this.stopTimers();
+            this.releaseOnDestroy();
+            const model = this.props.record && this.props.record.model;
+            if (model && model.variantMappingPanel === this) {
+                model.variantMappingPanel = null;
+            }
+        });
         // 切换产品记录时 model 是复用的：先把上一份映射（含基线）清掉，免得串记录
-        this.resetForRecord();
+        this.runGuarded(() => this.resetForRecord());
         // 属性行增删、勾取值都会让 record 变化：统一防抖后重算（重算里再按签名去重）
         useRecordObserver(() => this.scheduleRefresh());
         // 兜底自检：Odoo 的 observer 触发条件依赖内部实现（见 AGENTS.md → L2 P4 陷阱 16），
         // 面板挂载期间每秒本地比较一次签名；没变化时 recompute() 直接返回，没有开销。
-        this.pollTimer = setInterval(() => this.scheduleRefresh(), 1000);
+        this.pollTimer = setInterval(() => this.safeRefresh(), 1000);
     }
 
     /**
@@ -605,8 +638,49 @@ export class VariantMappingPanel extends Component {
     }
 
     willUnmount() {
+        this.stopTimers();
+    }
+
+    /** 这个组件还能用吗？已销毁的组件再碰响应式状态就会被 Owl 抛 "Component is destroyed"。 */
+    get isAlive() {
+        return Boolean(this.__owl__) && this.__owl__.status !== OWL_STATUS_DESTROYED;
+    }
+
+    /** 防抖 / 轮询的定时器一并停掉：组件都不在了，没必要再算（销毁与卸载都会走到）。 */
+    stopTimers() {
         clearTimeout(this.refreshTimer);
         clearInterval(this.pollTimer);
+        this.refreshTimer = null;
+        this.pollTimer = null;
+    }
+
+    /**
+     * 面板**所有异步逻辑的统一入口**：把异常收在这里，绝不冒成 UncaughtPromiseError。
+     *
+     * 面板只是产品表单上的一层辅助表：它重算失败了，用户也不该被一条 traceback 打断正在录的
+     * 单据 —— 真正拦不住的那道闸门在服务端（缺映射时它会给出明确报错）。
+     */
+    async runGuarded(action) {
+        try {
+            // 与 destroyedPromise 竞赛：面板一旦被销毁就不再等它（那时候请求答复会变成
+            // 永不 settle 的 promise，等下去只会把调用方——比如 save()——拖死）
+            await Promise.race([Promise.resolve(action.call(this)), this.destroyedPromise]);
+        } catch (error) {
+            if (!this.isAlive || isDestroyedError(error)) {
+                // 组件已经被销毁：没有对象可以继续算，也没有界面可以报错，静默收尾
+                return;
+            }
+            console.warn("Variant mapping panel could not be refreshed", error);
+        }
+    }
+
+    /** 定时器 / observer 用的入口：面板不在了直接返回。 */
+    safeRefresh() {
+        if (!this.isAlive) {
+            this.stopTimers();
+            return Promise.resolve();
+        }
+        return this.runGuarded(() => this.recompute());
     }
 
     // ------------------------------------------------------------------
@@ -616,17 +690,32 @@ export class VariantMappingPanel extends Component {
     /** 取一次快照（有缓存就不重复取），然后重算映射。 */
     async load() {
         const record = this.props.record;
-        if (!record || !record.resId) {
+        // 组件已经没了（保存后立刻切页签那一类）：这一趟请求注定被 useService 拒掉，不必发
+        if (!record || !record.resId || !this.isAlive) {
             return;
         }
         // 新建的产品保存之后才有 id：记下来，免得又被当成「换了记录」反复作废
         this.store.resId = record.resId;
         if (!this.store.snapshot) {
-            this.store.snapshot = await this.orm.call(
-                "product.template",
-                "get_variant_mapping_snapshot",
-                [[record.resId]]
-            );
+            // 领号：翻页 / 点 New 很快时，上一趟请求可能晚一步才回来，那答复属于**旧记录**，
+            // 直接丢掉（见下面的 token 比对）
+            const token = ++this.loadToken;
+            try {
+                this.store.snapshot = await this.orm.call(
+                    "product.template",
+                    "get_variant_mapping_snapshot",
+                    [[record.resId]]
+                );
+            } catch (error) {
+                // 组件已经被销毁时，useService 不会发请求、直接拒 —— 收尾时的正常现象
+                if (!this.isAlive || isDestroyedError(error)) {
+                    return;
+                }
+                throw error;
+            }
+            if (!this.isAlive || token !== this.loadToken) {
+                return;
+            }
         }
         this.store.signature = undefined;
         await this.recompute();
@@ -635,7 +724,7 @@ export class VariantMappingPanel extends Component {
     /** 变化很密（加一行 / 勾一个取值都会触发），防抖后只算一次。 */
     scheduleRefresh() {
         clearTimeout(this.refreshTimer);
-        this.refreshTimer = setTimeout(() => this.recompute(), 150);
+        this.refreshTimer = setTimeout(() => this.safeRefresh(), 150);
     }
 
     /**
@@ -646,7 +735,9 @@ export class VariantMappingPanel extends Component {
      */
     async recompute() {
         const record = this.props.record;
-        if (!record) {
+        // 组件已经被销毁（关表单 / 换视图）：最后一个定时器回调也要收尾，别再往下算
+        if (!record || !this.isAlive) {
+            this.stopTimers();
             return;
         }
         // 换了记录（New / 翻页 / 新建保存后拿到 id）：旧快照与旧分配都不再属于这条记录
@@ -953,7 +1044,8 @@ export class VariantMappingPanel extends Component {
 function notifyMappingPanel(component) {
     const model = component?.props?.record?.model || component?.props?.list?.model;
     if (model?.variantMappingPanel) {
-        onPatched(() => model.variantMappingPanel.scheduleRefresh());
+        // 用可选链：面板被销毁时 model 上的引用会被摘掉，这里再读它就是 null 了
+        onPatched(() => model.variantMappingPanel?.safeRefresh());
     }
 }
 

@@ -13,7 +13,13 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantMappingPanel`（「属性 ↔ 变体」映射表，field widget）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给映射表补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.13.1.0`（19.0.13.1.0：**组合可以选择「不生成变体」** —— 映射表 Variant 下拉新增
+- 当前版本：`19.0.13.1.1`（19.0.13.1.1：**修「保存后立刻切页签 / 关表单 / 快速翻页冒 `UncaughtPromiseError: Component is destroyed`」**
+  —— Odoo 的 `useService` 在组件已销毁时会把服务调用**直接拒掉**（报错这一帧），而请求在飞、回来时
+  组件才销毁的则会给出**永不 settle** 的 promise（会把 `save()` 挂死）；面板那条
+  `recompute → resetForRecord → load → ORM.call` 异步链（`19.0.13.0.7` 起）没有一处 catch，
+  rejection 就冒到了顶层；另 model 上挂的实例在销毁时没摘，保存钩子还在拿它重算。
+  四处修复统一走 `runGuarded()` / `safeRefresh()` + `isDestroyedError()` / `isAlive` / `destroyedPromise`，
+  见 L2 P4 陷阱 26；19.0.13.1.0：**组合可以选择「不生成变体」** —— 映射表 Variant 下拉新增
   `Do not create a variant`（`store.skipped`），服务端在转换末尾丢弃标了不生成的组合**本次刚建出来**
   的那条变体；它与「由既有变体保留」互斥（两道闸门：前端禁用 + 服务端按锚点拒绝），见 L1 约束 1
   最后一条；19.0.13.0.7：**修「点 New 后映射表还是上一个产品的」** —— 点 New / 翻页走
@@ -760,6 +766,45 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 - 判断标准：本模块里任何 `unlink()` 都要回答「会不会连带删掉产品模板」「缓存有没有作废」；
   改动后跑一次「标掉最多的组合」的边界用例（见 L1 约束 1 的例外）。
 
+26. **切页签会把面板组件 destroy 掉 —— 异步链不能在已销毁的组件上续跑（`19.0.13.1.1`，目标环境实测）**
+- 现象（目标环境 2026-09-26 08:54，用户操作：**点 Save 之后立刻切到 `Attributes & Variants` 页签**）：
+  ```
+  UncaughtPromiseError > Uncaught Promise > Component is destroyed
+      at Object.original (hooks.js useServiceProtectMethodHandling.original)
+      at ORM.call → VariantMappingPanel.load → resetForRecord → recompute
+  ```
+- 根因是**三条压到一起**：
+  1. **切 Notebook 页签 = 换组件**：`web/static/src/core/notebook/notebook.xml:18` 是
+     `<t t-if="page" t-component="page.Component" t-key="state.currentPage" />` —— **只渲染当前页**，
+     且 key 是当前页 id。切走 = 旧页组件 **destroy**（`ComponentNode.status = 3`）；
+     切回来 = **新建一个面板实例**（`setup()` 重跑，model 与 store 却是复用的）。
+  2. **Odoo 的 `useService` 保护有两个分支**（`web/static/src/core/utils/hooks.js::_protectMethod`）：
+     - 组件**已销毁时调用**服务方法 → 直接 `Promise.reject(new Error("Component is destroyed"))`
+       **（就是这条报错：ORM.call 被「调用」的那一刻组件已经没了）**；
+     - 请求**已发出、答复回来时**组件才销毁 → `.then(() => new Promise(() => {}))`
+       —— **永不 settle**。这条不报错，但会把所有 `await` 它的人一起挂死（当时的
+       `settleMappingAfterSave()` → `await panel.load()` 就是这样把 `save()` 拖住不返回的）。
+  3. `19.0.13.0.7` 起的「换记录由 `recompute()` 认」把 1 秒轮询/定时器 → `recompute` →
+     `resetForRecord` → `load` → `ORM.call` 变成了**异步链**，而调用者分散在 `setup()`、
+     防抖定时器、每秒轮询、o2m 的 `onPatched()`、**FormController 的保存钩子**里 —— **没有一处 catch**。
+     另 `model.variantMappingPanel` 这份跨组件引用在销毁时没摘，保存钩子还在拿它重算。
+- 正确做法（四处，都已在 `19.0.13.1.1` 落地）：
+  1. `isDestroyedError()`（纯函数，认这个错误）+ `isAlive`（`this.__owl__.status !== 3`，
+     Owl `ComponentNode` 的 DESTROYED，见 `web/static/lib/owl/owl.js`）；
+  2. **`runGuarded()` / `safeRefresh()` 是面板唯一的异步入口**：异常收在面板内（非「组件已销毁」
+     的错误只 `console.warn`，不打扰用户正在录的单据），并且一律
+     `Promise.race([action(), this.destroyedPromise])` —— **面板被销毁就立刻放行**，避免上述
+     「永不 settle」把调用方（含 `save()`）挂死；
+  3. `onWillDestroy()`：停定时器、放行等待者、**把 model 上的实例引用摘掉**；表单 patch 侧对可能
+     已销毁的面板一律 `panel?.isAlive` 之后才用（别去改它的响应式状态）；
+  4. `load()` 每次取快照领一个号（`loadToken`）：快读翻页 / 点 New 时上一趟答复可能晚一步回来，
+     那份答复属于**旧记录**，直接丢弃。
+- 判断标准：**凡是组件自己起的异步链**，都要回答三件事 ——「回调回来时组件还在吗」（链上只要有一个
+  `await`，回来时就可能已经进坟墓了）、「谁来 catch」、「被销毁组件的服务调用会不会把调用方挂死」。
+  看到 `UncaughtPromiseError` 先查「是不是 `await` 了一个跨组件生命周期的 promise」，
+  别急着怀疑业务逻辑。切换页签 / 关表单 / 快速翻页这几类操作要在**真实网络延迟**下手动验
+  （本地 dev 请求太快，很难复出这条栈）。
+
 ### P5：业务场景、数据流与一致性边界（评估完整性 / 排障时读）
 
 **触发条件**：判断「某个改动会不会被本模块拦住」、评估业务场景完整性、回答「库存 / 价格为什么没跟着走」时。
@@ -904,7 +949,11 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   所以其它模块要用 `create` 带属性行程序化产生多变体产品仍然可行。
 - 升级 Odoo 必须回归的内部 API：`_filter_combinations_impossible_by_config()`、`_without_no_variant_attributes()`、
   `_create_variant_ids()`、`FormController.onWillSaveRecord`、`Record._getChanges()` 的 `forceSave` 语义、
-  `product.template.attribute.value.unlink()` 里的 `_unlink_or_archive()` 行为。
+  `product.template.attribute.value.unlink()` 里的 `_unlink_or_archive()` 行为；
+  另有**前端**三处：`useService` 的保护行为（`hooks.js::_protectMethod`，销毁后调用是否仍 reject
+  「Component is destroyed」、`isDestroyedError()` 的判定串有没有变）、
+  Owl `ComponentNode.status` 的取值（DESTROYED 目前是 `3`，`isAlive` 依赖它）、
+  Notebook 未选中页的渲染方式（`notebook.xml` 的 `t-component` + `t-key`：切走是否仍然 destroy）。
 
 ---
 

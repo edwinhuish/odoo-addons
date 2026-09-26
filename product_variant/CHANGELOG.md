@@ -56,6 +56,73 @@
   ③ 用分页翻到另一条产品 → 映射按那条产品重算（不是上一条的）；④ 回到原产品改属性 → 映射照旧，
   未分配提示与保存拦截不受影响。
 
+## [19.0.13.1.1] - 2026-09-26（修「保存后立刻切页签 / 关表单 / 快速翻页冒 `UncaughtPromiseError: Component is destroyed`」）
+
+> 修订日期：2026-09-26 ｜ 类型：修复（+z） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`static/src/js/variant_conversion_form_patch.js`、
+> `tests/js/variant_mapping_pure.mjs`（+1 用例）、`__manifest__.py`、`README.md` / `AGENTS.md`
+
+> 目标环境实测报错：`UncaughtPromiseError > Uncaught Promise > Component is destroyed`，
+> 栈是 `VariantMappingPanel.load → ORM.call → Object.fn → Object.original`。
+> **与「不生成变体」无关**，是 `19.0.13.0.7` 引入的「换记录由 ``recompute()`` 认」在本地开发
+> （请求几乎瞬时）没露面、在真实网络延迟下才现形的问题。
+>
+> **用户给的确切操作**：点 **Save** 之后**立刻**切到 `Attributes & Variants` 页签。
+> 这一步为什么致命：`notebook.xml` 只渲染当前页内容 ``t-component="page.Component" t-key="state.currentPage"``
+> —— **切页签 = 旧页组件被 destroy**（不是隐藏），而保存钩子那条异步链还挂在旧实例上继续跑。
+
+### 变更
+
+1. **根因：异步链上没有一处 catch，而 Odoo 会主动把请求拒掉**。
+   Odoo 的 ``useService`` 保护机制（`web/static/src/core/utils/hooks.js` 里的
+   ``useServiceProtectMethodHandling``）在**组件已销毁**时调服务方法，不会真的发请求，
+   而是直接返回 ``Promise.reject(new Error("Component is destroyed"))``。
+   面板这条 ``recompute() → resetForRecord() → load() → ORM.call()`` 是 `19.0.13.0.7` 才有的
+   异步链（之前 recompute 是纯同步的），而调用它的人分布在 `setup()`、防抖定时器、
+   每秒轮询、o2m 的 `onPatched()` —— **没有一处 catch**，rejection 就冒成了全局
+   `UncaughtPromiseError`。
+2. **第二处隐患：`model.variantMappingPanel` 引用悬挂**。
+   面板为了「从别的页签保存」把实例挂在 model 上，但组件销毁时没摘。表单/面板一旦销毁
+   （关表单、切到别的视图），保存钩子（`ensureMappingStore()` / `settleMappingAfterSave()`）
+   仍拿着它去重算，甚至写它的响应式状态 —— 也会被上面的保护拒掉并把错误传给用户。
+3. **修复（四处）**：
+   - 新增纯函数 ``isDestroyedError()``（认出这个错误）+ ``isAlive`` getter
+     （``this.__owl__.status !== 3``，Owl `ComponentNode` 的 DESTROYED，见 `web/static/lib/owl/owl.js`）；
+   - 新增 ``runGuarded()`` / ``safeRefresh()``：面板**所有**异步入口统一走它们，异常收在面板内
+     （非「组件已销毁」的错误只 `console.warn`，不打扰用户正在录的单据 ——
+     真正拦不住的闸门在服务端那层）；
+   - ``onWillDestroy()`` 里停定时器并把 model 上的实例**主动摘掉**；表单 patch 侧对可能已销毁的
+     面板一律 ``panel?.isAlive`` 保护后才用；
+   - ``load()`` 里给每次取快照发一个号（``loadToken``）：快速翻页 / 点 New 时**上一趟**回复可能
+     晚一步回来，那答复属于旧记录，直接丢弃（修的是同一类竞态，顺手一起做）。
+   - **顺带修一个没人报错但同样严重的**：``useService`` 保护的**另一个分支**是「请求已发出、答复回来时
+     组件才销毁 → 返回**永不 settle** 的 promise」（``hooks.js::_protectMethod``）。用户这个操作下，
+     保存钩子里的 ``await panel.load()`` 就是这样把整个 ``save()`` **挂成永不返回**（保存其实早就成功了）。
+     ``runGuarded()`` 现在一律 ``Promise.race([action(), this.destroyedPromise])`` —— 面板被销毁就放行
+     （重新挂载的那个新实例会自己重取快照 + 重建基线，不需要老实例操心）。
+5. 离线自测加一条：`isDestroyedError()` 要认得出这个错误、也不误判别的错误。
+
+### 影响
+
+- 只改异常收尾路径：**正常链路（算表格、保存、拦截）行为完全不变**。
+- 面板现在是「失败了也不添乱」：静默收尾 + 控制台留线索，不再弹 traceback。
+- 无数据迁移、不改后端；**需要 `-u product_variant` + 强刷浏览器**（前端资源变了）。
+- 没新增用户可见文案，本版不动 `i18n/zh_CN.po`。
+
+### 验证
+
+- `node product_variant/tests/js/variant_mapping_pure.mjs` → **20 项全过**（含新增 1 项）；
+  `task check` 通过（JS 语法 / po / 应用列表元数据一致性）。
+- 待目标环境复现验证（本地 dev 库请求太快，很难复出这条栈）：
+  ① **用户报的那一步（重点）**：在产品表单上改属性（或只改映射）→ 点 **Save** →
+  **不等它转完立刻切到 `Attributes & Variants` 页签** → 三件事都要成立：控制台**不再出现**
+  `Component is destroyed`、保存**确实落库**（离开再回来样子是对的）、右上角 Save 按钮
+  不会一直灰着（``save()`` 不再被挂死）；
+  ② 打开一个多变体产品 → 属性行改动让面板开始取快照 → **立刻关掉表单 / 切到别的菜单**
+  → 控制台不再出现 `Component is destroyed`；
+  ③ 产品列表里**连点翻页**（上一页还没取完就翻下一页）→ 不再报错，且面板最终显示的是
+  **当前这条产品**的组合。
+
 ## [19.0.13.1.0] - 2026-09-26（组合可以选择「不生成变体」）
 
 > 修订日期：2026-09-26 ｜ 类型：功能（+y） ｜ 影响文件：

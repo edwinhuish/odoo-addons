@@ -34,6 +34,7 @@ const {
     buildVariantOptions,
     computeVariantMapping,
     emptyMappingStore,
+    isDestroyedError,
     mappingDiffersFromBaseline,
     mergeAttributeLines,
     resetMappingStore,
@@ -41,8 +42,9 @@ const {
     snapshotMappingBaseline,
 } = new Function(
     `${pure}; return { applyDefaultAssignment, applyValueCommands, buildMappingPayload, buildCombinationRows, ` +
-        `buildVariantOptions, computeVariantMapping, emptyMappingStore, mappingDiffersFromBaseline, ` +
-        `mergeAttributeLines, resetMappingStore, rowMatchesVariant, snapshotMappingBaseline };`
+        `buildVariantOptions, computeVariantMapping, emptyMappingStore, isDestroyedError, ` +
+        `mappingDiffersFromBaseline, mergeAttributeLines, resetMappingStore, rowMatchesVariant, ` +
+        `snapshotMappingBaseline };`
 )();
 
 const check = (label, fn) => {
@@ -358,6 +360,15 @@ check("映射改过才显示保存/丢弃：默认分配不算改动，动过才
 
     store.shareVendorPrices = true;
     assert.equal(mappingDiffersFromBaseline(store), true, "勾选框也属于映射状态");
+});
+
+check("「Component is destroyed」要被认出来（组件销毁后的正常收尾，不是功能错误）", () => {
+    // Odoo 的 useService 保护：组件销毁后调服务方法，会直接抛这个（不是我们发的请求失败）
+    assert.equal(isDestroyedError(new Error("Component is destroyed")), true);
+    assert.equal(isDestroyedError({ message: "Component is destroyed" }), true);
+    assert.equal(isDestroyedError("Component is destroyed"), true);
+    assert.equal(isDestroyedError(new Error("Access Denied")), false);
+    assert.equal(isDestroyedError(undefined), false);
 });
 
 check("换产品记录：映射状态**原地**清空（点 New / 翻页都不会串记录）", () => {
