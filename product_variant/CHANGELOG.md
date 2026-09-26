@@ -3,6 +3,46 @@
 > 倒序排列，最新版本在最前。每版本固定三段式：变更 / 影响 / 文档。
 > 版本号规则见根 `AGENTS.md` 第 3 节：架构/破坏性 +x，功能新增 +y，修复/文档 +z。
 
+## [19.0.13.0.6] - 2026-09-26（核查修订：文档同步 + 原生直写安全不变量用例）
+
+> 修订日期：2026-09-26 ｜ 类型：文档 / 测试（+z） ｜ 影响文件：
+> `models/product_template.py`（仅注释）、`tests/test_product_variant_mapping.py`（+1 用例）、
+> `README.md`、`__manifest__.py`、`AGENTS.md`
+
+### 变更
+
+1. **文档同步到当前实现**（README 自查发现的三处过期信息）：
+   - 示例映射表还是 `19.0.10.0.0` 之前的旧语义（每行一条变体、下拉选取值）→ 改为
+     现在的「行 = 组合、属性列只读、最后一列 Variant 下拉」，并补上未分配时的
+     `(new variant)` / 上方警告文案、选项标签带在手数量的写法；
+   - `_convert_to_multi_variant()` 的签名里多了源码已不存在的 `previous_attribute_lines` → 删除；
+   - 前端资源表补上 `static/src/scss/variant_mapping_panel.scss`（`19.0.13.0.5` 新增），
+     并把 `variant_mapping_panel.js` 的职责描述改成「每行一个属性组合」；
+   - 版本链路的「当前版本」还停在 `19.0.7.0.3` → 改为 `19.0.13.0.6`；
+   - 与自己的正文自相矛盾的两处：功能概述说「属性主数据也拦」，但「已知边界」仍写
+     「只拦产品表单改属性这一条路 / 会直接删除或归档既有变体」、「后续迭代」还把 `T-017`
+     列为待办 —— 实际 `product_attribute_guards.py` 早已交付且有测试
+     （`test_deleting_a_used_value_in_master_data_is_refused` /
+     `test_deleting_a_ptav_with_active_variants_is_refused`）。已改成「删除类直写路径已拦，
+     未覆盖的只剩 `attribute.line.create()`（新增行）」。
+2. **测试数口径修正**：README 多处写「55 项」（2026-09-24 的历史值）→ 新增当前口径行
+   （`task test -- product_variant`，**66 项**，2026-09-26），历史行保留但注明口径；
+   「前端交互没有自动化测试」改为「映射表没有浏览器级自动化测试」，并说明纯函数已有
+   `tests/js/variant_mapping_pure.mjs`（需手工跑，`task check` 只做 JS 语法检查）。
+3. **把「原生直写的安全不变量」显性化**（核查发现它此前只靠推理成立）：
+   - `write()` 里走原生直写那条分支补注释：走到它意味着「组合数 ≥ 启用变体数」且每条既有
+     变体都带全了多取值属性行的取值；归档变体若还带着活组合，会让
+     `expected_count > before_count`（`before_count` 只数启用变体）从而落到转换路径，被
+     `_check_variant_conversion_allowed()` 以「先恢复或删除归档变体」拒绝；这条分支**没有**
+     转换路径那样的后置断言，改判据时必须重验；
+   - 新增用例 `test_archived_variants_cannot_slip_through_the_native_save`：
+     产品带归档变体 + 「不新增变体」形态的改动 + 映射 → 抛
+     `archived variants` 且整单回滚（归档变体没有被 `_create_variant_ids()` 悄悄激活）。
+
+### 影响
+
+- 无行为变更（第 3 条只加注释与用例）；升级仅为拿到同步后的文档与版本号。
+
 ## [19.0.13.0.5] - 2026-09-25（映射表面板的说明 / 警告自动换行）
 
 > 修订日期：2026-09-25 ｜ 类型：修复（+z） ｜ 影响文件：

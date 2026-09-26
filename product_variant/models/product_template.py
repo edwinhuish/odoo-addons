@@ -189,6 +189,17 @@ class ProductTemplate(models.Model):
             # 往下走转换、用默认归属把每条既有变体的锚点写下去（没有新变体，所以不用弹窗确认）。
             if not affected["needs_anchoring"]:
                 if not mapping_payload:
+                    # 原生直写之所以安全，靠下面这条**不变量**（改上面判据时必须重验）：
+                    # 走到这里说明「组合数 >= 启用变体数」且每条既有变体都带全了所有**多取值**
+                    # 属性行的取值（否则 needs_anchoring），所以 `_create_variant_ids()` 不会把
+                    # 任何启用变体判成多余。归档变体同样不会被悄悄激活：它若还带着某个**活组合**，
+                    # 那个组合必然计入 expected_count，于是 expected_count > before_count
+                    # （before_count 只数启用变体，见 `_analyze_variant_conversion_write()`），
+                    # 流程会落到下面的转换路径，由 `_check_variant_conversion_allowed()` 以
+                    # 「先恢复或删除归档变体」拒绝；若它的组合已不是活组合，`_create_variant_ids()`
+                    # 用同一套排除规则也不会激活它。
+                    # 注意：这条分支**没有**转换路径那样的后置断言，靠的就是上述推理。
+                    # 用例：`test_archived_variants_cannot_slip_through_the_native_save`。
                     return super().write(vals)
                 # 用户在映射表里给每条既有变体指定了组合后，删属性行 / 删取值是**有意为之**：
                 # 典型是删掉产品上唯一的属性 —— 那条变体由映射继续承载「空组合」，不会被删。

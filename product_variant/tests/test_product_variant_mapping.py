@@ -9,7 +9,8 @@
 4. 单取值轴与「按需生成」轴由 Odoo 自己补取值，不算未映射；
 5. 会丢变体的改动（删取值）走不通，映射表拿到的是 blocked 而不是一堆未映射；
 6. 还有未映射变体时，保存被拒绝且一个字都不写库；
-7. 删掉唯一属性：带映射 → 那条变体原样留下（承载空组合）；不带映射 → 守卫照旧拦住。
+7. 删掉唯一属性：带映射 → 那条变体原样留下（承载空组合）；不带映射 → 守卫照旧拦住；
+8. 产品带归档变体时，哪怕是「不新增变体」的改动也不能走原生直写把归档变体悄悄激活。
 
 跑法（本地开发环境）：
 
@@ -349,3 +350,66 @@ class TestProductVariantMapping(TransactionCase):
             product.write({"attribute_line_ids": [Command.delete(line.id)]})
         self.assertIn("Removing the attribute", str(caught.exception))
         self.assertEqual(len(product.product_variant_ids), 1, "一个字都没写库")
+
+    # ------------------------------------------------------------------
+    # 归档变体：不能靠「组合数没变」的原生直写把它悄悄激活
+    # ------------------------------------------------------------------
+
+    def test_archived_variants_cannot_slip_through_the_native_save(self):
+        """产品带归档变体时，即便改动「不新增变体」也必须被拒绝，不能交给原生直写。
+
+        原生的 ``_create_variant_ids()`` 匹配组合时会一并考虑归档变体（``active_test=False``），
+        命中就 ``write({'active': True})`` —— 老变体会被悄悄复活，库存与单据重新暴露在界面上。
+
+        拦住它靠的是这条**不变量**：归档变体若还带着某个活组合，那个组合必然计入
+        ``expected_count``，而 ``before_count`` 只数**启用**变体，于是
+        ``expected_count > before_count``，流程落到转换路径，由
+        ``_check_variant_conversion_allowed()`` 以「先恢复或删除归档变体」拒绝。
+        原生直写分支没有后置断言，所以这条用例把这个不变量钉住
+        （见 ``models/product_template.py`` → ``write()`` 里的注释）。
+        """
+        product = self._configure(self._create_product(), self.color, self.color.value_ids)
+        variants = product.product_variant_ids
+        self.assertEqual(len(variants), 2)
+        archived = variants[1]
+        archived.write({"active": False})
+        active = product.product_variant_ids
+        self.assertEqual(len(active), 1, "归档后只剩一条启用变体")
+
+        # 加一个单取值属性：组合数 2 = 1（Color 剩余取值）× 1（新属性），
+        # 「不新增变体」的形态 —— 正是原生直写会走的形状
+        single = self.env["product.attribute"].create({
+            "name": "Mapping Single",
+            "value_ids": [(0, 0, {"name": "Map One"})],
+        })
+        commands = self._set_commands(product, single, single.value_ids)
+        payload = json.dumps({
+            "mapping": [{
+                "values": (active.product_template_attribute_value_ids
+                           .product_attribute_value_id.ids + single.value_ids.ids),
+                "origin_variant_id": active.id,
+            }],
+            "share_vendor_prices": False,
+        })
+
+        # 用保存点模拟 Web 层：UserError 抛出时整个请求回滚（否则 write() 里第①步
+        # 「只写配置」已写的属性行会留在事务里 —— 那是调用方要不要回滚的问题，
+        # 前端请求会因为报错整单回滚，这里用保存点还原同样的结果）
+        with self.assertRaises(UserError) as caught:
+            with self.env.cr.savepoint():
+                product.write({
+                    "attribute_line_ids": commands,
+                    "variant_conversion_mapping": payload,
+                })
+        self.assertIn("archived variants", str(caught.exception))
+
+        product.invalidate_recordset()
+        archived.invalidate_recordset()
+        self.assertEqual(len(product.product_variant_ids), 1, "归档变体没有被悄悄激活")
+        self.assertEqual(
+            len(product.with_context(active_test=False).product_variant_ids), 2,
+            "两条变体都还在（一条启用、一条归档）")
+        self.assertFalse(archived.active, "归档状态没有被改写")
+        self.assertFalse(
+            product.attribute_line_ids.filtered(lambda line: line.attribute_id == single),
+            "整单回滚：新属性行没有留下")

@@ -13,7 +13,9 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantMappingPanel`（「属性 ↔ 变体」映射表，field widget）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给映射表补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.13.0.5`（19.0.13.0.5：**面板说明 / 警告文字自动换行** —— 样式放
+- 当前版本：`19.0.13.0.6`（19.0.13.0.6：**核查修订** —— README 同步到当前实现
+  （映射表示例 / 签名 / 前端资源表 / 测试数口径）、把「原生直写的安全不变量」写成注释与用例
+  （见 L2 P4 陷阱 22 第 4 条）；19.0.13.0.5：**面板说明 / 警告文字自动换行** —— 样式放
   `static/src/scss/variant_mapping_panel.scss`：`min-width: 0` + `overflow-wrap: anywhere`
   把 CSS Grid 轨道压住，长句（含无空格长词）不再顶出 `.o_form_sheet`，见 L2 P4 陷阱 23；
   19.0.13.0.4：**删唯一属性时守卫放行** —— 带着映射保存时，先校验「每条
@@ -677,6 +679,16 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
   不能替用户处理掉（用例 `test_removing_the_only_attribute_without_mapping_is_still_blocked`）。
 - 判断标准：凡是「放宽守卫」的改动，都要有一个**可校验的前提**（这里是「每条既有变体都有
   组合」），并且**不带前提时行为不变**；不要直接把守卫删掉。
+- 第 4 条（`19.0.13.0.6` 补）：**原生直写那条分支没有后置断言**，它的安全靠一条不变量 ——
+  走到它意味着「组合数 ≥ 启用变体数」且每条既有变体都带全了所有**多取值**属性行的取值
+  （否则 `needs_anchoring`）；**归档变体**若还带着某个活组合，那个组合必然计入
+  `expected_count`，而 `before_count` 只数**启用**变体（`_analyze_variant_conversion_write()`
+  里 `variants = self.product_variant_ids`），于是 `expected_count > before_count`，流程落到转换
+  路径、被 `_check_variant_conversion_allowed()` 以「先恢复或删除归档变体」拒绝；它的组合
+  已不是活组合时，`_create_variant_ids()` 用同一套排除规则也不会激活它。
+  用例 `test_archived_variants_cannot_slip_through_the_native_save` 钉住这条不变量
+  （归档变体 + 「不新增变体」形态 + 映射 → 报 `archived variants` 且整单回滚）。
+  **改 `expected_count` / `before_count` / `needs_anchoring` 的算法时必须重跑这条用例。**
 
 23. **面板的说明 / 警告文字必须自动换行、不能顶出 `.o_form_sheet`（`19.0.13.0.5`）**
 - 现象：映射表上方那段说明与「N 条变体未分配」的警告是**一整行长句**，直接溢出产品表单纸面，
