@@ -170,7 +170,7 @@
 | `views/product_template_views.xml` | 产品表单头像字段 widget 改为 `product_image_gallery`、列表增「Images」列（主图缩略 `image_128`，可选只读） |
 | `views/product_product_views.xml` | 变体「独立编辑」表单（`product_variant_easy_edit_view`）图片字段 widget 换 `product_image_gallery` + 变体图库不可见 One2many 元数据声明 |
 | `views/product_image_views.xml` | 图库独立列表/表单/搜索视图与动作 |
-| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮局部放大（放大镜跟随鼠标）/ 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（选中切换·滚动·「+」开管理弹窗·选中蓝边框）/ 管理弹窗回调（列表快照 getItems / 删除按 type+key 分派——图库 key 为 `g<id>` 需解析后定位 / 拖动排序 onReorder 按 10 步长写 sequence / 上传写入主图或追加图库且按稳定 key 锚定页面展示不上跳新图） |
+| `static/src/js/product_image_gallery.js` | `product_image_gallery` widget：主图 2 倍 / 悬浮局部放大（放大镜跟随鼠标）/ 点击预览入口 / 展示序列（主图+图库）/ 右侧缩略图（选中切换·滚动·「+」开管理弹窗·选中蓝边框）/ 管理弹窗回调（列表快照 getItems / 删除按 type+key 分派——图库 key 为 `g<id>` 需解析后定位 / 拖动排序 onReorder 按 10 步长写 sequence / 上传写入主图或追加图库且按稳定 key 锚定页面展示不上跳新图）；**图库行的删除一律走列表官方 `delete(record)`（19.0.2.6.6 起，见 L1 约束 13）** |
 | `static/src/xml/product_image_gallery.xml` | widget QWeb 模板：主图 + 悬浮浮层 + 右侧缩略图列（无删除按钮）+ 预览弹窗 |
 | `static/src/js/product_image_preview.js` | `ProductImagePreviewDialog`：全屏预览，放大/缩小/旋转 |
 | `static/src/xml/product_image_preview.xml` | 预览弹窗 QWeb 模板 |
@@ -249,6 +249,13 @@
 - `CHANGELOG.md` 的版本说明（变更 / 影响 / 文档）
 - 本 `AGENTS.md` 的相关约束（若涉及行为变更）
 - `README.md` 的功能说明（若涉及用户可见功能）
+
+修复类版本额外要求（便于版本追踪）：
+- `CHANGELOG.md` 条目里写清 **修正日期**、**修正位置**（文件 + 方法 / 代码位置）与**涉及范围**
+  （改了什么、没改什么、是否需要迁移脚本）——样式照 `[19.0.2.6.6]`
+- 若根因是被推翻的旧认知，**同步更正原来的注释 / 文档**（如 19.0.2.6.6 把「虚拟 id」改成
+  「datapoint 内部 id」），并在 `AGENTS.md` 文末「回归修复」小节留一份现象 / 根因 / 备选方案记录
+- 根 `README.md` 模块一览表与根 `AGENTS.md` 模块表同步版本号与状态；`TODO.md` 补归档条目
 
 改完先跑测试（`tests/` 目录的用例；含可选模块的页面用例需要装齐 stock / sale / purchase）：
 
@@ -714,6 +721,10 @@ task test -- product_image,stock,sale_management,purchase --test-tags=/product_i
 > 生产环境（`odoo.nas.leyings.cn:20000`，2026-09-26）报错，属于 **Odoo 19 前端 datapoint id 与 x2many 命令 id 混用**这一类问题。
 > 同类教训在 `product_reference/static/src/js/product_reference_manage.js` 的 `onDelete()` 注释里已记过一次（那边是「删空行不生效」），
 > 本模块这次踩得更重：**不只是没反应，而是把脏 id 发到服务端导致 SQL 报错**。
+>
+> **修正日期**：2026-09-26 ｜ **落地版本**：`19.0.2.6.6` ｜ **状态**：已交付，待目标环境复验 ｜
+> **修正位置**：`static/src/js/product_image_gallery.js`（3 处删除命令 + 1 处 import + 2 处注释）
+> ｜ **触发任务**：`T-044`（根 `TODO.md`）｜ 变更日志：本模块 `CHANGELOG.md` → `[19.0.2.6.6]`
 
 ### 1. 现象与报错
 
@@ -749,6 +760,20 @@ task test -- product_image,stock,sale_management,purchase --test-tags=/product_i
   「datapoint 内部 id，仅前端做 key，不得下发」。
 - **不变量（已写进 L1 约束 13）**：图库行的删除 / 撤销只允许走 `list.delete(record)`；
   `record.id` 只能出现在前端 key / 比较里，绝不能出现在发给服务端的 x2many 命令里。
+
+**修正位置明细**（全部在 `static/src/js/product_image_gallery.js`；行号会随版本漂移，按方法名定位）：
+
+| # | 位置 | 修正内容 | 修改原因 |
+|---|---|---|---|
+| 1 | `onGalleryRemove()` | `x2ManyCommands.unlink(rec.id)` / `delete(rec.resId)` 分支 → `await list.delete(rec)` | 未保存的新行必须走 `DELETE` 撤销待发 `CREATE`；`record.id` 是 datapoint 内部 id，不能当命令 id |
+| 2 | `onMainRemove()` | 同上 → `await this.galleryList?.delete(first)`；主图字段写入拆成独立 `record.update` | 同上 |
+| 3 | `_writeOrderWithNewMain()` | 同上 → `await galleryList.delete(newMainRec)`；主图字段写入拆成独立 `record.update` | 同上（生产报错的触发路径） |
+| 4 | 文件头 `import` | 删除 `import { x2ManyCommands } from "@web/core/orm_service";` | 三处改完后不再使用，避免遗留误用入口 |
+| 5 | `_itemKey()` / `_gidFromKey()` | 注释「虚拟 id」→「datapoint 内部 id（仅前端做 key，不得下发）」 | 本次缺陷正是这条误解造成的 |
+| 6 | `_writeOrderWithNewMain()` 的 `galleryKeys.push(…)` | `g${oldMainRecord.id}` → `g${oldMainRecord.resId || oldMainRecord.id}` | 与 `_itemKey()` 统一口径 |
+
+**涉及范围**：只改前端 1 个文件；模型 / 字段 / 视图 / 权限 / 数据文件 / 译文 / manifest 文案均未改，无迁移脚本。
+入口影响面为**未保存状态下的图库删除、删主图提升、拖动换主图**三条路径（新建产品 / 新建变体时最常见）。
 
 ### 4. 备选方案与取舍
 

@@ -2,6 +2,20 @@
 
 ## [19.0.2.6.6] - 2026-09-26（修复：图库删除误把前端 datapoint id 当 x2many 命令 id，导致「同图重复 + 删不掉 + 保存报 SQL 错」）
 
+> 修订日期：2026-09-26（生产环境反馈当日）｜ 类型：修复（+z）｜ 状态：**已交付，待目标环境复验**（需 `-u` + 强刷浏览器）｜ 触发任务：`T-044`（根 `TODO.md`）
+> 影响文件：`static/src/js/product_image_gallery.js`（**修正位置**：3 处删除命令 + 1 处 `import` + 2 处注释，详见下表）、
+> `__manifest__.py`（版本 `19.0.2.6.5` → `19.0.2.6.6`）、`README.md`、`AGENTS.md`（模块）、
+> 根 `README.md` / `AGENTS.md` / `TODO.md`
+
+### 优化目标（修复类）
+
+- 消除生产环境（`odoo.nas.leyings.cn:20000`，2026-09-26）保存产品时的 RPC 报错
+  `psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type integer: "d"`
+  （`DELETE FROM "product_image_gallery" WHERE id IN ('d', 'a', 't', …)`）
+- 消除「新建产品上传 2 张图 → 把第 2 张拖到首位（换主图）→ 界面变 3 张、首尾同图、多出的那张删不掉」的错误状态
+- 验收口径（只写用户视角）：新建产品做「上传 2 张 → 第 2 张拖到首位 → 删除任意一张 → 保存」全流程，
+  应保持 2 张图、删除立即生效、保存成功；已保存产品的图库删除 / 换主图行为不变
+
 ### 变更（修复）
 
 - **现象（生产环境）**：新建产品时上传 2 张图，把第 2 张拖到首位（设为**主图**）后 —— 界面上变成 **3 张**
@@ -27,31 +41,69 @@
   - **未保存的新行** → `DELETE` 被识别为「该 id 上还有待发的 `CREATE`」→ `ownCommands.splice(0)`
     **只撤销新建、不下发任何命令**（新行从列表消失，也不再有脏命令留在待发队列里）。
 
-  涉及三处（均在 `product_image_gallery.js`）：
-  | 方法 | 场景 |
-  |---|---|
-  | `onGalleryRemove()` | 管理弹窗里点图库缩略图的 ×（删单张图库图） |
-  | `onMainRemove()` | 删主图 → 自动提升图库首张（首张是未保存新行时即触发本缺陷） |
-  | `_writeOrderWithNewMain()` | 拖动排序把图库图提到首位 = 换主图（**本次生产报错的触发路径**） |
+  **修正位置**（3 处删除命令 + 1 处 import + 2 处注释，全部在 `static/src/js/product_image_gallery.js`）：
 
-  同时删掉不再使用的 `x2ManyCommands` 导入，并把 `_itemKey()` / `_gidFromKey()` 的注释从「虚拟 id」
-  改成「datapoint 内部 id（**仅前端做 key，绝不能作为 x2many 命令的 id 下发**）」，避免下次再踩。
+  | # | 位置（方法 / 代码） | 场景 | 修正内容 | 修改原因 |
+  |---|---|---|---|---|
+  | 1 | `onGalleryRemove()` | 管理弹窗里点图库缩略图的 ×（删单张图库图） | `x2ManyCommands.unlink(rec.id)` / `delete(rec.resId)` 分支 → `await list.delete(rec)` | 未保存的新行必须走 `DELETE` 撤销待发 `CREATE`；`record.id` 是 datapoint 内部 id，不能当命令 id |
+  | 2 | `onMainRemove()` | 删主图 → 自动提升图库首张（首张是未保存新行时即触发本缺陷） | 同上 → `await this.galleryList?.delete(first)`；主图字段写入拆成独立 `record.update` | 同上 |
+  | 3 | `_writeOrderWithNewMain()` | 拖动排序把图库图提到首位 = 换主图（**本次生产报错的触发路径**） | 同上 → `await galleryList.delete(newMainRec)`；主图字段写入拆成独立 `record.update` | 同上 |
+  | 4 | 文件头 `import` | — | 删除 `import { x2ManyCommands } from "@web/core/orm_service";` | 三处改完后不再使用，避免遗留误用入口 |
+  | 5 | `_itemKey()` / `_gidFromKey()` | 展示项 key 口径 | 注释「虚拟 id」→「datapoint 内部 id（仅前端做 key / 比较，**绝不能作为 x2many 命令 id 下发**）」 | 本次缺陷正是这条误解造成的，注释要跟着纠正 |
+  | 6 | `_writeOrderWithNewMain()` 内 `galleryKeys.push(…)` | 原主图落位为新建图库项 | `g${oldMainRecord.id}` → `g${oldMainRecord.resId || oldMainRecord.id}` | 与 `_itemKey()` 统一口径（未保存行取 `record.id`、已保存行取 `resId`） |
+
 - 前端改动 `[19.0.2.5.0]` 之后 `onXXXRemove()` 一直如此写；已保存记录那条分支（`delete(resId)`）行为正确，
   所以缺陷只在「**未保存**的新图库行」上暴露（新建产品时最典型）。
 
+### 优化前后对比
+
+| 场景 | 修正前 | 修正后 |
+|------|--------|--------|
+| 新建产品上传 2 张图 → 把第 2 张拖到首位（换主图） | 界面变 **3 张**（第 1 张与第 3 张同图），图库行没被撤销 | **2 张**：新主图 + 原主图落到图库，无重复 |
+| 在上述状态下点图库缩略图的 × 删除 | 点了没反应（命令匹配不到任何行） | 立即删除，网格与头像区同步刷新 |
+| 在上述状态下点「保存」 | RPC 报错 `invalid input syntax for type integer: "d"`（`DELETE … id IN ('d','a','t',…)`），事务回滚 | 保存成功，图序与主图与保存前一致 |
+| 已保存产品的图库删除 / 删主图提升 / 拖动换主图 | 正常 | 正常（行为不变，仍下发 `(2, resId)`） |
+| 已保存产品的图库新增图后立刻删除 | 正常 | 正常（撤销待发 `(0, 0, …)`，不发命令） |
+
 ### 影响
 
-- 纯前端：只改 `static/src/js/product_image_gallery.js`（1 个文件），无模型 / 字段 / 视图 / 权限 / 译文变化，
-  **无需迁移脚本**。
+- **涉及范围（有）**：`product_image` 模块前端 1 个文件 `static/src/js/product_image_gallery.js`；
+  影响入口为**未保存（新建产品 / 新建变体）时的图库删除、删主图提升、拖动换主图**三条交互路径。
+- **涉及范围（无）**：模型 / 字段 / 视图 / 权限 / 数据文件 / 译文（`i18n/zh_CN.po`）/ manifest 文案**均未改**，
+  不涉及数据库结构变更，**无需迁移脚本**。
 - 待发命令不再残留 datapoint id：新建产品时删图 / 换主图后保存，不会再出现上述 SQL 报错，
-  也不会留下「同图重复、删不掉」的脏状态。
-- `odoo -d <db> -u product_image --stop-after-init` 升级后**必须强刷浏览器**（前端资源有缓存）；
-  已保存产品上的图库删除行为不变。
+  也不会留下「同图重复、删不掉」的脏状态；已保存记录的命令仍是 `(2, resId)`，与修正前等价。
+- 该报错发生在同一事务内并已回滚，**不需要清理历史数据**；若存量产品上存在重复图库行（早期版本误存），
+  升级后直接在界面删除即可。
+- `odoo -d <db> -u product_image --stop-after-init` 升级后**必须强刷浏览器**（前端资源有缓存）。
 
-### 验证（本地静态检查）
+### 文档
 
-- `node --check product_image/static/src/js/product_image_gallery.js` 通过；`task check` 通过（未新增结构性问题）。
-- 前端行为**无自动化用例**，界面复验清单见模块 [`README.md`](README.md) →「验证清单」第 12 项。
+- 模块：`__manifest__.py`（版本 `19.0.2.6.5` → `19.0.2.6.6`）、本 `CHANGELOG.md`（本条）、
+  `AGENTS.md`（L1 新增约束 13「图库行的删除一律走 x2many 官方 API」+ 文末「回归修复（19.0.2.6.6）」，
+  含现象 / 根因 / 修改位置 / 不变量 / 备选方案）、`README.md`（版本修订要点、验证清单第 12 项、
+  异常情况与处理、后续维护）。
+- 仓库根：`README.md`（模块一览表 version 与状态两处）、`AGENTS.md`（模块一览表 `product_image` 行）、
+  `TODO.md`（新增 `T-044` 归档条目，含落地版本、做法、验收记录与遗留）。
+
+### 验证记录
+
+- 本地静态检查（2026-09-26）：`node --check product_image/static/src/js/product_image_gallery.js` 通过；
+  `python3 .dev/scripts/check_repo.py`（`task check`）通过，未新增结构性问题。
+- 根因证据取自 `odoo:19.0` 镜像内源码（与运行版本一致）：前端 `addons/web/static/src/model/relational_model/static_list.js`
+  （`delete()` = `[DELETE, record.resId || record._virtualId]`、`_applyCommands()` 的 `DELETE` / `UNLINK` 分支）、
+  `.../datapoint.js`（`this.id = getId("datapoint")`）；后端 `odoo/orm/fields_relational.py::One2many.write_real`
+  （`Command.UNLINK` → `browse(command[1])`、`Command.DELETE` → `to_delete.append(command[1])`）。
+- 前端行为**无自动化用例**（本模块无 `static/tests`），界面复验清单见模块 [`README.md`](README.md) →「验证清单」第 12 项。
+
+### 遗留
+
+- 目标环境界面复验（需 `-u` + 强刷浏览器）：按「验证清单」第 12 项逐条走一遍——新建产品「上传 2 张 → 第 2 张拖到首位
+  → 删任意一张 → 保存」全流程；已保存产品的删除 / 换主图不回归；中英界面各一遍。
+- 同类风险点（可选）：`galleryRecords` getter 的排序兜底 `(a.resId || a.id) - (b.resId || b.id)` 在两条**未保存**记录
+  `sequence` 相同时会算出 `NaN`（字符串相减），仅为兜底顺序不稳定、不报错；如需彻底消除，可改为字符串比较。
+
+---
 
 ## [19.0.2.6.5] - 2026-09-23（修复：产品列表「Images」列显示产品主图）
 

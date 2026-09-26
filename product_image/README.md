@@ -3,6 +3,7 @@
 Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护多张图片，在原有图片位置直接支持多图浏览，不新增页签，保持界面简洁。
 
 > 模块技术名：`product_image`（原名 `product_multi_image`，于 19.0.2.0.0 改名）。模型名仍为 `product.image.gallery`（避开 `website_sale` 的 `product.image`，仅依赖 `product`）。
+> 当前版本 `19.0.2.6.6`，最后修订日期 **2026-09-26**：修复「未保存的新图库行删除 / 换主图 → 同图重复、删不掉、保存报 SQL 类型错」（修正位置与修改原因见下「验证清单」开头的版本修订要点末条 / [`CHANGELOG.md`](CHANGELOG.md) → `[19.0.2.6.6]`）——升级后**务必强刷浏览器**。
 
 ---
 
@@ -210,7 +211,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 > `19.0.2.6.2`（2026-09-08）修复变体上传补充图报「双归属」Validation Error：变体编辑 action context 携带 `default_product_tmpl_id`（官方 product 变体列表 action），图库子行 `(0, 0)` 创建时子模型 default_get 把它填进 `product_tmpl_id`，与 One2many inverse 回填的 `product_id` 冲突——`product.product` 的 create / write 现对 `variant_image_gallery_ids` 的 `(0,0)` 创建命令子行强制置空 `product_tmpl_id`——**待目标环境复验**。
 > `19.0.2.6.3`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 + 分类「产品」），**目标环境已验收通过**；记录见 `CHANGELOG.md` →「验收记录（T-013）」。
 > `19.0.2.6.5`（2026-09-23，T-038）修复产品列表「Images」列看不到图片：原列绑的是图库计数 `image_gallery_count`（只显示数字），现改绑原生 `image_128`（主图缩略）+ `widget="image"`，库存 / 销售 / 采购三个「产品」入口同时生效；**待目标环境界面复验**（本地 7 项自动化用例 + dev 库三入口 arch 实测通过，记录见 `CHANGELOG.md` →「`19.0.2.6.5`」）。
-> `19.0.2.6.6`（2026-09-26）修复图库删除误把前端 datapoint id 当 x2many 命令 id：未保存的新图库行删不掉 / 换主图后出现「同图重复」，保存时报 `DELETE FROM product_image_gallery WHERE id IN ('d','a','t',…)`（`invalid input syntax for type integer: "d"`）——三处删除（删图库单张 / 删主图提升 / 拖动换主图）统一改走官方 `StaticList.delete(record)`，未保存行只撤销其待发的新建命令；**待目标环境界面复验**（记录见 `CHANGELOG.md` →「`19.0.2.6.6`」与 `AGENTS.md` →「回归修复（19.0.2.6.6）」）。
+> `19.0.2.6.6`（2026-09-26）修复图库删除误把前端 datapoint id 当 x2many 命令 id：未保存的新图库行删不掉 / 换主图后出现「同图重复」，保存时报 `DELETE FROM product_image_gallery WHERE id IN ('d','a','t',…)`（`invalid input syntax for type integer: "d"`）——**修正位置**：`static/src/js/product_image_gallery.js` 的 `onGalleryRemove()` / `onMainRemove()` / `_writeOrderWithNewMain()` 三处删除（另删 1 处 `x2ManyCommands` 导入、更正 2 处注释），统一改走官方 `StaticList.delete(record)`，未保存行只撤销其待发的新建命令；**修改原因**：`record.id` 是前端 datapoint 内部 id（`"datapoint_12"`），不是 x2many 命令认的 id（已保存行 `resId` / 未保存行 `record._virtualId`），拿它当命令 id 在前端匹配不到待发新建命令、在后端被 `browse()` 逐字符拆成 id 集合；**待目标环境界面复验**（记录见 `CHANGELOG.md` →「`19.0.2.6.6`」与 `AGENTS.md` →「回归修复（19.0.2.6.6）」）。
 
 | 验证项 | 期望 |
 |--------|------|
@@ -306,6 +307,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 - 产品列表图片列（19.0.2.6.5）：「Images」列绑 `image_128`（**主图**，只读、可选列）在 `views/product_template_views.xml` 的 `product_template_list_inherit` 里；**不要**改回 `image_gallery_count`（那样只显示数字）；要改列高改该字段的 `options="{'size': [0, 48]}"`（宽度 0 = 按比例自适应）。三处入口靠继承基础视图 `product.product_template_tree_view` 生效，相关回归用例见 `tests/test_product_list_image_column.py`
 - 变体图集数据源（19.0.2.6.0）：widget 的 `galleryField` getter 按主记录 `resModel` 分流——`product.template` → `image_gallery_ids`，`product.product` → `variant_image_gallery_ids`；新增入口模型时只改此处
 - 排序写回逻辑：统一在 widget 的 `onManageReorder` / `_writeOrderWithNewMain` / `_writeGalleryOrder`（统一数组 diff + 最小写回），不要在各处散写 sequence
+- 图库行删除（19.0.2.6.6）：**一律走 x2many 列表官方 `list.delete(record)`**（`list = props.record.data[galleryField]`）——它对已保存行下发 `(2, resId)`、对未保存的新行撤销待发的 `(0, 0, …)`；**禁止**自己拼 `x2ManyCommands.unlink(record.id)`：`record.id` 是前端 datapoint 内部 id（`"datapoint_12"`），既匹配不到待发命令（删不掉），又会把脏 id 发到服务端（`DELETE … id IN ('d','a','t',…)` 报错）。不变量见 `AGENTS.md` → L1 约束 13
 - 坑点与解法索引：见 `AGENTS.md` →「开发复盘与关键经验（T-005）→ 遇到的问题及解决方案」（含 Bootstrap `!important`、`<template>` 惰性容器、`overflow-y:auto` 隐式横向滚动、binary size 图片需 ORM 读取、**未保存行的删除必须走 `list.delete(record)`（`record.id` 是 datapoint 内部 id，不能当 x2many 命令 id）** 等）
 - widget 行为调整：改 `static/src/js/product_image_gallery.js` 与对应 QWeb 模板
 - 预览弹窗调整：改 `static/src/js/product_image_preview.js` 与 `static/src/xml/product_image_preview.xml`
