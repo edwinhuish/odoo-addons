@@ -210,6 +210,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 > `19.0.2.6.2`（2026-09-08）修复变体上传补充图报「双归属」Validation Error：变体编辑 action context 携带 `default_product_tmpl_id`（官方 product 变体列表 action），图库子行 `(0, 0)` 创建时子模型 default_get 把它填进 `product_tmpl_id`，与 One2many inverse 回填的 `product_id` 冲突——`product.product` 的 create / write 现对 `variant_image_gallery_ids` 的 `(0,0)` 创建命令子行强制置空 `product_tmpl_id`——**待目标环境复验**。
 > `19.0.2.6.3`（2026-09-09，T-013）补应用列表（Apps）中文元数据（模块名 / 摘要 / 描述 + 分类「产品」），**目标环境已验收通过**；记录见 `CHANGELOG.md` →「验收记录（T-013）」。
 > `19.0.2.6.5`（2026-09-23，T-038）修复产品列表「Images」列看不到图片：原列绑的是图库计数 `image_gallery_count`（只显示数字），现改绑原生 `image_128`（主图缩略）+ `widget="image"`，库存 / 销售 / 采购三个「产品」入口同时生效；**待目标环境界面复验**（本地 7 项自动化用例 + dev 库三入口 arch 实测通过，记录见 `CHANGELOG.md` →「`19.0.2.6.5`」）。
+> `19.0.2.6.6`（2026-09-26）修复图库删除误把前端 datapoint id 当 x2many 命令 id：未保存的新图库行删不掉 / 换主图后出现「同图重复」，保存时报 `DELETE FROM product_image_gallery WHERE id IN ('d','a','t',…)`（`invalid input syntax for type integer: "d"`）——三处删除（删图库单张 / 删主图提升 / 拖动换主图）统一改走官方 `StaticList.delete(record)`，未保存行只撤销其待发的新建命令；**待目标环境界面复验**（记录见 `CHANGELOG.md` →「`19.0.2.6.6`」与 `AGENTS.md` →「回归修复（19.0.2.6.6）」）。
 
 | 验证项 | 期望 |
 |--------|------|
@@ -275,6 +276,11 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 9. 回归修复验证（19.0.2.6.1）：升级后先打开一个已有若干张补充图的产品模板表单——主图与图库全部图片均正常显示（不再出现占位符）；再打开某变体编辑表单确认其图库同样正常；随后复验上传 / 删除 / 排序等写操作不回归
 10. 双归属回归验证（19.0.2.6.2）：模板表单 → 顶部「变体」进入变体列表 → 打开某变体 → 上传若干张补充图并保存：不再弹 “cannot belong to both a product and a product variant…” 双归属报错；返回模板表单确认共享补充图上传 / 保存不受影响
 11. 列表图片列验证（19.0.2.6.5，库存 / 销售 / 采购三处都要看）：分别打开「库存 → 产品 → 产品」「销售 → 产品 → 产品」「采购 → 产品 → 产品」，在列表右上角「可选列」里勾选 **Images** → 有主图的产品显示主图缩略（无主图的产品显示占位图，只有补充图的产品不显示图），取消勾选后该列隐藏；中英界面各看一遍（列标题分别为 `Images` / `图片`）。中文列标题由 `migrations/19.0.2.6.5/` 在 `-u` 时自动刷新（po 不覆盖已有译文，见 `CHANGELOG.md` → `[19.0.2.6.5]`）
+12. 未保存行删除 / 换主图验证（19.0.2.6.6，**必须在新建产品、尚未保存时做**）：
+    - **新建**产品 → 上传 2 张图 → 在「图片管理」弹窗里把**第 2 张拖到首位**（= 设为主图）→ 应为 **2 张**（新主图 + 原主图落到图库），**不得**出现「第 1 张与第 3 张同一张图」的重复；
+    - 此时删掉任意一张（图库缩略图 ×、或主图 × 自动提升）→ 列表立即少一张（不再「点了没反应」）；
+    - 点「保存」→ 保存成功，**不得**报 `invalid input syntax for type integer: "d"` / `DELETE FROM product_image_gallery WHERE id IN ('d','a','t',…)`；
+    - 保存后重开产品，图序与主图与保存前一致；再打开一个**已保存**产品的图库做同样三步（删除 / 换主图 / 保存），行为不得回归
 
 ### 异常情况与处理
 
@@ -284,6 +290,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 - 粘贴无反应：粘贴入口在「图片管理」弹窗内（打开后自动获焦，按 `Ctrl+V` 粘贴），头像区域本身不再直接响应粘贴
 - widget 不生效：前端资源缓存，`-u product_image` 升级后强刷浏览器
 - 列表勾选「Images」列后看不到图片：该列只显示**主图**——产品没有主图（只有图库补充图）时显示占位图，属预期；先在产品表单上传主图。另确认列标题为 `Images`（旧版该列是「图片数」计数），升级到 `19.0.2.6.5` 后强刷浏览器
+- 新建产品时删图 / 换主图后出现「同一张图重复」「多的那张删不掉」「保存报 `invalid input syntax for type integer: "d"`（`DELETE … id IN ('d','a','t',…)`）」：19.0.2.6.6 之前的缺陷（删除命令误用前端 datapoint 内部 id）——升级到 `19.0.2.6.6` 并**强刷浏览器**；升级前已产生的脏状态不要保存，直接丢弃表单（放弃修改）重新操作
 - 变体表单看不到多图 widget：需从模板表单「变体」入口打开（该表单才带 easy edit 图片区），且升级后强刷浏览器
 - 变体图集与模板共享图串图：变体补充图必须挂在 `product_id`（不写 `product_tmpl_id`）；widget 数据源见 `galleryField`（AGENTS.md L1 约束 2 / 9 / 11）
 - 切换不写库：浏览切换是纯前端状态，不触发保存；图库图删除、主图删除（自动提升图库首张）、上传、拖动排序才写库（均需产品表单保存后落库）
@@ -299,7 +306,7 @@ Odoo 19 产品模块扩展，用于在外贸 SOHO 场景下为一个产品维护
 - 产品列表图片列（19.0.2.6.5）：「Images」列绑 `image_128`（**主图**，只读、可选列）在 `views/product_template_views.xml` 的 `product_template_list_inherit` 里；**不要**改回 `image_gallery_count`（那样只显示数字）；要改列高改该字段的 `options="{'size': [0, 48]}"`（宽度 0 = 按比例自适应）。三处入口靠继承基础视图 `product.product_template_tree_view` 生效，相关回归用例见 `tests/test_product_list_image_column.py`
 - 变体图集数据源（19.0.2.6.0）：widget 的 `galleryField` getter 按主记录 `resModel` 分流——`product.template` → `image_gallery_ids`，`product.product` → `variant_image_gallery_ids`；新增入口模型时只改此处
 - 排序写回逻辑：统一在 widget 的 `onManageReorder` / `_writeOrderWithNewMain` / `_writeGalleryOrder`（统一数组 diff + 最小写回），不要在各处散写 sequence
-- 坑点与解法索引：见 `AGENTS.md` →「开发复盘与关键经验（T-005）→ 遇到的问题及解决方案」（含 Bootstrap `!important`、`<template>` 惰性容器、`overflow-y:auto` 隐式横向滚动、binary size 图片需 ORM 读取、未保存记录虚拟 id 等）
+- 坑点与解法索引：见 `AGENTS.md` →「开发复盘与关键经验（T-005）→ 遇到的问题及解决方案」（含 Bootstrap `!important`、`<template>` 惰性容器、`overflow-y:auto` 隐式横向滚动、binary size 图片需 ORM 读取、**未保存行的删除必须走 `list.delete(record)`（`record.id` 是 datapoint 内部 id，不能当 x2many 命令 id）** 等）
 - widget 行为调整：改 `static/src/js/product_image_gallery.js` 与对应 QWeb 模板
 - 预览弹窗调整：改 `static/src/js/product_image_preview.js` 与 `static/src/xml/product_image_preview.xml`
 - 与 `website_sale` 共存：本模块用 `product.image.gallery` 模型名，与 `product.image` 互不干扰

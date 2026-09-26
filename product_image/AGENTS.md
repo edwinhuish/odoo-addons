@@ -14,7 +14,7 @@
 - 自定义预览组件：`ProductImagePreviewDialog`（全屏预览，放大/缩小/旋转）
 - 自定义图片管理弹窗：`ProductImageManageDialog`（点击「+」打开：上半部分大图（仅预览、无删除按钮；选中主图时名称行留空）+ 平铺缩略图（每张缩略图含主图右上角 ×——先确认后删除，删图库图删记录，删主图自动提升图库首张；缩略图可拖动排序、主图固定首位；点击缩略图只切弹窗大图；布局：大图列固定尺寸、缩略图占满剩余宽高并超高滚动），下半部分上传 dropzone（点击/拖放/Ctrl+V，上传中缩略图 + 动画，粘贴不自动关闭，上传不改变页面大图）；header「批量删除」勾选模式 + 批量确认（含缩略图清单）；走 `main_components` 注册表顶层 overlay）
 - 主依赖：`product`（最小化，不依赖 `sale` / `website_sale` / `web_image_paste`）
-- 当前版本：`19.0.2.6.5`（19.0.2.6.5：修复产品列表「Images」列看不到图片——原列绑图库计数 `image_gallery_count`（只显示数字），现改绑原生 `image_128`（主图缩略）+ `widget="image"`、仍为可选只读列，库存 / 销售 / 采购三处产品列表同时生效，回归用例见 `tests/test_product_list_image_column.py`；19.0.2.6.4：删掉 `security/ir.model.access.csv` 里硬编码的可选模块用户组 `sales_team.group_sale_manager`，模块可单独安装；19.0.2.6.3：补应用列表（Apps）中文元数据——`shortdesc` / `summary` / `description` + 分类 `Product` 译文；19.0.2.6.2：修复变体上传补充图报「双归属」Validation Error——变体编辑 action context 的 `default_product_tmpl_id` 经 default_get 落进图库子行、与 O2M inverse 回填的 `product_id` 冲突；`product.product` 的 create / write 对 `variant_image_gallery_ids` 的 `(0,0)` 子命令强制置空 `product_tmpl_id`，详见文末回归小节；19.0.2.6.1：修复 19.0.2.6.0 回归——产品 / 变体表单图库图片显示占位符，恢复 widget `fieldDependencies` 机制并改为按 `image_1920` options `gallery_field` 分流，详见文末回归小节；`19.0.2.6.0` T-010 产品变体多图：`product.image.gallery` 新增 `product_id`，图片归属产品 / 产品变体二选一；`product.product` 新增 `variant_image_gallery_ids` 变体专属补充图；变体「独立编辑」表单（`product_variant_easy_edit_view`）图片区同样启用 `product_image_gallery` widget，各变体图集互相独立、与模板共享补充图互不串扰——改动细节与风险见文末会话修改总结；此前 `19.0.2.5.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；此前的 `19.0.2.4.3` 含管理弹窗拖动排序（含主图，首位即主图）/ 删除确认 / 批量删除；`19.0.2.4.1` 调整确认框按钮顺序（取消置右），`19.0.2.4.2` 关闭按钮贴齐最右侧（去掉 `pe-1`），`19.0.2.4.3` 修复缩略图列「+」占位符被 flex 压成 18px（`flex: 0 0 auto` + 56×56 兜底）；`19.0.2.3.1` 修复拖动跟手与 XML `&nbsp;` 实体崩溃，`19.0.2.3.2` 修复拖拽布局（`position-relative !important` 覆盖），`19.0.2.4.0` 修复勾选模式无操作按钮（`<template t-if>` → `<t t-if>`）；`19.0.2.2.10~2.2.15` 布局与弹窗改动已验证）
+- 当前版本：`19.0.2.6.6`（19.0.2.6.6：修复「上传 2 张图后把第 2 张拖到首位（换主图）→ 界面变 3 张（同图重复）、多出来的图删不掉，保存报 `DELETE FROM product_image_gallery WHERE id IN ('d','a','t',…)`」——三处删除误把前端 **datapoint 内部 id**（`record.id`，形如 `datapoint_12`）当成 x2many 命令 id 下发：前端匹配不到待发的 `(0,0,…)` 新建命令（新行留在列表 → 重复、删不掉），后端 `browse()` 把字符串按字符展开成 id 集合 → PostgreSQL 类型错误；现统一改走列表官方 `StaticList.delete(record)`（未保存行只撤销新建命令），详见文末「回归修复（19.0.2.6.6）」；19.0.2.6.5：修复产品列表「Images」列看不到图片——原列绑图库计数 `image_gallery_count`（只显示数字），现改绑原生 `image_128`（主图缩略）+ `widget="image"`、仍为可选只读列，库存 / 销售 / 采购三处产品列表同时生效，回归用例见 `tests/test_product_list_image_column.py`；19.0.2.6.4：删掉 `security/ir.model.access.csv` 里硬编码的可选模块用户组 `sales_team.group_sale_manager`，模块可单独安装；19.0.2.6.3：补应用列表（Apps）中文元数据——`shortdesc` / `summary` / `description` + 分类 `Product` 译文；19.0.2.6.2：修复变体上传补充图报「双归属」Validation Error——变体编辑 action context 的 `default_product_tmpl_id` 经 default_get 落进图库子行、与 O2M inverse 回填的 `product_id` 冲突；`product.product` 的 create / write 对 `variant_image_gallery_ids` 的 `(0,0)` 子命令强制置空 `product_tmpl_id`，详见文末回归小节；19.0.2.6.1：修复 19.0.2.6.0 回归——产品 / 变体表单图库图片显示占位符，恢复 widget `fieldDependencies` 机制并改为按 `image_1920` options `gallery_field` 分流，详见文末回归小节；`19.0.2.6.0` T-010 产品变体多图：`product.image.gallery` 新增 `product_id`，图片归属产品 / 产品变体二选一；`product.product` 新增 `variant_image_gallery_ids` 变体专属补充图；变体「独立编辑」表单（`product_variant_easy_edit_view`）图片区同样启用 `product_image_gallery` widget，各变体图集互相独立、与模板共享补充图互不串扰——改动细节与风险见文末会话修改总结；此前 `19.0.2.5.0` 为 T-006 i18n：源语言英文 + `i18n/zh_CN.po` 中英双语；此前的 `19.0.2.4.3` 含管理弹窗拖动排序（含主图，首位即主图）/ 删除确认 / 批量删除；`19.0.2.4.1` 调整确认框按钮顺序（取消置右），`19.0.2.4.2` 关闭按钮贴齐最右侧（去掉 `pe-1`），`19.0.2.4.3` 修复缩略图列「+」占位符被 flex 压成 18px（`flex: 0 0 auto` + 56×56 兜底）；`19.0.2.3.1` 修复拖动跟手与 XML `&nbsp;` 实体崩溃，`19.0.2.3.2` 修复拖拽布局（`position-relative !important` 覆盖），`19.0.2.4.0` 修复勾选模式无操作按钮（`<template t-if>` → `<t t-if>`）；`19.0.2.2.10~2.2.15` 布局与弹窗改动已验证）
 
 ---
 
@@ -103,6 +103,23 @@
       `..._purchasable_inherit`，同为该基础视图的后代）→ 不要改成只继承某一个页面的视图
     - 回归用例 `tests/test_product_list_image_column.py` 会核对三个动作**实际使用的列表视图**合成 arch，
       改列定义时先跑它（可选模块未装则按配置 skip）
+
+13. **图库行的删除 / 移除一律走 x2many 列表官方 API（19.0.2.6.6 起）**
+    - 删除 / 撤销图库行只允许两种写法：`list.delete(record)`（表单 widget 侧，`list = record.data[<图库字段>]`），
+      或 `props.record.update({ [galleryField]: [...] })` 里带**服务端认得的 id**
+    - **禁止**自己拼 `x2ManyCommands.unlink(record.id)` / `x2ManyCommands.delete(record.id)`：
+      `record.id` 是前端 **datapoint 内部 id**（`DataPoint` 构造里 `this.id = getId("datapoint")`
+      → `"datapoint_12"`），**不是** x2many 命令认的 id（已保存行是 `resId`，未保存行是 `record._virtualId`
+      → `"virtual_3"`）。用它当 id 会同时踩两个坑：
+      - 前端：命令匹配不到那条待发的 `(0, 0, ...)` 新建命令（`StaticList._applyCommands` 按 id 找 `_commands`）
+        → 新行留在列表里（换主图后表现为「同一张图出现两次」），点删除也毫无反应；
+      - 后端：`(3, "datapoint_12")` 被原样发出，`One2many.write_real` 的 `Command.UNLINK` 分支做
+        `comodel.browse(command[1])` → 字符串被**逐字符**当成 id → `DELETE ... WHERE id IN ('d','a','t',…)`
+        → `psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type integer: "d"`
+    - 官方 `StaticList.delete(record)`（`[DELETE, record.resId || record._virtualId]`）已覆盖两种情况：
+      已保存行 → `(2, resId)`；未保存行 → `DELETE` 被识别为「该 id 上还有待发的 `CREATE`」→ 只撤销新建、不发命令
+    - 前端 key / 比较（`_itemKey` / `_gidFromKey` / `displayKeys` / `_writeGalleryOrder`）可以继续用
+      `record.resId || record.id` 做**内部**标识，但它**绝不能**出现在发给服务端的命令里
 
 ---
 
@@ -689,3 +706,62 @@ task test -- product_image,stock,sale_management,purchase --test-tags=/product_i
 - 不要删 `options="{'size': [0, 48]}"`：删掉后图片按原始尺寸（最大 128px）显示，列表行会明显变高。
 - 目标环境仍需界面复验（三处列表勾选 / 取消勾选、有主图 / 无主图 / 仅有补充图三种产品、中英各一遍 + 强刷浏览器），
   清单见模块 [`README.md`](README.md) →「验证清单 / 执行流程」与 `CHANGELOG.md` → `[19.0.2.6.5]` →「遗留」。
+
+---
+
+## 回归修复（`19.0.2.6.6`，目标环境反馈）
+
+> 生产环境（`odoo.nas.leyings.cn:20000`，2026-09-26）报错，属于 **Odoo 19 前端 datapoint id 与 x2many 命令 id 混用**这一类问题。
+> 同类教训在 `product_reference/static/src/js/product_reference_manage.js` 的 `onDelete()` 注释里已记过一次（那边是「删空行不生效」），
+> 本模块这次踩得更重：**不只是没反应，而是把脏 id 发到服务端导致 SQL 报错**。
+
+### 1. 现象与报错
+
+- 新建产品时上传 2 张图 → 在「图片管理」弹窗里把**第 2 张拖到首位**（= 设为主图）→ 界面变成 **3 张**，
+  第 1 张与第 3 张是同一张图，多出来的那张**删不掉**。
+- 此时点保存，服务端报：
+  `psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type integer: "d"`
+  → `DELETE FROM "product_image_gallery" WHERE id IN ('d', 'a', 't', …)`。
+- 生产调用栈（节选，与报错完全对应）：
+  `product.template.create` → `_create` → `fields_relational.create` → `write_batch(record_values, True)`
+  → `write_real` → `flush()` → `comodel.browse(to_delete).unlink()`。
+
+### 2. 根因（一句话）
+
+三处「删除图库记录」自己拼了 `x2ManyCommands.unlink(record.id)`，而 **`record.id` 是 datapoint 内部 id
+（`"datapoint_12"`），不是 x2many 命令认的 id**（已保存行 `resId` / 未保存行 `record._virtualId` `"virtual_3"`）。
+
+- 前端：`StaticList._applyCommands` 的 `DELETE` / `UNLINK` 分支按 `command[1]` 在 `_commands` 里找该行的待发命令；
+  拿 `"datapoint_12"` 去找 `"virtual_3"` 上的 `CREATE` 命令**必然找不到** → 该新行留在 `records` / `_currentIds`
+  （换主图后原图库行没被撤掉，于是「同图重复」）；删除动作也匹配不到任何行 → 「删不掉」。
+- 后端：保存时 `StaticList._getCommands()` 把未识别成 `CREATE` / `UPDATE` 的命令**原样下发** → 服务端
+  `One2many.write_real` 的 `Command.UNLINK` 走 `unlink(comodel.browse(command[1]))`，`browse()` 收到字符串会
+  **按字符迭代**成 id 集合 → `to_delete.extend(['d','a','t',…])` → `DELETE ... WHERE id IN ('d','a',…)`
+  → PostgreSQL 报 `invalid input syntax for type integer: "d"`。
+  （`Command.DELETE` 分支是 `to_delete.append(command[1])`，后果相同；两条分支都会炸。）
+
+### 3. 修法与不变量
+
+- 三处全部改走官方入口 `StaticList.delete(record)`：
+  `onGalleryRemove()`（删图库单张）、`onMainRemove()`（删主图 → 提升图库首张）、
+  `_writeOrderWithNewMain()`（拖动换主图，**生产报错的触发路径**）。
+- 顺带删掉不再使用的 `x2ManyCommands` 导入；`_itemKey()` / `_gidFromKey()` 的注释改成
+  「datapoint 内部 id，仅前端做 key，不得下发」。
+- **不变量（已写进 L1 约束 13）**：图库行的删除 / 撤销只允许走 `list.delete(record)`；
+  `record.id` 只能出现在前端 key / 比较里，绝不能出现在发给服务端的 x2many 命令里。
+
+### 4. 备选方案与取舍
+
+| 备选 | 为什么不选 |
+|---|---|
+| 只把 `record.id` 换成 `record._virtualId`（仍自拼 `unlink`） | `UNLINK` 对「还没保存的行」本身就是错的命令：`_applyCommands` 只在 `LINK` 分支做抵消，`UNLINK` 会**照发** `(3, "virtual_3")` → 服务端同样炸。新行必须走 `DELETE`（撤销待发 `CREATE`） |
+| 用 `record.resId || record._virtualId` 拼 `x2ManyCommands.delete(...)` | 语义正确但依赖 `_virtualId` 这个下划线私有 API；`StaticList.delete()` 已经把这条表达式封装好，直接用官方入口更稳 |
+| 前端不删新行，等保存后由后端清理 | 界面上会一直显示「同图重复」，用户以为功能坏了；且保存前用户还可能再拖 / 再删，状态更乱 |
+
+### 5. 验证与遗留
+
+- 本地：`node --check` 通过；`task check` 通过（未新增结构性问题）。
+- **前端行为无自动化用例**（本模块无 `static/tests`），需目标环境界面复验，清单见
+  [`README.md`](README.md) →「验证清单」第 12 项：新建产品上传 2 张 → 把第 2 张拖到首位 → 应为 **2 张**
+  （主图 + 原主图落到图库）、删除任意一张立即生效、保存不再报错；已保存产品的图库删除行为不变。
+- 升级方式：`odoo -d <db> -u product_image --stop-after-init` + **强刷浏览器**（前端资源有缓存），无需迁移脚本。

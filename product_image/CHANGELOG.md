@@ -1,5 +1,58 @@
 # 变更日志
 
+## [19.0.2.6.6] - 2026-09-26（修复：图库删除误把前端 datapoint id 当 x2many 命令 id，导致「同图重复 + 删不掉 + 保存报 SQL 错」）
+
+### 变更（修复）
+
+- **现象（生产环境）**：新建产品时上传 2 张图，把第 2 张拖到首位（设为**主图**）后 —— 界面上变成 **3 张**
+  （第 1 张与第 3 张是同一张图），多出来的那张**删不掉**；此时点保存直接报 RPC 错：
+  `psycopg2.errors.InvalidTextRepresentation: invalid input syntax for type integer: "d"`
+  → `DELETE FROM "product_image_gallery" WHERE id IN ('d', 'a', 't', …)`。
+- **根因**：`static/src/js/product_image_gallery.js` 里有三处「删除图库记录」自己拼了
+  `x2ManyCommands.unlink(record.id)`（或 `delete(record.resId)` 的另一分支），而 `record.id` 在
+  Odoo 19 前端是 **datapoint 内部 id**（`DataPoint` 构造里 `this.id = getId("datapoint")` → 形如
+  `"datapoint_12"`），**不是** x2many 命令认的 id（未保存行是 `record._virtualId`，形如 `"virtual_3"`）。
+  于是：
+  1. **前端**：命令 id 匹配不到那条待发的 `(0, 0, ...)` 新建命令（`StaticList._applyCommands` 的
+     `DELETE` / `UNLINK` 分支按 id 找 `_commands`）→ 该新行仍留在列表里（提升为主图后原图库行没被撤掉，
+     于是「同一张图出现两次」），点删除也没有任何反应；
+  2. **后端**：保存时把 `(3, "datapoint_12")` 原样发给服务端，`One2many.write_real` 的
+     `Command.UNLINK` 分支执行 `comodel.browse(command[1])` —— 字符串被当成 id 集合**逐字符展开**成
+     `['d','a','t','…']` 再交给 `to_delete`，最终 `DELETE FROM product_image_gallery WHERE id IN ('d','a',…)`
+     触发 PostgreSQL 类型错误。调用栈与生产报错完全一致：
+     `product.template.create` → `_create` → `fields_relational.create` → `write_batch` → `write_real` → `flush()` → `unlink()`。
+- **修法**：三处删除统一改走 x2many 列表的**官方入口** `StaticList.delete(record)`
+  （`web/static/src/model/relational_model/static_list.js`：`[DELETE, record.resId || record._virtualId]`）：
+  - 已保存记录 → 下发 `(2, resId)`（行为与从前一致）；
+  - **未保存的新行** → `DELETE` 被识别为「该 id 上还有待发的 `CREATE`」→ `ownCommands.splice(0)`
+    **只撤销新建、不下发任何命令**（新行从列表消失，也不再有脏命令留在待发队列里）。
+
+  涉及三处（均在 `product_image_gallery.js`）：
+  | 方法 | 场景 |
+  |---|---|
+  | `onGalleryRemove()` | 管理弹窗里点图库缩略图的 ×（删单张图库图） |
+  | `onMainRemove()` | 删主图 → 自动提升图库首张（首张是未保存新行时即触发本缺陷） |
+  | `_writeOrderWithNewMain()` | 拖动排序把图库图提到首位 = 换主图（**本次生产报错的触发路径**） |
+
+  同时删掉不再使用的 `x2ManyCommands` 导入，并把 `_itemKey()` / `_gidFromKey()` 的注释从「虚拟 id」
+  改成「datapoint 内部 id（**仅前端做 key，绝不能作为 x2many 命令的 id 下发**）」，避免下次再踩。
+- 前端改动 `[19.0.2.5.0]` 之后 `onXXXRemove()` 一直如此写；已保存记录那条分支（`delete(resId)`）行为正确，
+  所以缺陷只在「**未保存**的新图库行」上暴露（新建产品时最典型）。
+
+### 影响
+
+- 纯前端：只改 `static/src/js/product_image_gallery.js`（1 个文件），无模型 / 字段 / 视图 / 权限 / 译文变化，
+  **无需迁移脚本**。
+- 待发命令不再残留 datapoint id：新建产品时删图 / 换主图后保存，不会再出现上述 SQL 报错，
+  也不会留下「同图重复、删不掉」的脏状态。
+- `odoo -d <db> -u product_image --stop-after-init` 升级后**必须强刷浏览器**（前端资源有缓存）；
+  已保存产品上的图库删除行为不变。
+
+### 验证（本地静态检查）
+
+- `node --check product_image/static/src/js/product_image_gallery.js` 通过；`task check` 通过（未新增结构性问题）。
+- 前端行为**无自动化用例**，界面复验清单见模块 [`README.md`](README.md) →「验证清单」第 12 项。
+
 ## [19.0.2.6.5] - 2026-09-23（修复：产品列表「Images」列显示产品主图）
 
 ### 变更（修复）

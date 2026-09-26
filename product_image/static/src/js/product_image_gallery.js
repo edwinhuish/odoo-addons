@@ -4,7 +4,6 @@ import { _t } from "@web/core/l10n/translation";
 import { useService } from "@web/core/utils/hooks";
 import { imageUrl } from "@web/core/utils/urls";
 import { isBinarySize } from "@web/core/utils/binary";
-import { x2ManyCommands } from "@web/core/orm_service";
 import { fileTypeMagicWordMap } from "@web/views/fields/image/image_field";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { registry } from "@web/core/registry";
@@ -454,7 +453,12 @@ export class ProductImageGallery extends Component {
         }));
     }
 
-    /** 展示项稳定 key：主图固定 'main'，图库图为 g<记录 id>（与缩略图展示项一一对应）。 */
+    /**
+     * 展示项稳定 key：主图固定 'main'，图库图为 `g<前端标识>`（与缩略图展示项一一对应）。
+     * 前端标识 = 已保存记录的 `resId`，或未保存新记录的 datapoint 内部 id（`record.id`）——
+     * 只在本 widget 内部做 key / 比较用，**绝不能当作 x2many 命令的 id 下发到服务端**
+     *（未保存行的删除一律走 `list.delete(record)`，见 onGalleryRemove）。
+     */
     _itemKey(item) {
         return item.type === "main" ? "main" : `g${item.record.resId || item.record.id}`;
     }
@@ -598,20 +602,25 @@ export class ProductImageGallery extends Component {
             oldMainRecord = await galleryList.addNewRecord(false);
             await oldMainRecord.update({ image_1920: oldMainData });
         }
-        // 提升新主图：数据写入主图字段 + 删除其图库记录
-        const command = newMainRec.isNew
-            ? x2ManyCommands.unlink(newMainRec.id)
-            : x2ManyCommands.delete(newMainRec.resId);
-        await this.props.record.update({
-            [this.props.name]: newMainData,
-            [this.galleryField]: [command],
-        });
+        // 提升新主图：数据写入主图字段 + 删除其图库记录（移动，不重复）。
+        // 删除一律走 x2many 列表的官方入口 `delete()`（= Odoo 官方行删除）：
+        // 已保存记录下发 (2, resId)；**未保存的新记录**下发 (2, 虚拟 id)，从而撤销该行
+        // 待发的 (0, 0, ...) 新建命令。
+        // ⚠ 不能自己拼 `x2ManyCommands.unlink(record.id)`：`record.id` 是 datapoint 内部
+        // id（形如 "datapoint_12"），既匹配不到那条待发命令（新记录留在列表里 → 出现
+        // 「同图重复」且删不掉），又会被当成 (3, "datapoint_12") 发给服务端 → 服务端
+        // browse() 把字符串按字符拆成 id，报
+        // `DELETE FROM product_image_gallery WHERE id IN ('d','a','t',…)`。
+        await this.props.record.update({ [this.props.name]: newMainData });
+        if (galleryList) {
+            await galleryList.delete(newMainRec);
+        }
         // 拖动后的新图库顺序：去掉已提升为主图的首位，'main' 处换成新建的原主图记录
         const galleryKeys = [];
         for (const key of after.slice(1)) {
             if (key === "main") {
                 if (oldMainRecord) {
-                    galleryKeys.push(`g${oldMainRecord.id}`);
+                    galleryKeys.push(`g${oldMainRecord.resId || oldMainRecord.id}`);
                 }
                 continue; // 原主图读取失败时不占位，避免后续顺序错位
             }
@@ -693,10 +702,11 @@ export class ProductImageGallery extends Component {
     }
 
     /**
-     * 把弹窗 key（'g<id>'）解析为图库记录标识；非法返回 null。
+     * 把弹窗 key（'g<id>'）解析为图库记录标识（与 `_itemKey` 同一口径）；非法返回 null。
      * - 已保存记录：数字 resId；
-     * - 未保存记录（如原主图落位新建的图库项）：虚拟 id 字符串（如 virtual_1），
+     * - 未保存记录（如原主图落位新建的图库项）：datapoint 内部 id 字符串（如 datapoint_12），
      *   原样返回，与 `record.resId || record.id` 严格相等比较即可命中。
+     * ⚠ 该标识只用于前端定位；未保存行的删除必须走 `list.delete(record)`，不能拿它拼命令。
      */
     _gidFromKey(key) {
         const s = String(key ?? "");
@@ -745,14 +755,11 @@ export class ProductImageGallery extends Component {
                 }
             }
             if (imgData) {
-                // 提升：图库首张图数据 → 主图字段，并删除该图库记录（移动，不重复）
-                const command = first.isNew
-                    ? x2ManyCommands.unlink(first.id)
-                    : x2ManyCommands.delete(first.resId);
-                await this.props.record.update({
-                    [this.props.name]: imgData,
-                    [this.galleryField]: [command],
-                });
+                // 提升：图库首张图数据 → 主图字段，并删除该图库记录（移动，不重复）。
+                // 删除同样走列表官方 delete()：未保存的行会被撤销待发的新建命令，
+                // 不会把 datapoint 内部 id 当命令 id 发给服务端（见 _writeOrderWithNewMain）。
+                await this.props.record.update({ [this.props.name]: imgData });
+                await this.galleryList?.delete(first);
             } else {
                 // 取不到图数据，降级为清空主图
                 await this.props.record.update({ [this.props.name]: false });
@@ -850,13 +857,11 @@ export class ProductImageGallery extends Component {
         if (!list) {
             return;
         }
-        // 通过主 record 的 update + x2ManyCommands 删除图库记录
-        const command = rec.isNew
-            ? x2ManyCommands.unlink(rec.id) // (3, id) 移除关联
-            : x2ManyCommands.delete(rec.resId); // (2, id) 删除已保存记录
-        await this.props.record.update({
-            [this.galleryField]: [command],
-        });
+        // 删除走 x2many 列表官方 delete()：已保存记录下发 (2, resId)；未保存的新行撤销
+        // 其待发的 (0, 0, ...) 新建命令 —— **不会**把 datapoint 内部 id 当命令 id 发给
+        // 服务端（`x2ManyCommands.unlink(record.id)` 曾导致保存时
+        // `DELETE FROM product_image_gallery WHERE id IN ('d','a','t',…)` 报错）。
+        await list.delete(rec);
         this._clampIndex();
         requestAnimationFrame(() => this._updateThumbOverflow());
     }
