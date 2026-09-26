@@ -19,6 +19,9 @@ import { ListX2ManyField } from "@web/views/fields/x2many/list_x2many_field";
  *
  * - 留空 = 这个组合新建一条变体；
  * - 选一条既有变体 = 那条变体继续承载这个组合（它的库存、单据、价格都跟着走）；
+ * - 选**「不生成变体」** = 这个组合不产出变体（本次不建）。它与「由既有变体保留」互斥：
+ *   这一行上还挂着既有变体时选不了 —— 那等于要删掉一条带着库存与单据的变体
+ *   （服务端还会再判一次，见 AGENTS.md → L1 约束 1）；
  * - 每条既有变体必须**恰好出现在一行**里：没有出现在任何一行的，会在上方提示「还有 N 条没被分配」，
  *   并且**阻止保存** —— 本模块绝不静默丢掉既有变体；
  * - 同一行不会有两条变体（组合是行，天然不重复）；选中的变体若原本在别的行，会自动从那一行让出来，
@@ -282,12 +285,14 @@ export function rowMatchesVariant(row, variant) {
  * :param list variants: 快照里的既有变体。
  * :param dict assignment: 当前分配（会被修改）。
  * :param dict cleared: 用户显式清空过的行 key（跳过）。
+ * :param dict skipped: 用户标了「不生成变体」的行 key（跳过）。
  * :return: 更新后的 ``assignment``。
  */
-export function applyDefaultAssignment(rows, variants, assignment, cleared) {
+export function applyDefaultAssignment(rows, variants, assignment, cleared, skipped) {
     const taken = new Set(Object.values(assignment || {}).filter(Boolean));
     for (const row of rows || []) {
-        if (assignment[row.key] || (cleared && cleared[row.key])) {
+        // 标了「不生成变体」的行不参与默认分配：给它挂上一条既有变体，又等于要生成一条
+        if (assignment[row.key] || (cleared && cleared[row.key]) || (skipped && skipped[row.key])) {
             continue;
         }
         const match = (variants || []).find(
@@ -308,17 +313,23 @@ export function applyDefaultAssignment(rows, variants, assignment, cleared) {
  * :param list variants: 快照里的既有变体。
  * :param dict snapshot: 快照（``attributes`` / ``values``）。
  * :param dict assignment: 用户分配好的 ``{组合 key: 既有变体 id 或 false}``。
- * :return: ``{rows, axes, unassigned, unassigned_count, new_count}``：
- *   ``rows`` 每行一个组合（``cells`` 各属性取值 + ``variant_id``）；
+ * :param dict skipped: 用户标了「不生成变体」的组合 ``{组合 key: true}`` —— 这些行
+ *   不挂变体、也不新建变体（保存时服务端把刚建出来的那一条丢掉）。
+ * :return: ``{rows, axes, unassigned, unassigned_count, new_count, pending_count, skipped_count}``：
+ *   ``rows`` 每行一个组合（``cells`` 各属性取值 + ``variant_id`` + ``skipped``；
+ *   ``will_create`` 表示这一行会不会真的产出变体）；
  *   ``unassigned`` 没被任何组合认领的既有变体（**保存会被拦**）。
  */
-export function computeVariantMapping({ lines, variants, snapshot, assignment }) {
+export function computeVariantMapping({ lines, variants, snapshot, assignment, skipped }) {
     const axes = buildAxes(lines, snapshot);
     const rows = buildCombinationRows(axes);
+    const skippedRows = skipped || {};
     const byId = new Map((variants || []).map((variant) => [variant.id, variant]));
     const taken = new Set();
     for (const row of rows) {
-        const wanted = (assignment || {})[row.key];
+        // 「不生成变体」与「由某条既有变体保留」互斥：标了就不挂变体（挂上等于要生成一条）
+        row.skipped = Boolean(skippedRows[row.key]);
+        const wanted = row.skipped ? false : (assignment || {})[row.key];
         const variant = wanted ? byId.get(wanted) : false;
         if (variant && !taken.has(variant.id)) {
             row.variant_id = variant.id;
@@ -328,7 +339,7 @@ export function computeVariantMapping({ lines, variants, snapshot, assignment })
             row.variant_id = false;
             row.on_hand = null;
         }
-        row.is_new = !row.variant_id;
+        row.is_new = !row.variant_id && !row.skipped;
     }
     const unassigned = (variants || [])
         .filter((variant) => !taken.has(variant.id))
@@ -354,7 +365,8 @@ export function computeVariantMapping({ lines, variants, snapshot, assignment })
     for (const row of rows) {
         const onDemandCells = row.cells.filter((cell) => cell.on_demand);
         row.will_create =
-            Boolean(row.variant_id) || onDemandCells.every((cell) => claimed.has(cell.value_id));
+            !row.skipped &&
+            (Boolean(row.variant_id) || onDemandCells.every((cell) => claimed.has(cell.value_id)));
     }
     return {
         rows,
@@ -362,7 +374,9 @@ export function computeVariantMapping({ lines, variants, snapshot, assignment })
         unassigned,
         unassigned_count: unassigned.length,
         new_count: rows.filter((row) => row.is_new && row.will_create).length,
-        pending_count: rows.filter((row) => !row.will_create).length,
+        // 「等订单创建」不含用户标了「不生成变体」的行：那是明确不要，不是还没轮到
+        pending_count: rows.filter((row) => !row.skipped && !row.will_create).length,
+        skipped_count: rows.filter((row) => row.skipped).length,
     };
 }
 
@@ -401,12 +415,21 @@ function assignmentSignature(assignment) {
         .join("|");
 }
 
+/** 纯函数：字典里「值为真的键」的稳定签名（与插入顺序无关）。 */
+function truthyKeysSignature(dict) {
+    return Object.keys(dict || {})
+        .filter((key) => dict[key])
+        .sort()
+        .join("|");
+}
+
 /**
  * 纯函数：映射相对「未修改前」（``store.baseline``）有没有改动。
  *
  * 这是「要不要显示 Save manually / Discard all changes」的判据：只有用户真的改了分配
- * （或改了「共享供应商价格」），才认为有未保存的映射改动。
- * 面板第一次算完时会先建立基线（``snapshotMappingBaseline()``），所以默认分配不算改动。
+ * （改了变体归属、标了 / 取消「不生成变体」，或改了「共享供应商价格」），
+ * 才认为有未保存的映射改动。面板第一次算完时会先建立基线
+ * （``snapshotMappingBaseline()``），所以默认分配不算改动。
  */
 export function mappingDiffersFromBaseline(store) {
     const baseline = store.baseline;
@@ -415,6 +438,7 @@ export function mappingDiffersFromBaseline(store) {
     }
     return (
         assignmentSignature(store.assignment) !== assignmentSignature(baseline.assignment) ||
+        truthyKeysSignature(store.skipped) !== truthyKeysSignature(baseline.skipped) ||
         Boolean(store.shareVendorPrices) !== Boolean(baseline.shareVendorPrices)
     );
 }
@@ -423,16 +447,24 @@ export function mappingDiffersFromBaseline(store) {
 export function snapshotMappingBaseline(store) {
     store.baseline = {
         assignment: { ...(store.assignment || {}) },
+        skipped: { ...(store.skipped || {}) },
         shareVendorPrices: Boolean(store.shareVendorPrices),
     };
 }
 
-/** 纯函数：把映射表整理成服务端认的归属载荷（``mapping`` 里每条就是一个组合）。 */
+/**
+ * 纯函数：把映射表整理成服务端认的归属载荷（``mapping`` 里每条就是一个组合）。
+ *
+ * ``skip`` 为真的组合服务端**不建变体**（本次刚建出来的那一条会被丢掉）；
+ * 它与 ``origin_variant_id`` 互斥：既有变体带着库存与单据，一条都不能因为
+ * 「这个组合不生成变体」而被删掉（服务端还会再判一次）。
+ */
 export function buildMappingPayload(rows, shareVendorPrices) {
     return {
         mapping: rows.map((row) => ({
             values: row.cells.filter((cell) => cell.value_id).map((cell) => cell.value_id),
             origin_variant_id: row.variant_id || false,
+            skip: !!row.skipped,
         })),
         share_vendor_prices: !!shareVendorPrices,
     };
@@ -446,6 +478,7 @@ export function emptyMappingStore(resId) {
         unassigned: [],
         assignment: {},
         cleared: {},
+        skipped: {},        // 用户标了「不生成变体」的组合：{组合 key: true}
         shareVendorPrices: false,
         signature: undefined,
         snapshot: null,
@@ -528,6 +561,7 @@ export function discardMappingChanges(model) {
     const baseline = store.baseline;
     store.assignment = { ...((baseline && baseline.assignment) || {}) };
     store.cleared = {};
+    store.skipped = { ...((baseline && baseline.skipped) || {}) };
     store.shareVendorPrices = Boolean(baseline && baseline.shareVendorPrices);
     store.dirty = false;
     model.bus?.trigger("FIELD_IS_DIRTY", false);
@@ -651,6 +685,7 @@ export class VariantMappingPanel extends Component {
             variants,
             snapshot,
             assignment: this.store.assignment,
+            skipped: this.store.skipped,
         });
         const liveKeys = new Set(preview.rows.map((row) => row.key));
         for (const key of Object.keys(this.store.assignment)) {
@@ -659,19 +694,30 @@ export class VariantMappingPanel extends Component {
                 delete this.store.cleared[key];
             }
         }
-        // 默认分配：把「本来就属于这一行」的既有变体放回它的行（用户显式清空过的行不碰）
-        applyDefaultAssignment(preview.rows, variants, this.store.assignment, this.store.cleared);
+        // 组合已经不存在的「不生成变体」标记跟着一起丢（属性行改了，那一行已经不在了）
+        for (const key of Object.keys(this.store.skipped)) {
+            if (!liveKeys.has(key)) {
+                delete this.store.skipped[key];
+            }
+        }
+        // 默认分配：把「本来就属于这一行」的既有变体放回它的行
+        // （用户显式清空过、或标了「不生成变体」的行不碰）
+        applyDefaultAssignment(
+            preview.rows, variants, this.store.assignment, this.store.cleared, this.store.skipped
+        );
         const result = computeVariantMapping({
             lines,
             variants,
             snapshot,
             assignment: this.store.assignment,
+            skipped: this.store.skipped,
         });
         this.store.rows = result.rows;
         this.store.unassigned = result.unassigned;
         this.store.axes = result.axes;
         this.store.newCount = result.new_count;
         this.store.pendingCount = result.pending_count || 0;
+        this.store.skippedCount = result.skipped_count || 0;
         this.syncDirty();
     }
 
@@ -767,7 +813,7 @@ export class VariantMappingPanel extends Component {
 
     get introLabel() {
         return _t(
-            "Every combination that will exist, and which existing variant keeps it. Leave the variant empty to create a new one; a variant that is not assigned to any combination would be dropped, so the save is blocked until each of them is assigned."
+            "Every combination that will exist, and which existing variant keeps it. Leave the variant empty to create a new one, or pick Do not create a variant to leave that combination out; a variant that is not assigned to any combination would be dropped, so the save is blocked until each of them is assigned."
         );
     }
 
@@ -777,6 +823,33 @@ export class VariantMappingPanel extends Component {
 
     get chooseVariantLabel() {
         return _t("Choose a variant");
+    }
+
+    /** Variant 下拉里「不生成变体」这个选项的值（既不是变体 id，也不是空值）。 */
+    get skipValue() {
+        return "skip";
+    }
+
+    get skipLabel() {
+        return _t("Do not create a variant");
+    }
+
+    /** 这一行还挂着既有变体时，「不生成变体」选不了 —— 得先把它让出来。 */
+    get skipBlockedLabel() {
+        return _t(
+            "An existing variant keeps this combination, so it cannot be marked as not created: set that row back to (new variant) to release the variant first — an existing variant is never dropped."
+        );
+    }
+
+    get skippedCount() {
+        return this.store.skippedCount || 0;
+    }
+
+    get skippedHint() {
+        return _t(
+            "%(count)s combinations are marked as not created: no variant is created for them. It applies to this save only, so the next attribute change lists them again.",
+            { count: this.skippedCount }
+        );
     }
 
     get unassignedHint() {
@@ -818,9 +891,28 @@ export class VariantMappingPanel extends Component {
     // 交互
     // ------------------------------------------------------------------
 
-    /** 给某一行指定「由哪条既有变体保留」（空 = 新建变体）。 */
+    /**
+     * 给某一行指定「这个组合怎么办」—— 下拉有三种取值：
+     *
+     * - 一条既有变体：那条变体接着承载这个组合（库存、单据、价格都跟着走）；
+     * - 空：这个组合**新建**一条变体；
+     * - ``skip``（**不生成变体**）：这个组合**不产出变体**，本次不建、也不许有既有变体挂在上面。
+     */
     onSelectVariant(row, ev) {
-        const variantId = Number(ev.target.value) || false;
+        const raw = ev.target.value;
+        if (raw === this.skipValue) {
+            // 「不生成变体」与「由既有变体保留」互斥：这一行上还挂着既有变体时不能标 ——
+            // 标了等于要删掉它，而既有变体带着库存与单据，一条都不能动
+            // （下拉里已禁用，这里是防御；服务端还会再判一次，见 AGENTS.md → L1 约束 1）
+            if (!row.variant_id) {
+                this.store.skipped[row.key] = true;
+                delete this.store.assignment[row.key];
+                delete this.store.cleared[row.key];
+            }
+            this.refreshRows();
+            return;
+        }
+        const variantId = Number(raw) || false;
         if (variantId) {
             // 已经被别行占着的变体在下拉里是禁用的（浏览器不会触发它），这里只是防御：
             // 想把它换到这一行，得先把占着它的那一行改回「(new variant)」让出来
@@ -834,9 +926,11 @@ export class VariantMappingPanel extends Component {
             }
             this.store.assignment[row.key] = variantId;
             delete this.store.cleared[row.key];
+            delete this.store.skipped[row.key];
         } else {
             // 留空 = 这一行新建变体；记下来，别在下次重算时又自动分配回去
             delete this.store.assignment[row.key];
+            delete this.store.skipped[row.key];
             this.store.cleared[row.key] = true;
         }
         this.refreshRows();

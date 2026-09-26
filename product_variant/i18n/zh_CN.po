@@ -289,8 +289,8 @@ msgstr "每次从产品表单给产品增加属性时都会留下转换记录。
 #. module: product_variant
 #. odoo-javascript
 #: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
-msgid "Every combination that will exist, and which existing variant keeps it. Leave the variant empty to create a new one; a variant that is not assigned to any combination would be dropped, so the save is blocked until each of them is assigned."
-msgstr "这次改动之后会存在的每个组合，以及由哪条既有变体继续保留它。变体留空 = 这个组合新建一条变体；没被分配到任何组合的既有变体会被丢弃，所以在每条既有变体都分配好之前，保存会被拦住。"
+msgid "Every combination that will exist, and which existing variant keeps it. Leave the variant empty to create a new one, or pick Do not create a variant to leave that combination out; a variant that is not assigned to any combination would be dropped, so the save is blocked until each of them is assigned."
+msgstr "这次改动之后会存在的每个组合，以及由哪条既有变体继续保留它。变体留空 = 这个组合新建一条变体，也可以选「不生成变体」让这个组合不产出变体；没被分配到任何组合的既有变体会被丢弃，所以在每条既有变体都分配好之前，保存会被拦住。"
 
 #. module: product_variant
 #. odoo-python
@@ -1001,3 +1001,39 @@ msgstr ""
 #: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
 msgid "(new variant)"
 msgstr "（新建变体）"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "Do not create a variant"
+msgstr "不生成变体"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "An existing variant keeps this combination, so it cannot be marked as not created: set that row back to (new variant) to release the variant first — an existing variant is never dropped."
+msgstr "这条组合正由一条既有变体保留，不能标成「不生成变体」：请先把那一行改回「（新建变体）」把变体让出来 —— 既有变体绝不会被丢弃。"
+
+#. module: product_variant
+#. odoo-javascript
+#: code:addons/product_variant/static/src/js/variant_mapping_panel.js:0
+msgid "%(count)s combinations are marked as not created: no variant is created for them. It applies to this save only, so the next attribute change lists them again."
+msgstr "有 %(count)s 个组合被标成「不生成变体」：它们不会产出变体。这只对本次保存生效，下次再改属性时它们会重新被列出来。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "The form sent unknown attribute values for the combination %(values)s of %(product)s."
+msgstr "表单为 %(product)s 的组合 %(values)s 提交了不存在的属性取值。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "The combination %(values)s is kept by the existing variant %(variant)s and cannot be marked as not created: that variant carries its own stock, orders and invoices. Move it to another combination first."
+msgstr "组合 %(values)s 正由既有变体 %(variant)s 保留，不能标成「不生成变体」：那条变体带着自己的库存、订单与发票。请先把它挪到别的组合。"
+
+#. module: product_variant
+#. odoo-python
+#: code:addons/product_variant/models/product_template.py:0
+msgid "The combination %(values)s is kept by the existing variant %(variant)s and cannot be marked as not created: that variant carries its own stock, orders and invoices. Move it to another combination first, or set its row back to (new variant) to release it."
+msgstr "组合 %(values)s 正由既有变体 %(variant)s 保留，不能标成「不生成变体」：那条变体带着自己的库存、订单与发票。请先把它的那一行改回「（新建变体）」把它让出来，或者把它挪到别的组合。"

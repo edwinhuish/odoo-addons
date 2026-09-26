@@ -56,6 +56,69 @@
   ③ 用分页翻到另一条产品 → 映射按那条产品重算（不是上一条的）；④ 回到原产品改属性 → 映射照旧，
   未分配提示与保存拦截不受影响。
 
+## [19.0.13.1.0] - 2026-09-26（组合可以选择「不生成变体」）
+
+> 修订日期：2026-09-26 ｜ 类型：功能（+y） ｜ 影响文件：
+> `static/src/js/variant_mapping_panel.js`、`static/src/xml/variant_mapping_panel.xml`、
+> `models/product_template.py`、`tests/test_product_variant_mapping.py`（+2 用例）、
+> `tests/test_product_variant_conversion.py`（+1 用例）、
+> `tests/js/variant_mapping_pure.mjs`（+2 用例）、`i18n/zh_CN.po`、
+> `__manifest__.py`、`README.md`
+
+### 变更
+
+1. **映射表每行的 Variant 下拉新增「Do not create a variant」（不生成变体）**：
+   组合除了「由某条既有变体保留」与「留空 = 新建变体」，现在还能明确**不要变体** ——
+   之前「立即」属性的取值笛卡尔积会被原生 `_create_variant_ids()` **全部**建出来
+   （改一次属性就多出一批没人要的变体），用户没有说不的余地。
+   - 状态：`store.skipped`（组合行 key 集合），与 `assignment` 互斥 —— 标了就不再挂变体，
+     挂了变体也选不了「不生成」；
+   - 行数不变，标了的行显示成灰色、算进 `skipped_count`，**不**算进「等订单创建」
+     （那是另一种语义：按需轴还没人认领）。
+2. **`不生成变体` 与「由既有变体保留」互斥，两道闸门**：
+   - 前端：这一行还挂着既有变体时该选项**禁用**（悬停说明：先把那一行改回 `(new variant)`
+     把变体让出来）。让出来之后那条变体变成「未分配」，保存照样被拦住 —— 用户必须给它
+     找一个新组合，不会无声消失；
+   - 服务端：`_parse_variant_conversion_mapping()` 按载荷里的组合先判一次，
+     `_check_variant_conversion_skipped()` 再按**改动后的锚点**判一次（锚点是最终口径）。
+     既有变体带着自己的库存、单据与发票，一条都不能因为「这个组合不生成变体」被丢掉。
+3. **服务端在转换末尾丢掉标了「不生成变体」的组合刚建出来的那条变体**
+   （`_drop_variant_conversion_skipped_variants()`）：
+   - 只丢 `originals` 之外的（**本次**新建的）：它们是这一趟才建出来的，还没有任何
+     库存 / 单据 / 价格。既有变体一条都不碰（上面那条校验已经拦住，这里是第二道保险）；
+   - 带「按需生成」属性的产品更简单：计划里的这些组合**根本不建**
+     （`_create_variant_conversion_missing_variants()` 里过滤掉）；
+   - `unlink()` 走 `create_product_product=False`：只删变体本身，绝不因为「它是这个产品
+     的最后一条变体」把产品模板连带删掉（原生 `product.product.unlink()` 有这个分支）；
+   - 后置断言的预期变体数扣掉本次丢掉的数量（丢完立即作废 `product_variant_ids` /
+     `product_variant_count` 缓存，断言读到真值）。
+4. 「不生成变体」算**未保存改动**：标了 / 取消都会亮出 Save manually 与 Discard all changes，
+   Discard 会回到基线（基线里现在也记 `skipped`）。
+5. 离线自测 `tests/js/variant_mapping_pure.mjs` 加两条：标了「不生成变体」的行不挂变体 /
+   不新建 / 不算「等订单创建」；默认分配不会把它填回去。服务端加三条：
+   标了不生成的组合不产出变体；既有变体占着的组合标不生成 → 被拒且整单回滚；
+   **带「按需生成」属性**的产品走的是另一条补建路径（计划补建），
+   「不生成变体」对它也生效（后置断言的预期变体数要跟着扣，否则会撞上整单回滚）。
+
+### 影响
+
+- 只改「属性组合能不能不要变体」这一件事：不加字段、不加按钮、不改既有保存路径。
+  不标「不生成变体」时行为与 `19.0.13.0.7` 完全一致。
+- **只对本次保存生效**：以后再改属性，映射表会重新把这些组合列出来（面板下方提示会写明）。
+  它不改属性配置本身，所以 Odoo 以后仍能按配置建出这些组合。
+- 需要 `-u product_variant` + **强刷浏览器**（前端资源变了），中文界面由 `i18n/zh_CN.po`
+  提供（本次新增 / 改写的界面文案与报错都已补译文）。
+- 无数据迁移；服务端 Python 只动 `product_template.py`。
+
+### 验证
+
+- `task test -- product_variant` → **75 项 0 failed / 0 error**（含新增 3 项）；
+  `node product_variant/tests/js/variant_mapping_pure.mjs` → 19 项全过（含新增 2 项）。
+- 待目标环境手工验证（前端无浏览器自动化）：① 多变体产品加一个多取值属性 → 映射表里
+  某个没有既有变体的组合选 **不生成变体** → 保存后该组合确实没有变体（其它组合照旧）；
+  ② 试着给**挂着既有变体**的那一行选「不生成变体」→ 选项禁用、选不了；
+  ③ 标了之后 Save manually / Discard all changes 出现，Discard 后标记回到基线。
+
 ## [19.0.13.0.6] - 2026-09-26（核查修订：文档同步 + 原生直写安全不变量用例）
 
 > 修订日期：2026-09-26 ｜ 类型：文档 / 测试（+z） ｜ 影响文件：

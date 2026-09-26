@@ -1254,6 +1254,37 @@ class TestProductVariantConversion(TransactionCase):
         # 按需属性的产品不做价格分离（以后订单期新建的变体还要靠模板级价格）
         self.assertFalse(conversions.separate_variant_prices)
 
+    def test_on_demand_product_can_leave_a_combination_out(self):
+        """「按需生成」属性的产品：标了「不生成变体」的组合同样不产出变体。
+
+        按需属性的变体由 ``_create_variant_conversion_missing_variants()`` 计划补建，
+        「不生成变体」对这条路径也要生效，且后置断言的预期变体数要跟着扣 —— 否则用户
+        标掉一个组合就会撞上「变体数与预期不符」的整单回滚（而不是拿到想要的结果）。
+        """
+        dynamic = self._dynamic_attribute(name="Test On Demand Length")
+        product = self._on_demand_product(dynamic)
+        originals = product.product_variant_ids
+        self.assertEqual(len(originals), 2)
+
+        commands = self._set_commands(product, self.color, self.color.value_ids)
+        preview = self._preview(product, commands)
+        self.assertEqual(len(preview["combinations"]), 4)
+
+        rows = self._default_rows(preview)
+        # 挑一个**没有既有变体占着**的组合标成「不生成变体」
+        target = next(row for row in rows if not row["origin_variant_id"])
+        target["skip"] = True
+        self._confirm(product, commands, self._payload(rows))
+
+        self.assertEqual(len(product.product_variant_ids), 3, "4 个组合里少了标掉的那一组合")
+        combinations = [
+            set(variant.product_template_attribute_value_ids.product_attribute_value_id.ids)
+            for variant in product.product_variant_ids
+        ]
+        self.assertNotIn(set(target["values"]), combinations, "标掉的组合没有变体")
+        self.assertEqual(originals - product.product_variant_ids,
+                         self.env["product.product"], "既有变体一条不少")
+
     def test_adding_an_on_demand_attribute_keeps_the_existing_variant(self):
         """给既有变体加一个**多取值**的「按需生成」属性：必须自己锚定，不能让原生删掉变体。
 

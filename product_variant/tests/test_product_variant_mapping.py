@@ -352,6 +352,85 @@ class TestProductVariantMapping(TransactionCase):
         self.assertEqual(len(product.product_variant_ids), 1, "一个字都没写库")
 
     # ------------------------------------------------------------------
+    # 「不生成变体」：某些组合这次不要变体
+    # ------------------------------------------------------------------
+
+    def test_skipped_combination_creates_no_variant(self):
+        """映射表里标了「不生成变体」的组合，保存之后**不产出变体**。
+
+        Odoo 原生会把「立即」轴的取值笛卡尔积**全部**建出来（``_create_variant_ids()``），
+        本模块在转换末尾把标了的那一组合刚建出来的变体丢掉 —— 它是本次才建出来的，
+        还没有任何库存 / 单据；既有变体一条都不碰。
+        """
+        product = self._configure(self._create_product(), self.color, self.color.value_ids)
+        self.assertEqual(len(product.product_variant_ids), 2)
+        red = self.color.value_ids.filtered(lambda value: value.name == "Map Red")
+
+        # 加 Size(M / L)：4 个组合，既有两条变体按默认归属各占 Red/M 与 Blue/M
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = product.get_variant_conversion_preview(commands)
+        self.assertTrue(preview["required"])
+        self.assertEqual(len(preview["combinations"]), 4)
+
+        mapping = []
+        for combination in preview["combinations"]:
+            values = combination["values"]
+            mapping.append({
+                "values": values,
+                "origin_variant_id": combination["origin_variant_id"],
+                # Red + L 这一行标成「不生成变体」（没有既有变体占着它）
+                "skip": red.id in values and self.size_l.id in values,
+            })
+        product.write({
+            "attribute_line_ids": commands,
+            "variant_conversion_mapping": json.dumps(
+                {"mapping": mapping, "share_vendor_prices": False}),
+        })
+        product.invalidate_recordset()
+
+        self.assertEqual(len(product.product_variant_ids), 3, "4 个组合里少了标了「不生成变体」的那个")
+        combinations = [
+            set(variant.product_template_attribute_value_ids.product_attribute_value_id.ids)
+            for variant in product.product_variant_ids
+        ]
+        self.assertNotIn({red.id, self.size_l.id}, combinations, "Red + L 没有变体")
+        self.assertIn({red.id, self.size_m.id}, combinations, "Red + M 还是原来那条变体")
+
+    def test_skipping_a_combination_kept_by_an_existing_variant_is_refused(self):
+        """既有变体占着的组合不能标「不生成变体」：那等于要删掉一条带着库存与单据的变体。"""
+        product = self._configure(self._create_product(), self.color, self.color.value_ids)
+        red = self.color.value_ids.filtered(lambda value: value.name == "Map Red")
+        kept = product.product_variant_ids.filtered(
+            lambda variant: red in variant.product_template_attribute_value_ids
+                            .product_attribute_value_id)
+        self.assertEqual(len(kept), 1)
+
+        commands = self._set_commands(product, self.size, self.size.value_ids)
+        preview = product.get_variant_conversion_preview(commands)
+        mapping = []
+        for combination in preview["combinations"]:
+            values = combination["values"]
+            mapping.append({
+                "values": values,
+                "origin_variant_id": combination["origin_variant_id"],
+                # Red + M 正由那条既有变体保留着，却把它标成「不生成变体」
+                "skip": red.id in values and self.size_m.id in values,
+            })
+        with self.assertRaises(UserError) as caught:
+            with self.env.cr.savepoint():
+                product.write({
+                    "attribute_line_ids": commands,
+                    "variant_conversion_mapping": json.dumps(
+                        {"mapping": mapping, "share_vendor_prices": False}),
+                })
+        self.assertIn("cannot be marked as not created", str(caught.exception))
+
+        product.invalidate_recordset()
+        kept.invalidate_recordset()
+        self.assertTrue(kept.exists(), "那条既有变体没有被删掉")
+        self.assertEqual(len(product.product_variant_ids), 2, "整单回滚：变体数没变")
+
+    # ------------------------------------------------------------------
     # 归档变体：不能靠「组合数没变」的原生直写把它悄悄激活
     # ------------------------------------------------------------------
 

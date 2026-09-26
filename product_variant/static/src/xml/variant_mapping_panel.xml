@@ -39,13 +39,22 @@
                             <select class="form-select"
                                     t-att-disabled="!isEditable"
                                     t-on-change="(ev) => this.onSelectVariant(row, ev)">
-                                <option value="" t-att-selected="!row.variant_id" t-esc="newVariantLabel"/>
+                                <option value=""
+                                        t-att-selected="!row.variant_id and !row.skipped"
+                                        t-esc="newVariantLabel"/>
                                 <option t-foreach="variantOptions" t-as="option" t-key="option.id"
                                         t-att-value="option.id"
                                         t-att-selected="row.variant_id === option.id"
                                         t-att-disabled="isOptionTaken(option, row)"
                                         t-att-title="isOptionTaken(option, row) ? takenElsewhereLabel : ''"
                                         t-esc="option.label"/>
+                                <!-- 「不生成变体」：这一行不产出变体。还挂着既有变体时选不了
+                                     （那等于要删掉一条带着库存与单据的变体） -->
+                                <option t-att-value="skipValue"
+                                        t-att-selected="row.skipped"
+                                        t-att-disabled="row.variant_id"
+                                        t-att-title="row.variant_id ? skipBlockedLabel : ''"
+                                        t-esc="skipLabel"/>
                             </select>
                         </td>
                     </tr>
@@ -53,6 +62,7 @@
             </table>
 
             <div t-if="store.newCount" class="text-muted mt-2" t-esc="newVariantsLabel"/>
+            <div t-if="skippedCount" class="text-muted mt-2" t-esc="skippedHint"/>
             <div t-if="pendingCount" class="text-muted mt-2" t-esc="pendingHint"/>
             <div class="o_variant_mapping_actions form-check mt-3">
                 <input class="form-check-input" type="checkbox" id="variant_mapping_share_vendor_prices"

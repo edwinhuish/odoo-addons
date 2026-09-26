@@ -228,13 +228,14 @@ class ProductTemplate(models.Model):
         #    并写下转换台账与谱系。此时配置已是目标配置，转换里那一步写属性行是幂等的。
         # 没有映射也走转换的唯一情况：本次不新增变体、但原生会丢变体（needs_anchoring，见上），
         # 这时不需要用户确认归属，用默认归属即可，所以 mapping 留空由 _convert_to_multi_variant 兜底
-        variant_mapping, share_vendor_prices = (
+        variant_mapping, share_vendor_prices, skipped_combinations = (
             self._parse_variant_conversion_mapping(mapping_payload) if mapping_payload
-            else ({}, False))
+            else ({}, False, set()))
         self._convert_to_multi_variant(
             self._get_variant_conversion_specification(),
             variant_mapping=variant_mapping,
             share_vendor_prices=share_vendor_prices,
+            skipped_combinations=skipped_combinations,
             # 台账要记「本次真正新加了哪些属性」：属性行在第①步已写成目标配置，读不出来了
             added_attributes=affected["added_attributes"],
         )
@@ -430,16 +431,27 @@ class ProductTemplate(models.Model):
         return analysis
 
     def _parse_variant_conversion_mapping(self, payload):
-        """把表单弹窗回传的归属映射（JSON）解析成 ``({既有变体: 取值集合}, 是否共享供应商价格)``。
+        """把表单映射表回传的归属映射（JSON）解析成服务端要的三样东西。
 
-        前端格式::
+        前端格式（``skip`` 是后加的，缺省即 False，老载荷照样认）::
 
-            {"mapping": [{"values": [取值 id, ...], "origin_variant_id": 既有变体 id 或 false}, ...],
+            {"mapping": [{"values": [取值 id, ...],
+                          "origin_variant_id": 既有变体 id 或 false,
+                          "skip": true/false}, ...],
              "share_vendor_prices": true/false}
 
         每条 mapping 的含义是「改动后的这个组合由哪条既有变体继续承载」，没指定来源的就是
-        新变体。这里只做「每条既有变体恰好一次、取值必须存在」的校验，其余校验交给
+        新变体；``skip`` 为真是「这个组合**不生成变体**」。两者互斥：既有变体带着自己的
+        库存、单据与发票，不能因为「这个组合不生成变体」被删掉（这里按**载荷里的组合**
+        先判一次，改动后的归属在 ``_check_variant_conversion_skipped()`` 里按锚点再判一次）。
+
+        这里只做「每条既有变体恰好一次、取值必须存在」的校验，其余校验交给
         ``_check_variant_conversion_mapping``。
+
+        :return: ``(mapping, share_vendor_prices, skipped)``：
+            ``mapping`` 是 ``{既有变体: 取值集合}``；
+            ``skipped`` 是「不生成变体」的组合集合（每项是一组
+            ``product.attribute.value`` id 的 ``frozenset``）。
         """
         self.ensure_one()
         try:
@@ -454,8 +466,21 @@ class ProductTemplate(models.Model):
         share_vendor_prices = bool(payload.get("share_vendor_prices"))
         originals = self.product_variant_ids
         mapping = {}
+        skipped = set()
         for row in rows:
-            origin_id = row.get("origin_variant_id") if isinstance(row, dict) else False
+            if not isinstance(row, dict):
+                continue
+            values = self.env["product.attribute.value"].browse(row.get("values") or [])
+            if len(values) != len(values.exists()):
+                raise UserError(_(
+                    "The form sent unknown attribute values for the combination %(values)s of %(product)s.",
+                    values=", ".join(values.mapped("display_name")) or "-",
+                    product=self.display_name,
+                ))
+            # 不生成变体：先把组合记下来（它不许由任何既有变体承载 —— 那条互斥在下面统查）
+            if row.get("skip"):
+                skipped.add(frozenset(values.ids))
+            origin_id = row.get("origin_variant_id")
             if not origin_id:
                 continue
             variant = originals.filtered(lambda original: original.id == origin_id)
@@ -470,12 +495,6 @@ class ProductTemplate(models.Model):
                     "Variant %(variant)s was given two combinations; keep one combination per existing variant.",
                     variant=variant.display_name,
                 ))
-            values = self.env["product.attribute.value"].browse(row.get("values") or [])
-            if len(values) != len(values.exists()):
-                raise UserError(_(
-                    "The form sent unknown attribute values for variant %(variant)s.",
-                    variant=variant.display_name,
-                ))
             mapping[variant] = values
 
         unmapped = originals - self.env["product.product"].browse(
@@ -485,7 +504,14 @@ class ProductTemplate(models.Model):
                 "Every existing variant must keep a combination: %(variants)s has no combination. Save the product form again to get the ownership dialog.",
                 variants=", ".join(unmapped.mapped("display_name")),
             ))
-        return mapping, share_vendor_prices
+        for variant, values in mapping.items():
+            if frozenset(values.ids) in skipped:
+                raise UserError(_(
+                    "The combination %(values)s is kept by the existing variant %(variant)s and cannot be marked as not created: that variant carries its own stock, orders and invoices. Move it to another combination first.",
+                    values=", ".join(values.mapped("display_name")) or "-",
+                    variant=variant.display_name,
+                ))
+        return mapping, share_vendor_prices, skipped
 
     def _check_variant_conversion_combination_cap(self, attribute_lines):
         """本次转换会落到多少个变体（组合数）超过 ``product.dynamic_variant_limit`` 就拒绝。
@@ -564,7 +590,7 @@ class ProductTemplate(models.Model):
     # ------------------------------------------------------------------
 
     def _convert_to_multi_variant(self, specification, variant_mapping=None, share_vendor_prices=False,
-                                  added_attributes=None):
+                                  added_attributes=None, skipped_combinations=None):
         """给产品追加属性 / 取值，生成缺失的变体，并保留全部既有变体。
 
         :param list specification: 每个属性一项，形如::
@@ -579,6 +605,10 @@ class ProductTemplate(models.Model):
             的规则补默认值（已有属性保持原取值、新加属性取本次的第一个取值）。
         :param bool share_vendor_prices: 是否把仅适用于原变体的供应商价格改为
             「适用于本产品的全部变体」。
+        :param skipped_combinations: 用户在映射表里标了「不生成变体」的组合，形如
+            ``{frozenset(取值 id), ...}`` —— 这些组合**不产出变体**：本次刚建出来的
+            那一条会被丢掉（既有变体不会碰，见 ``_check_variant_conversion_skipped()``）。
+            只对本次转换生效：以后再改属性，映射表会重新把它们列出来。
         :param added_attributes: 本次真正新加的属性（写进转换台账）。留空时按当前配置推断。
 
         谱系判定不需要「改动前的属性行快照」：来源是按**转换前各变体携带的取值**（进入本方法
@@ -663,6 +693,11 @@ class ProductTemplate(models.Model):
             anchors = self._get_variant_conversion_anchor_values(
                 specification, mapping, attribute_lines)
             self._check_variant_conversion_anchors(originals, anchors)
+            # 「不生成变体」：把载荷里的取值 id 翻译成**本产品**的 ptav 组合，并确认
+            # 没有任何既有变体会因此被丢掉（改动后的锚点是最终口径）
+            skipped = self._resolve_variant_conversion_skipped(
+                skipped_combinations, attribute_lines)
+            self._check_variant_conversion_skipped(anchors, skipped)
 
             # ③ 把每个既有变体锚定到它的归属组合：让下一步的 _create_variant_ids 认出
             #    「既有变体 = 某个归属组合」从而逐个复用它们（既不新建也不删除）
@@ -680,8 +715,14 @@ class ProductTemplate(models.Model):
             new_variants = self._create_variant_conversion_missing_variants(
                 attribute_lines) or (self.product_variant_ids - originals)
 
+            # ④b 标了「不生成变体」的组合：把本次**刚建出来**的那条变体丢掉。
+            #     既有变体一条都不碰（``_check_variant_conversion_skipped()`` 已拦住），
+            #     所以这里丢的全是本次新建、还没有任何库存 / 单据的记录。
+            dropped = self._drop_variant_conversion_skipped_variants(originals, skipped)
+
             # ⑤ 后置断言：任何不符合预期的情况都整单回滚，不留半成品
-            self._check_variant_conversion_result(anchors, expected_count)
+            #    （预期数量扣掉本次丢掉的那些「不生成变体」的组合）
+            self._check_variant_conversion_result(anchors, expected_count - len(dropped))
             new_variants = self.product_variant_ids - originals
 
             # ⑥ 显式记录归属：转换台账 + 谱系行 + 变体上的来源字段
@@ -765,6 +806,59 @@ class ProductTemplate(models.Model):
             existing.add(signature)
             created |= variant
         return created
+
+    def _resolve_variant_conversion_skipped(self, skipped_combinations, attribute_lines):
+        """把「不生成变体」的组合从**取值 id** 翻译成**本产品**的 ptav 组合。
+
+        映射表回传的是 ``product.attribute.value`` id（前端手里只有它），而变体上挂的是
+        ``product.template.attribute.value``（ptav）；两者靠当前属性行一一对应。
+        载荷过期（某个取值已经不在属性行里）时那一行对应不到任何组合，直接忽略。
+
+        :return: ``{frozenset(ptav id), ...}``
+        """
+        self.ensure_one()
+        ptav_by_value = {
+            ptav.product_attribute_value_id.id: ptav.id
+            for ptav in attribute_lines.product_template_value_ids._only_active()
+        }
+        signatures = set()
+        for values in skipped_combinations or ():
+            ptav_ids = []
+            for value_id in values:
+                ptav_id = ptav_by_value.get(value_id)
+                if not ptav_id:
+                    ptav_ids = None
+                    break
+                ptav_ids.append(ptav_id)
+            if ptav_ids:
+                signatures.add(frozenset(ptav_ids))
+        return signatures
+
+    def _drop_variant_conversion_skipped_variants(self, originals, skipped):
+        """丢掉「不生成变体」的组合在**本次转换里刚建出来**的那条变体。
+
+        只丢 ``originals`` 之外的（本次新建的）：它们还没有任何库存、单据或价格；
+        既有变体一条都不碰 —— 「不生成变体」与「由既有变体保留」互斥，那条互斥在
+        ``_check_variant_conversion_skipped()`` 里已经拦住，这里是第二道保险。
+
+        :return: 本次丢掉的变体记录集。
+        :rtype: product.product
+        """
+        self.ensure_one()
+        if not skipped:
+            return self.env["product.product"]
+        created = self.with_context(active_test=False).product_variant_ids - originals
+        to_drop = created.filtered(
+            lambda variant: frozenset(variant.product_template_attribute_value_ids.ids) in skipped
+        )
+        if not to_drop:
+            return to_drop
+        # create_product_product=False：只删变体本身，绝不因为「它是这个产品的最后一条变体」
+        # 而把产品模板连带删掉（原生 product.product.unlink() 有这个分支）
+        to_drop.with_context(create_product_product=False).unlink()
+        # 变体数 / 变体清单是算出来的（可能还留在缓存里）：作废缓存，让后面的后置断言读到真值
+        self.invalidate_recordset(["product_variant_ids", "product_variant_count"])
+        return to_drop
 
     # ------------------------------------------------------------------
     # 校验
@@ -911,6 +1005,24 @@ class ProductTemplate(models.Model):
                     "The values chosen for the original variant %(variant)s (%(values)s) are excluded by the attribute configuration of this product; choose another combination.",
                     variant=variant.display_name,
                     values=self._get_variant_conversion_combination_label(anchor),
+                ))
+
+    def _check_variant_conversion_skipped(self, anchors, skipped):
+        """「不生成变体」的组合不能是任何既有变体的归属组合。
+
+        标了「不生成变体」等于「这个组合不要变体」；而既有变体带着自己的库存、单据与发票，
+        一条都不能这样被丢掉（L1 约束 1）。所以用户在映射表里要先把那条变体挪到别的组合
+        （把它那一行改回「(new variant)」让出来），才能把这个组合标成不生成。
+        """
+        self.ensure_one()
+        if not skipped:
+            return
+        for variant, anchor in anchors.items():
+            if frozenset(anchor.ids) in skipped:
+                raise UserError(_(
+                    "The combination %(values)s is kept by the existing variant %(variant)s and cannot be marked as not created: that variant carries its own stock, orders and invoices. Move it to another combination first, or set its row back to (new variant) to release it.",
+                    values=self._get_variant_conversion_combination_label(anchor),
+                    variant=variant.display_name,
                 ))
 
     def _check_variant_conversion_result(self, anchors, expected_count):

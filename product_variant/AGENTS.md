@@ -13,7 +13,10 @@
 - 继承模型：`product.template`（保存拦截 + 转换核心）、`product.product`（来源字段）
 - 自定义组件（前端模块）：`VariantMappingPanel`（「属性 ↔ 变体」映射表，field widget）+ `FormController.onWillSaveRecord` 补丁
 - 主依赖：`product`（**不依赖** `stock` / `sale` / `purchase` / `account`；这些模型只用来给映射表补在手数量，运行时判断是否存在）
-- 当前版本：`19.0.13.0.7`（19.0.13.0.7：**修「点 New 后映射表还是上一个产品的」** —— 点 New / 翻页走
+- 当前版本：`19.0.13.1.0`（19.0.13.1.0：**组合可以选择「不生成变体」** —— 映射表 Variant 下拉新增
+  `Do not create a variant`（`store.skipped`），服务端在转换末尾丢弃标了不生成的组合**本次刚建出来**
+  的那条变体；它与「由既有变体保留」互斥（两道闸门：前端禁用 + 服务端按锚点拒绝），见 L1 约束 1
+  最后一条；19.0.13.0.7：**修「点 New 后映射表还是上一个产品的」** —— 点 New / 翻页走
   `model.load({resId})`，model 与面板组件实例都被复用（`setup()` 不再跑），「换记录」只能在
   `recompute()` 里认（作废整份状态 + 重取快照）；`resetMappingStore()` 改**原地**清空（换对象会让
   组件与保存钩子各拿一份、且不经代理不重画）；新建（没 id）与「快照还没取回来」时整块不显示，
@@ -41,6 +44,14 @@
 1. **绝不删除、重建或归档既有变体**
    - 转换只能新增 `product.product`；改动前存在的每一条变体记录都必须原地保留（id 不变），并各自成为用户确认的那个组合
    - 违反后果：`stock.move.line` 因 `ondelete='cascade'` 被连带删除（库存历史直接丢失）；`sale.order.line` / `purchase.order.line` / `account.move.line` / `stock.quant` 因 `ondelete='restrict'` 导致删除失败后退化为归档旧变体 + 新建同组合变体，单据与库存从此对不上
+   - **`19.0.13.1.0` 起唯一的例外**：用户在映射表里把某个组合标成**「不生成变体」**时，可以删掉
+     该组合**本次转换刚建出来**的那条变体（`_drop_variant_conversion_skipped_variants()`）——
+     它是这一趟才建的，还没有任何库存 / 单据。硬前提：**只删 `originals` 之外的**
+     （`self.product_variant_ids - originals`），既有变体一条都不能因为它被丢掉；
+     前端在「还挂着既有变体」的行上禁用该选项，服务端按**改动后的锚点**再拒一次
+     （`_check_variant_conversion_skipped()`），删完立即作废 `product_variant_ids` /
+     `product_variant_count` 缓存，后置断言的预期数也扣掉本次删掉的数量。
+     违反后果：既有多变体被连带删除 / 归档，回到上面那条违反后果
 
 2. **入口只能是「保存时检测」，不能加按钮 / 向导**
    - 属性变更的归属确认必须发生在保存流程里（前端 `onWillSaveRecord` + 服务端 `write` 双层），
@@ -735,6 +746,19 @@ docker compose -f .dev/compose.yml run --rm -T odoo \
 - 判断标准：凡是**挂在 model / env 上、跨组件复用**的状态，都要回答「换记录时谁负责作废」；
   只写在 `setup()` 里的重置逻辑在 Odoo 的表单里**不可靠**（组件与 model 都被复用）。
   验证方式：打开一个有变体的产品 → 点 New（面板应消失）→ 再翻回原产品（映射重新算出来）。
+
+25. **`product.product.unlink()` 会把产品模板一起删掉**（`19.0.13.1.0` 起本模块会删变体，必读）
+- 源码（`product/models/product_product.py`）：`unlink()` 先判
+  `self.env.context.get("create_product_product") is False` —— 不是 False 时，删完变体会检查
+  「模板是不是已经没有变体了」，是就把**产品模板也删掉**；
+  另一条分支 `_unlink_or_archive()` 则是「有单据引用就归档、否则真删」。
+- 本模块删「不生成变体」的新建变体时必须走
+  `to_drop.with_context(create_product_product=False).unlink()`：只删变体本身。
+  少了这个上下文键，「这个产品只剩这一条变体」的场景会把整个产品删掉。
+- 另一半坑：删 / 建之后 `product_variant_count`（非存储 compute）可能还留在记录缓存里 ——
+  后置断言要用 `invalidate_recordset(["product_variant_ids", "product_variant_count"])` 作废缓存再读。
+- 判断标准：本模块里任何 `unlink()` 都要回答「会不会连带删掉产品模板」「缓存有没有作废」；
+  改动后跑一次「标掉最多的组合」的边界用例（见 L1 约束 1 的例外）。
 
 ### P5：业务场景、数据流与一致性边界（评估完整性 / 排障时读）
 

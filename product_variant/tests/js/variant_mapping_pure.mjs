@@ -156,9 +156,48 @@ check("提交给服务端的 mapping 就是「组合 → 归属变体」，覆�
     const rows = base().rows;
     const payload = buildMappingPayload(rows, false);
     assert.equal(payload.mapping.length, 12);
-    assert.deepEqual(Object.keys(payload.mapping[0]).sort(), ["origin_variant_id", "values"]);
+    assert.deepEqual(Object.keys(payload.mapping[0]).sort(), ["origin_variant_id", "skip", "values"]);
     assert.equal(payload.mapping[0].origin_variant_id, false);
+    assert.equal(payload.mapping[0].skip, false);
     assert.equal(payload.share_vendor_prices, false);
+});
+
+check("「不生成变体」的组合：不挂变体、不新建，也不算「等订单创建」", () => {
+    const rows = base().rows;
+    const rowA = rows.find((row) => rowMatchesVariant(row, variants[0]));
+    const rowB = rows.find((row) => rowMatchesVariant(row, variants[1]));
+    const target = rows.find((row) =>
+        row.cells.every((cell) => ["Steel", "White", "120"].includes(cell.value_name))
+    );
+    const result = base({
+        assignment: { [rowA.key]: 900, [rowB.key]: 901 },
+        skipped: { [target.key]: true },
+    });
+    const row = result.rows.find((item) => item.key === target.key);
+    assert.equal(row.skipped, true);
+    assert.equal(row.variant_id, false, "标了「不生成变体」就不能再挂着既有变体");
+    assert.equal(row.will_create, false, "这一行不产出变体");
+    assert.equal(row.is_new, false, "它不是「等着新建」，是明确不要");
+    assert.equal(result.skipped_count, 1);
+    assert.equal(result.unassigned_count, 0, "既有变体还挂在自己那两行上");
+    assert.ok(
+        !result.rows.filter((item) => !item.skipped && !item.will_create)
+            .some((item) => item.key === target.key),
+        "标了不生成的行不算「等订单创建」"
+    );
+    // 载荷里带 skip，服务端据此不建这一条
+    const payload = buildMappingPayload(result.rows, false);
+    assert.equal(payload.mapping.find((item) => item.skip).values.length, 3);
+});
+
+check("「不生成变体」的行不会被默认分配填回去", () => {
+    const rows = base().rows;
+    const rowA = rows.find((row) => rowMatchesVariant(row, variants[0]));
+    const rowB = rows.find((row) => rowMatchesVariant(row, variants[1]));
+    const assignment = {};
+    applyDefaultAssignment(rows, variants, assignment, {}, { [rowA.key]: true });
+    assert.equal(assignment[rowA.key], undefined, "标了「不生成变体」的行不参与默认分配");
+    assert.equal(assignment[rowB.key], 901, "别的行照旧自动归位");
 });
 
 check("全是「按需生成」属性时，同样按取值穷举组合", () => {
@@ -311,6 +350,11 @@ check("映射改过才显示保存/丢弃：默认分配不算改动，动过才
 
     delete store.assignment[rowA.key];
     assert.equal(mappingDiffersFromBaseline(store), false, "清回基线 → 又没有改动了");
+
+    store.skipped = { "51-62": true };
+    assert.equal(mappingDiffersFromBaseline(store), true, "标了「不生成变体」同样是有未保存改动");
+    delete store.skipped["51-62"];
+    assert.equal(mappingDiffersFromBaseline(store), false, "取消标记 → 又回到基线");
 
     store.shareVendorPrices = true;
     assert.equal(mappingDiffersFromBaseline(store), true, "勾选框也属于映射状态");
