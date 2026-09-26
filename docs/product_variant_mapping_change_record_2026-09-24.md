@@ -1,4 +1,4 @@
-# `product_variant` 映射表改造 · 操作记录与变更追溯（2026-09-24 ~ 09-25）
+# `product_variant` 映射表改造 · 操作记录与变更追溯（2026-09-24 ~ 09-26）
 
 > **文档定位**：本文件记录「多变体映射」这条改造的**实际操作过程与产生的变更** ——
 > 操作目的、时间、环境、执行内容（命令级）、变更清单、注意事项、后续建议。
@@ -279,3 +279,169 @@ Odoo 前端的字段与资源缓存是「内存 + 站点存储」，**普通刷�
 | 仓库自检 | `task check`（等价 `python3 .dev/scripts/check_repo.py`） |
 | 设计取舍与踩坑 | [`product_variant_mapping_review_2026-09-24.md`](product_variant_mapping_review_2026-09-24.md)、`product_variant/AGENTS.md` L2 P4 |
 | 需求状态 | 根 `TODO.md` → `T-042` |
+
+---
+
+# 第二轮（2026-09-25 ~ 09-26）：保存死锁 → 删唯一属性复用 → 守卫放行 → 面板换行 → 核查修订
+
+> 上面第 1~9 节是**第一轮**（`19.0.7.0.0` ~ `19.0.13.0.1`）的记录；本节起是同一条功能线的继续，
+> 覆盖 `19.0.13.0.2` ~ `19.0.13.0.6`，格式与第一轮一致：只写「做了什么、动了什么、结果与注意」。
+> 设计与踩坑的持久载体是 `product_variant/AGENTS.md` L2 P4 陷阱 21–23 与模块 `CHANGELOG.md`。
+
+## R2-1. 本轮目的（5 个触发）
+
+| # | 触发（用户视角） | 版本 |
+|---|---|---|
+| 1 | 点 **Save manually** 没反应、按钮一直灰；改属性行还会多发一次 onchange；面板下方按钮与标题右侧原生按钮重复 | `19.0.13.0.2` |
+| 2 | 删掉产品上**唯一的属性**后，映射表要求重新分配 → 应复用原来那条变体，而不是新建 | `19.0.13.0.3` |
+| 3 | 删唯一属性后点保存报 `Removing the attribute … would affect 1 active variants … Archive or delete those variants first` | `19.0.13.0.4` |
+| 4 | 面板的说明 / 警告文字超出 `.o_form_sheet` 可视范围，不换行 | `19.0.13.0.5` |
+| 5 | 要求系统性核查「核心原理与用户交互」「数据一致性与保存约束」，并补齐核查中发现的偏差 | `19.0.13.0.6` |
+
+## R2-2. 操作分类总览
+
+| 类别 | 主题 | 版本 | 关键文件 | 结果 |
+|---|---|---|---|---|
+| A 保存链路与交互精简 | 解开保存钩子死锁 + 跳过多余 onchange + 面板不再放按钮 | `.0.2` | `static/src/js/variant_conversion_form_patch.js`、`views/product_template_views.xml`、前端面板 | 保存按钮恢复正常，面板只留「未保存」徽标 |
+| B 前端映射逻辑 | 无属性时补「空组合」行；默认分配抽成纯函数 | `.0.3` | `static/src/js/variant_mapping_panel.js`、`tests/js/variant_mapping_pure.mjs` | 删唯一属性后自动认领原变体，不再报「未分配」 |
+| C 服务端约束与放行 | 给「丢变体」守卫加一个**带前提**的放行口 | `.0.4` | `models/product_template.py`、`models/product_attribute_guards.py`、`tests/test_product_variant_mapping.py` | 保存通过；原变体 id 不变、库存 / 单据保留 |
+| D 面板样式 | 宽度约束 + 长句换行 | `.0.5` | `static/src/scss/variant_mapping_panel.scss`（新增）、`__manifest__.py` | 窄屏 / 长句都在纸面内 |
+| E 核查与固化 | 文档同步 + 把隐式不变量写成注释与用例 | `.0.6` | `README.md`、`models/product_template.py`（注释）、`tests/test_product_variant_mapping.py` | 66 项测试全绿；文档与实现一致 |
+
+## R2-3. 分类明细（核心要点 / 文件 / 结果）
+
+### A. 保存链路与交互精简（`19.0.13.0.2`）
+
+- **核心要点**：`FormController.onWillSaveRecord` 在 `Record._save()` 里被调用，而 `_save()` 正占着
+  `model.mutex`；此时再 `await record.getChanges()`（它也要 mutex）就是等自己 → 死锁，`finally` 里的
+  `enableButtons()` 永不执行。改读同步的 `record._getChanges(record._changes, {withReadonly: true})`；
+  同时 patch `Record.prototype._getOnchangeValues()`，在「本次改动只含 `attribute_line_ids`」时返回空，
+  跳掉原生 `ir.ui.view._postprocess_on_change()` 补出来的那次多余 onchange；面板下方不再放
+  Save manually / Discard all changes（只留徽标），保存 / 丢弃一律用标题右侧原生按钮。
+- **文件**：`static/src/js/variant_conversion_form_patch.js`、`static/src/js/variant_mapping_panel.js`、
+  `static/src/xml/variant_mapping_panel.xml`、`views/product_template_views.xml`、模块三件套。
+- **结果**：`19.0.13.0.2`（提交 `c42751e`，9 files，+164 −62）。
+
+### B. 前端映射逻辑（`19.0.13.0.3`）
+
+- **核心要点**：`buildCombinationRows()` 原来在「一个有效轴都没有」时返回**空表** → 删掉唯一属性后
+  没有任何组合行，既有变体无处挂靠，被标成「未分配」而拦住保存。改为返回**一行空组合**
+  （`key = combinationKey([])`），并把「本来就属于这一行的既有变体自动挂回去」的逻辑抽成纯函数
+  `applyDefaultAssignment()`（`refreshRows()` 调用）。空组合行匹配所有变体：只有一条时自动认领，
+  多条时只取第一条、其余仍留「未分配」。
+- **文件**：`static/src/js/variant_mapping_panel.js`、`tests/js/variant_mapping_pure.mjs`、模块三件套。
+- **结果**：`19.0.13.0.3`（提交 `bb4803c`，7 files，+112 −24）；删唯一属性后面板自动认领，直接可保存。
+
+### C. 服务端约束与放行（`19.0.13.0.4`）
+
+- **核心要点**：报错真凶不是 Odoo 原生，而是本模块 `product_attribute_guards.py` 的 T-017 守卫。
+  删除唯一属性时，`write()` 判定「组合数 == 变体数、无需锚定」→ 走**原生直写** → 原生先删属性行 →
+  `product.template.attribute.line.unlink()` → 守卫看到「该行取值仍被 1 条在用变体带着」而拒绝。
+  但映射已说明那条变体会被保留（承载空组合），守卫的前提不成立。修法：`write()` 这条分支在带映射时
+  **先 `_parse_variant_conversion_mapping()` 校验「每条既有变体都有组合」**，再带上下文键
+  `variant_conversion_keeps_variants=True` 落库；三处守卫认这个键（常量 `KEEP_VARIANTS_KEY`）放行。
+  **不带映射时守卫照旧拦住**，行为不变。
+- **文件**：`models/product_template.py`、`models/product_attribute_guards.py`、
+  `tests/test_product_variant_mapping.py`（+2 用例）、模块三件套。
+- **结果**：`19.0.13.0.4`（提交 `d45fe0b`，8 files，+131 −12）。
+
+### D. 面板样式（`19.0.13.0.5`）
+
+- **核心要点**：面板此前**没有任何样式文件**；字段外层 `.o_field_widget` 在 Odoo 19 里可能是 CSS Grid
+  的单元格，长句按 `max-content` 把轨道撑开，参考号这类无空格长词又断不开 → 顶出纸面。新增
+  `static/src/scss/variant_mapping_panel.scss`：`max-width: 100%` + `min-width: 0`，
+  文本块 `overflow-wrap: anywhere`（**不是** `break-word` —— 只有 `anywhere` 会压小 min-content），
+  表格 `table-layout: fixed`，「未保存」flex 行 `flex-wrap: wrap`；并登记进 `assets.web.assets_backend`。
+- **文件**：`static/src/scss/variant_mapping_panel.scss`（新增）、`__manifest__.py`、模块三件套。
+- **结果**：`19.0.13.0.5`（提交 `3c639f1`，6 files，+86 −4）。
+
+### E. 核查与固化（`19.0.13.0.6`）
+
+- **核心要点**：逐条核对「template ↔ product 关系 / 映射表的显式化 / 三层防线 / 必须完整映射 / 组合数少于变体数必须先处理」，
+  结论与实现一致；同时发现 **6 处文档与实现漂移**（见下表）并修正；把「原生直写分支为什么安全」这条
+  原先只靠推理的**不变量**写成代码注释 + 一条用例。
+- **文件**：`README.md`、`models/product_template.py`（仅注释）、`tests/test_product_variant_mapping.py`（+1 用例）、
+  模块 `AGENTS.md` / `CHANGELOG.md`、根 `AGENTS.md`。
+- **结果**：`19.0.13.0.6`（提交 `9298666`，7 files，+158 −22）。
+
+**核查发现的文档漂移与修正**
+
+| # | 位置 | 漂移 | 修正 |
+|---|---|---|---|
+| 1 | `README.md` 示例映射表 | 仍是 `19.0.10.0.0` 之前的旧语义（每行一条变体、下拉选取值） | 改为「行 = 组合、属性列只读、最后一列 Variant 下拉」，补 `(new variant)` / 未分配警告 / 在手数量标签写法 |
+| 2 | `README.md` 方法签名 | `_convert_to_multi_variant()` 列了源码里已不存在的 `previous_attribute_lines` | 删除该参数，说明 `added_attributes` 的用途 |
+| 3 | `README.md` 前端资源表 | 面板职责描述是旧方向；缺 `19.0.13.0.5` 新增的 SCSS | 改为「每行一个属性组合」并补 SCSS 行 |
+| 4 | `README.md` 测试数 | 多处写「55 项」（09-24 的历史值），「前端交互没有自动化测试」也不准确 | 新增当前口径行（66 项）+ 历史口径说明；改为「映射表没有浏览器级测试」，注明纯函数脚本需手工跑 |
+| 5 | `README.md` 已知边界 / 后续迭代 | 与自身正文矛盾：正文说「属性主数据也拦」，边界却写「只拦产品表单这条路 / 会直接删变体」，待办还把 `T-017` 列为未做 | 改为「删除类直写路径已拦（PAV / ptav / 属性行），未覆盖的只剩 `attribute.line.create()`」；`T-017` 标已交付 |
+| 6 | `README.md` 顶部版本链路 | 「当前版本」停在 `19.0.7.0.3` | 改为 `19.0.13.0.6` |
+
+**新增/强化的用例**
+
+| 用例 | 钉住的行为 |
+|---|---|
+| `test_removing_the_only_attribute_keeps_the_existing_variant` | 删唯一属性 + 映射 → 原变体记录保留、仍启用、不再带取值 |
+| `test_removing_the_only_attribute_without_mapping_is_still_blocked` | 删唯一属性但**不带映射** → 守卫照旧拒绝，一个字不写库 |
+| `test_archived_variants_cannot_slip_through_the_native_save` | 产品带归档变体 + 「不新增变体」形态 + 映射 → 报 `archived variants` 且整单回滚（归档变体不被 `_create_variant_ids()` 悄悄激活） |
+| `variant_mapping_pure.mjs` 新增 2 条 | 无属性时有 1 行空组合；唯一既有变体自动复用 |
+
+## R2-4. 难点与易错点
+
+| # | 难点 | 成因 | 处置 |
+|---|---|---|---|
+| 1 | 报错来源误判 | 守卫的英文文案刻意模仿原生语气（`Removing the attribute … would affect N active variants`），直觉先怀疑 Odoo 框架 | `grep` 自家仓库才定位到 `product_attribute_guards.py`；排查顺序改为「先搜本仓库文案」 |
+| 2 | 「删唯一属性」的双重身份 | 既是「删属性」（触发守卫 / 原生删除链路），又必须「保留变体」；`ptal.unlink()` → `ptav.unlink()` → `_unlink_or_archive()` 的连坐与否取决于中间是否先摘掉取值，路径隐晦 | 不改守卫语义，只给它一个**带前提**的放行口；如实测通过 |
+| 3 | 放行的边界设计 | 直写路径（属性主数据 / 属性行）不经过产品表单，守卫服务的是它们；放行开大就丢保护 | 放行前必须 `_parse_variant_conversion_mapping()` 校验「每条既有变体都有组合」；未带映射时行为完全不变，并有用例锁住 |
+| 4 | CSS 溢出难定位 | Grid 单元格按 `max-content` 撑轨道；`break-word` **不影响 min-content** | 用 `overflow-wrap: anywhere` + `min-width: 0` + `table-layout: fixed`；窄屏必须实测 |
+| 5 | `write()` 第①步在 savepoint 之外 | 配置写入在第①步完成，转换（第②步）才抛错 → 进程内调用方捕获异常会看到已写入的配置；Web 请求因报错整单回滚 | 用例里用 `self.env.cr.savepoint()` 模拟 Web 回滚，并写清楚这是**调用方回滚责任**，不是模块 bug |
+| 6 | 文档与实现漂移 | 多轮迭代（映射表方向在 `19.0.10.0.0` 反转、签名变更、`T-017` 已交付）+ 同一事实写在多处 | 本次统一核查并修正 6 处；重申「每个事实一处权威来源」（`DOCS_TEMPLATE.md` 第 4 节） |
+| 7 | 验证细节易错 | `-u` 后必须强刷（前端术语与资源缓存）；`tests/js/*.mjs` 未接入 `task check`；测试数有 `result` 与 `stats` 两种口径 | 见 R2-7 |
+
+## R2-5. 产生的变更
+
+**版本链**：`19.0.13.0.1` → `.0.2` → `.0.3` → `.0.4` → `.0.5` → **`19.0.13.0.6`**（均为 `+z`：修复 / 文档）。
+
+**数据库**：**无表结构变更、无需迁移脚本**。`-u` 会刷新继承视图 arch 与模块元数据版本；i18n 无新增界面文案（`.0.6` 只改文档与注释）。
+
+**行为变更（用户可见）**
+
+| 场景 | 变更前 | 变更后 |
+|---|---|---|
+| 改属性后点 Save manually | 按钮一直灰、像没反应（保存钩子死锁） | 正常保存 |
+| 改属性行 | 额外发一次 `product.template` onchange | 不再发（仅跳过 `attribute_line_ids` 那一次） |
+| 面板下方 | 有 Save manually / Discard all changes 按钮 | 只留「未保存」徽标，统一用标题右侧原生按钮 |
+| 删掉唯一属性 | 面板报「N existing variants are not assigned…」，保存被拦 | 自动出现一行空组合并认领原变体，可直接保存 |
+| 删唯一属性后保存 | 报 `Removing the attribute … would affect 1 active variants` | 保存通过；原变体 id 不变、库存 / 单据保留、不再带取值 |
+| 窄屏 / 长句 | 说明与警告顶出 `.o_form_sheet` | 自动换行、不溢出 |
+| 归档变体 + 不新增变体的改动 | 安全性只靠推理（原生直写分支无后置断言） | 注释写明不变量 + 用例钉住（失败即报错回滚） |
+
+## R2-6. 验证结果
+
+| 命令 / 项 | 结果 |
+|---|---|
+| `task test -- product_variant --test-tags=/product_variant` | **66 项 0 failed / 0 error**（第一轮 63 项，本轮 +3：删唯一属性 2 条、归档变体 1 条） |
+| `node product_variant/tests/js/variant_mapping_pure.mjs` | **16 项 all good**（第一轮 15 项，+1：空组合复用） |
+| `task check` | 未发现结构性问题 |
+| `task update -- product_variant`（dev 库） | 无报错，模块 installed **19.0.13.0.6** |
+| `read_lints` / `node --check` / XML 解析 / SCSS 编译 | 全部通过，0 诊断 |
+| 本轮未验证 | 浏览器侧行为：自动换行（窄屏）、删唯一属性后保存的实际界面表现、归档变体报错弹窗 —— 需人工在目标环境确认 |
+
+## R2-7. 注意事项（本轮增量）
+
+1. **升级**：无迁移、无新字段，`task update -- product_variant` 即可；前端改动（`.0.2` / `.0.3` / `.0.5`）**必须强刷浏览器**。
+2. **测试数口径**：`odoo.tests.result`（本轮 66）与 `odoo.tests.stats`（本轮 72）不是同一个计数；文档统一用前者。
+3. **纯函数用例要手工跑**：`tests/js/variant_mapping_pure.mjs` 未接入 `task check`（只做 JS 语法检查），
+   改 `variant_mapping_panel.js` 的纯函数后记得跑一次（可选后续项：接进 `task check`）。
+4. **`write()` 的原子性边界**：配置写入在第①步、转换在第②步；进程内调用方捕获 `UserError` 会看到已写入的配置，
+   Web 请求因报错整单回滚。写测试时用 `self.env.cr.savepoint()` 模拟请求回滚。
+5. **放行口唯一**：只有 `variant_conversion_keeps_variants` 上下文键能绕过「丢变体」守卫，且必须先在
+   `write()` 里解析校验映射；**不要在别处复制这个键或裸删守卫**（见模块 `AGENTS.md` L2 P4 陷阱 22）。
+
+## R2-8. 追溯入口（本轮增量）
+
+| 想查什么 | 命令 / 位置 |
+|---|---|
+| 本轮 5 个提交与规模 | `git show --stat c42751e bb4803c d45fe0b 3c639f1 9298666` |
+| 逐版本「变更 / 影响」 | `product_variant/CHANGELOG.md`（`19.0.13.0.2` – `19.0.13.0.6`） |
+| 设计取舍与踩坑 | `product_variant/AGENTS.md` L2 P4 陷阱 21 / 22 / 23 |
+| 本轮新增用例 | `product_variant/tests/test_product_variant_mapping.py`（删唯一属性 2 条 + 归档变体 1 条） |
+| 用户手册与验证清单 | `product_variant/README.md`（场景矩阵 S1–S12、验证清单） |

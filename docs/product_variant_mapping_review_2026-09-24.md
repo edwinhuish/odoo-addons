@@ -4,11 +4,16 @@
 > 按「目标 → 步骤 → 技术要点 → 问题与解法 → 结果」组织，便于后续查阅与复盘。
 >
 > **权威细节不在这里**：使用者视角看 `product_variant/README.md`，逐版本变更看
-> `product_variant/CHANGELOG.md`，约束与踩坑（陷阱 8–20）看 `product_variant/AGENTS.md`。
+> `product_variant/CHANGELOG.md`，约束与踩坑（陷阱 8–23）看 `product_variant/AGENTS.md`。
 > 本文件只做汇总、索引与横切归纳，冲突时以模块三件套为准。
 >
 > **范围**：`19.0.7.0.0`（模块改名 + 映射表初版，已随 `cf0d463` 提交）→ `19.0.13.0.1`。
 > 本轮（同日 19:35 / 20:55）交付 `19.0.7.0.1` → `19.0.13.0.1`，共 17 个版本、5 条提交。
+>
+> **后续迭代（不在本文件范围内）**：`19.0.13.0.2` ~ `19.0.13.0.6` 是这条功能线的**第二轮**
+> （保存死锁 → 删唯一属性复用 → 守卫放行 → 面板换行 → 核查修订），操作记录见
+> [`product_variant_mapping_change_record_2026-09-24.md`](product_variant_mapping_change_record_2026-09-24.md)
+> 的「第二轮」一节；新增的约束与踩坑见 `product_variant/AGENTS.md` 陷阱 **21–23**。本复盘不重复收录。
 >
 > 规范依据：根 [`AGENTS.md`](../AGENTS.md) 第 7/8 节、[`DOCS_TEMPLATE.md`](../DOCS_TEMPLATE.md)、
 > [`docs/README.md`](README.md)。
@@ -391,8 +396,9 @@ Odoo 19 的事实（源码级）：
 | 想知道 | 去哪 |
 |---|---|
 | 怎么用、字段表、验证清单 | `product_variant/README.md` |
-| 每个版本改了什么 | `product_variant/CHANGELOG.md`（`19.0.7.0.0` – `19.0.13.0.1`） |
-| 约束与踩坑（陷阱 8–20） | `product_variant/AGENTS.md` L2 P4 |
+| 每个版本改了什么 | `product_variant/CHANGELOG.md`（`19.0.7.0.0` – `19.0.13.0.6`） |
+| 约束与踩坑（陷阱 8–23） | `product_variant/AGENTS.md` L2 P4 |
+| 第二轮的做了什么 / 注意什么 | [`product_variant_mapping_change_record_2026-09-24.md`](product_variant_mapping_change_record_2026-09-24.md) →「第二轮」 |
 | 需求状态与归档 | 根 `TODO.md` → `T-042` |
 | 模块一览与交付历史 | 根 `README.md` |
 | 本地开发命令 | `DEV_WORKFLOW.md`、`Taskfile.yml` |
